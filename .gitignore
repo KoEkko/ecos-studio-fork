@@ -5,3 +5,5 @@ bazel-*
 # Nix result
 result
 
+
+.vscode
