@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, computed } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
 import Splitter from 'primevue/splitter'
 import SplitterPanel from 'primevue/splitterpanel'
 import DrawingArea from '../components/DrawingArea.vue'
@@ -7,10 +7,6 @@ import ChatInspectorPanel from '../components/ChatInspectorPanel.vue'
 import ThumbnailGallery from '../components/ThumbnailGallery.vue'
 import PropertiesPanel from '../components/PropertiesPanel.vue'
 import LayerPanel from '../components/LayerPanel.vue'
-import { useLayoutState } from '@/composables/useLayoutState'
-
-const layoutState = useLayoutState()
-const isLayoutMode = computed(() => layoutState.renderMode.value === 'layout')
 
 let isResizing = false
 
@@ -55,7 +51,7 @@ onUnmounted(() => {
   <div class="editor-view">
     <Splitter class="flex-1 h-full border-none min-w-0">
       <!-- Left: Drawing + Thumbnails -->
-      <SplitterPanel :size="isLayoutMode ? 50 : 65" :minSize="35" class="flex flex-col min-w-0">
+      <SplitterPanel :size="60" :minSize="35" class="flex flex-col min-w-0">
         <Splitter layout="vertical" class="h-full border-none">
           <SplitterPanel :size="70" :minSize="30" class="flex flex-col">
             <DrawingArea />
@@ -66,23 +62,20 @@ onUnmounted(() => {
         </Splitter>
       </SplitterPanel>
 
-      <!-- Middle: Layout panels (only in layout mode) -->
-      <SplitterPanel v-if="isLayoutMode" :size="15" :minSize="10" class="flex flex-col min-w-0 overflow-hidden">
+      <!-- Middle: Layout panels -->
+      <SplitterPanel :size="15" :minSize="10" class="flex flex-col min-w-0 overflow-hidden">
         <Splitter layout="vertical" class="h-full border-none">
           <SplitterPanel :size="45" :minSize="20" class="flex flex-col overflow-hidden">
-            <LayerPanel :layer-manager="layoutState.layerManager.value" />
+            <LayerPanel />
           </SplitterPanel>
           <SplitterPanel :size="55" :minSize="20" class="flex flex-col overflow-hidden">
-            <PropertiesPanel
-              :selected-groups="layoutState.selectedGroups.value"
-              :data-store="layoutState.dataStore.value"
-            />
+            <PropertiesPanel />
           </SplitterPanel>
         </Splitter>
       </SplitterPanel>
 
       <!-- Right: Chat -->
-      <SplitterPanel :size="isLayoutMode ? 35 : 35" :minSize="25" class="chat-panel overflow-hidden min-w-0 max-w-full">
+      <SplitterPanel :size="25" :minSize="25" class="chat-panel overflow-hidden min-w-0 max-w-full">
         <ChatInspectorPanel />
       </SplitterPanel>
     </Splitter>

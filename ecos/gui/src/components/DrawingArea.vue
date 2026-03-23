@@ -16,6 +16,13 @@ import {
   HighlightPlugin,
 } from '@/applications/editor/plugins'
 import type { RawHeaderJSON, RawDataJSON } from '@/applications/editor/layout'
+import {
+  TileManager,
+  TileInteraction,
+  ViewportAnimator,
+  EditManager,
+  PlacementTool,
+} from '@/applications/editor/tile'
 import DrawingToolbar from './DrawingToolbar.vue'
 import { useWorkspace } from '@/composables/useWorkspace'
 import { useEDA } from '@/composables/useEDA'
@@ -37,6 +44,16 @@ let styleManager: LayerStyleManager | null = null
 let spatialIndex: SpatialIndex | null = null
 let interactionManager: InteractionManager | null = null
 let styleStateUnlisten: (() => void) | null = null
+// Tile rendering module
+let tileManager: TileManager | null = null
+let tileInteraction: TileInteraction | null = null
+let viewportAnimator: ViewportAnimator | null = null
+let editManager: EditManager | null = null
+let placementTool: PlacementTool | null = null
+
+// 记住最近选中的 instance cell 信息，用于 Place 工具
+let lastSelectedCellId: number | null = null
+let lastSelectedOrient = 0
 
 const stepEnumValues = Object.values(StepEnum)
 
@@ -68,15 +85,32 @@ function cleanupLayout(): void {
   spatialIndex?.clear()
   dataStore?.clear()
   styleManager?.clear()
+  placementTool?.destroy()
+  editManager?.destroy()
+  tileInteraction?.destroy()
+  viewportAnimator?.destroy()
+  tileManager?.destroy()
 
   interactionManager = null
   renderer = null
   spatialIndex = null
   dataStore = null
   styleManager = null
+  placementTool = null
+  editManager = null
+  tileInteraction = null
+  viewportAnimator = null
+  tileManager = null
 
   layoutState.selectedGroups.value = []
   layoutState.dataStore.value = null
+  layoutState.tileSelection.value = null
+  layoutState.tileActions.value = null
+  layoutState.tileLayers.value = []
+  layoutState.tileLayerActions.value = null
+  layoutState.tileEditActions.value = null
+  layoutState.hasUnsavedEdits.value = false
+  layoutState.isPlacementMode.value = false
   layoutState.renderMode.value = 'image'
 }
 
@@ -176,6 +210,154 @@ async function loadLayoutData(headerJson: RawHeaderJSON, dataJson: RawDataJSON):
   }
 }
 
+async function loadTileLayout(baseUrl: string): Promise<void> {
+  const ed = editor.value
+  if (!ed?.view) return
+
+  cleanupLayout()
+
+  layoutState.loadingState.value = 'loading'
+  layoutState.loadingMessage.value = 'Loading tile manifest...'
+
+  try {
+    tileManager = markRaw(new TileManager(ed.view, baseUrl))
+    await tileManager.init()
+
+    // ViewportAnimator
+    viewportAnimator = markRaw(new ViewportAnimator(ed.view))
+    if (tileManager.manifest) {
+      viewportAnimator.setManifest(tileManager.manifest)
+    }
+
+    // TileInteraction (RBush + hit-test + selection overlay)
+    tileInteraction = markRaw(new TileInteraction(
+      ed.view,
+      tileManager,
+      tileManager.cellStore,
+      tileManager.globalStore,
+    ))
+
+    // EditManager
+    editManager = markRaw(new EditManager(tileManager, tileManager.cellStore))
+    ed.view.addChild(editManager.editOverlay)
+
+    tileManager.setEditDirtyGetter(() => editManager!.hasUnsavedChanges)
+
+    // 绑定 EditManager → TileInteraction
+    tileInteraction.setEditManager(editManager)
+
+    // 挂载 overlays 到 viewport（渲染顺序：edit → ghost → highlight → selection）
+    ed.view.addChild(tileInteraction.ghostOverlay)
+    ed.view.addChild(tileInteraction.highlightOverlay)
+    ed.view.addChild(tileInteraction.selectionOverlay)
+
+    // PlacementTool
+    placementTool = markRaw(new PlacementTool(
+      ed.view,
+      editManager,
+      tileManager,
+      tileManager.cellStore,
+    ))
+    ed.view.addChild(placementTool.ghostOverlay)
+
+    // EditManager 变更 → 更新 hasUnsavedEdits
+    editManager.onChange(() => {
+      layoutState.hasUnsavedEdits.value = editManager?.hasUnsavedChanges ?? false
+    })
+
+    // 选中回调 → 更新 Vue 响应式状态 + 记住 cellId 供 Place 使用
+    tileInteraction.onSelectionChange((info) => {
+      layoutState.tileSelection.value = info
+      if (info?.type === 'instance' && info.cellId != null) {
+        lastSelectedCellId = info.cellId
+        lastSelectedOrient = info.orient ?? 0
+      }
+    })
+
+    // C 键 → 进入放置模式
+    tileInteraction.onRequestPlacement((cellId, orient) => {
+      _enterPlacement(cellId, orient)
+    })
+
+    // PlacementTool 停用 → 回到 select 模式
+    placementTool.onDeactivate(() => {
+      layoutState.isPlacementMode.value = false
+      tileInteraction?.enable()
+    })
+
+    // viewport 缩放时刷新选中框线宽
+    ed.view.on('zoomed', () => tileInteraction?.refreshSelectionStroke())
+
+    // 注册 tile 操作回调给 PropertiesPanel 使用
+    const mf = tileManager.manifest!
+    layoutState.tileDbuPerMicron.value = mf.dbuPerMicron
+    layoutState.tileActions.value = {
+      clearSelection: () => tileInteraction?.clearSelection(),
+      fitToView: () => handleFitToView(),
+    }
+
+    // 注册编辑操作
+    layoutState.tileEditActions.value = {
+      deleteSelected: () => {
+        const sel = tileInteraction?.currentSelection
+        if (sel?.type === 'instance' && sel.instanceId != null && editManager) {
+          editManager.deleteInstance(sel.instanceId)
+          tileInteraction?.clearSelection()
+        }
+      },
+      undo: () => editManager?.undo(),
+      redo: () => editManager?.redo(),
+      startPlacement: (cellId: number, orient?: number) => {
+        _enterPlacement(cellId, orient ?? 0)
+      },
+      cancelPlacement: () => {
+        placementTool?.deactivate()
+      },
+    }
+
+    // 注册图层列表和操作给 LayerPanel 使用
+    layoutState.tileLayers.value = mf.layers.map(l => ({
+      id: l.id, name: l.name, color: l.color,
+      alpha: l.alpha, zOrder: l.zOrder, visible: true,
+    }))
+    layoutState.tileLayerActions.value = {
+      toggleLayer: (id: number) => {
+        const vis = !tileManager!.isLayerVisible(id)
+        tileManager!.setLayerVisible(id, vis)
+        layoutState.tileLayers.value = layoutState.tileLayers.value.map(l =>
+          l.id === id ? { ...l, visible: vis } : l,
+        )
+      },
+      showAll: () => {
+        for (const l of mf.layers) tileManager!.setLayerVisible(l.id, true)
+        layoutState.tileLayers.value = layoutState.tileLayers.value.map(l => ({ ...l, visible: true }))
+      },
+      hideAll: () => {
+        for (const l of mf.layers) tileManager!.setLayerVisible(l.id, false)
+        layoutState.tileLayers.value = layoutState.tileLayers.value.map(l => ({ ...l, visible: false }))
+      },
+    }
+
+    layoutState.renderMode.value = 'layout'
+    layoutState.loadingState.value = 'ready'
+    layoutState.loadingMessage.value = ''
+  } catch (err) {
+    console.error('Failed to load tile layout:', err)
+    layoutState.loadingState.value = 'error'
+    layoutState.loadingMessage.value = String(err)
+    cleanupLayout()
+  }
+}
+
+function _enterPlacement(cellId: number, orient: number): void {
+  if (!placementTool || !tileInteraction) return
+  tileInteraction.disable()
+  tileInteraction.clearSelection()
+  tileInteraction.highlightOverlay.clear()
+  placementTool.activate(cellId, orient)
+  layoutState.isPlacementMode.value = true
+}
+
 const handleStageChange = async (stage: string) => {
   if (!editor.value || !stage) return
 
@@ -196,31 +378,19 @@ const handleStageChange = async (stage: string) => {
     if (layoutResponse.response === ResponseEnum.success && layoutResponse.data?.info) {
       const info = layoutResponse.data.info
 
-      // Check if structured JSON data is available
-      if (info.header_json && info.data_json) {
-        const projectPath = currentProject.value?.path || ''
-
-        const [headerUrl, dataUrl] = await Promise.all([
-          getResourceUrl(info.header_json, projectPath),
-          getResourceUrl(info.data_json, projectPath),
-        ])
-
-        const [headerResp, dataResp] = await Promise.all([
-          fetch(headerUrl),
-          fetch(dataUrl),
-        ])
-
-        const headerJson: RawHeaderJSON = await headerResp.json()
-        const dataJson: RawDataJSON = await dataResp.json()
-
-        await loadLayoutData(headerJson, dataJson)
+      // Tile-based rendering (highest priority)
+      if (info.manifest_url) {
+        await loadTileLayout(info.manifest_url)
         return
       }
-      // 暂时先使用 固定的数据 
-      // const headerJson: RawHeaderJSON = await import('../../assets/05_layout_json_top_layout_json-header.json') as unknown as RawHeaderJSON
-      // const dataJson: RawDataJSON = await import('../../assets/05_layout_json_top_layout_json-0.json') as unknown as RawDataJSON
-      // await loadLayoutData(headerJson, dataJson)
-      // return
+
+      // Dev fallback: load mock tile data when no backend data is available
+      if (import.meta.env.DEV) {
+        console.log('load mock tile data')
+        await loadTileLayout('/mock-design')
+        return
+      }
+
       // Fallback to image mode
       const imagePath = info.image
       if (imagePath) {
@@ -273,11 +443,47 @@ watch(stepRefreshCounter, () => {
   const stage = pathParts[pathParts.length - 1] || 'home'
   handleStageChange(stage)
 })
+
+// ─── 工具切换 → Tile 交互模式管理 ─────────────────────────────────────────────
+
+function onToolChange(toolId: string): void {
+  if (!tileInteraction) return
+
+  // 退出放置模式（如果在）
+  placementTool?.deactivate()
+
+  if (toolId === 'select') {
+    tileInteraction.enable()
+  } else if (toolId === 'place') {
+    // 进入放置模式：使用最近选中的 cellId
+    if (lastSelectedCellId != null) {
+      _enterPlacement(lastSelectedCellId, lastSelectedOrient)
+    } else {
+      // 没有选过 instance → 回退到 select 模式
+      tileInteraction.enable()
+    }
+  } else {
+    tileInteraction.disable()
+    tileInteraction.clearSelection()
+    tileInteraction.highlightOverlay.clear()
+  }
+}
+
+// ─── Tile 交互操作 ──────────────────────────────────────────────────────────
+
+function handleFitToView(): void {
+  const sel = layoutState.tileSelection.value
+  if (!sel || !viewportAnimator) return
+  viewportAnimator.fitToBbox({ x: sel.bboxX, y: sel.bboxY, w: sel.bboxW, h: sel.bboxH })
+}
+
+// 保留 loadLayoutData 供未来切换回 JSON 模式使用
+void loadLayoutData
 </script>
 
 <template>
   <div class="flex flex-col h-full overflow-hidden">
-    <DrawingToolbar :editor="editor" />
+    <DrawingToolbar :editor="editor" @toolChange="onToolChange" />
 
     <div class="relative flex-1 overflow-hidden">
       <EditorContainer @ready="onEditorReady" />
@@ -307,6 +513,44 @@ watch(stepRefreshCounter, () => {
         class="absolute top-2 right-2 px-2 py-1 bg-green-900/60 text-green-300 text-[10px] rounded z-10"
       >
         Layout Mode
+      </div>
+
+      <!-- Placement mode indicator -->
+      <div
+        v-if="layoutState.isPlacementMode.value"
+        class="absolute top-2 left-1/2 -translate-x-1/2 px-3 py-1.5 bg-emerald-900/80 text-emerald-300 text-xs rounded z-10 flex items-center gap-2"
+      >
+        <i class="ri-add-circle-line"></i>
+        <span>Placement Mode</span>
+        <span class="text-emerald-400/60 text-[10px]">Click to place | R rotate | Esc exit</span>
+      </div>
+
+      <!-- Selection hint -->
+      <div
+        v-if="layoutState.tileSelection.value && !layoutState.isPlacementMode.value"
+        class="absolute bottom-2 left-1/2 -translate-x-1/2 px-3 py-1.5 bg-slate-800/90 text-slate-200 text-xs rounded z-10 flex items-center gap-3 backdrop-blur-sm pointer-events-none select-none"
+      >
+        <template v-if="layoutState.tileSelection.value.type === 'instance'">
+          <span class="text-slate-400">Del</span><span>Delete instance</span>
+          <span class="text-slate-500">|</span>
+          <span class="text-slate-400">C</span><span>Copy and place</span>
+          <span class="text-slate-500">|</span>
+          <span class="text-slate-400">Drag</span><span>Move</span>
+        </template>
+        <template v-else-if="layoutState.tileSelection.value.type === 'segment'">
+          <span class="text-slate-400">Del</span><span>Delete segment</span>
+        </template>
+        <template v-else>
+          <span class="text-slate-400">Esc</span><span>Cancel selection</span>
+        </template>
+      </div>
+
+      <!-- Unsaved edits indicator -->
+      <div
+        v-if="layoutState.hasUnsavedEdits.value"
+        class="absolute bottom-2 right-2 px-2 py-1 bg-amber-900/60 text-amber-300 text-[10px] rounded z-10"
+      >
+        Unsaved edits
       </div>
     </div>
   </div>

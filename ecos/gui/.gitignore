@@ -31,6 +31,12 @@ src-tauri/binaries/*
 !src-tauri/binaries/.gitkeep
 src-tauri/resources/oss-cad-suite
 
+.cursor/
 .shared/
+openspec/
+
 
 assets/*.json
+
+public/mock-design/*
+public/layout_source/*.json

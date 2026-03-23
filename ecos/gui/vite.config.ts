@@ -28,7 +28,7 @@ export default defineConfig({
     port: 1420,
     strictPort: true,
     watch: {
-      ignored: ['**/src-tauri/**']
+      ignored: ['**/src-tauri/**', '**/public/mock-design/**']
     },
     // 配置 /data 路径服务 feature 图片等静态资源
     fs: {
