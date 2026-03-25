@@ -5,5 +5,10 @@ bazel-*
 # Nix result
 result
 
+# direnv
+.direnv/
 
-.vscode
+.vscode/
+# Claude Code
+.claude/
+.humanize*
