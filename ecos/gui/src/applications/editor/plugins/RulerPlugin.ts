@@ -2,6 +2,7 @@ import { Container, Graphics, Text, TextStyle } from 'pixi.js'
 import type { Editor } from '../core/Editor'
 import type { EditorTheme } from '../core/Theme'
 import type { IPlugin, ViewportTransform } from './IPlugin'
+import { RULER_THICKNESS } from '../core/rulerConfig'
 
 export interface RulerOptions {
   /** 标尺厚度 (默认 20) */
@@ -11,7 +12,7 @@ export interface RulerOptions {
 }
 
 const DEFAULT_OPTIONS: Required<RulerOptions> = {
-  thickness: 20,
+  thickness: RULER_THICKNESS,
   fontSize: 9
 }
 
@@ -63,7 +64,7 @@ export class RulerPlugin implements IPlugin {
     this.container.visible = this._enabled
     overlay.addChild(this.container)
 
-    // 创建水平标尺
+    // 创建水平标尺（贴在画布底部，见 drawRulers 中更新 y）
     this.horizontalRuler = new Container()
     this.hBackground = new Graphics()
     this.hTicks = new Graphics()
@@ -180,8 +181,12 @@ export class RulerPlugin implements IPlugin {
     const backgroundColor = theme.rulerBackground
     const tickColor = theme.rulerTickColor
 
-    // 绘制左上角方块
+    // 水平标尺在画布底部；左下角方块与垂直标尺、水平标尺衔接
+    if (this.horizontalRuler) {
+      this.horizontalRuler.position.set(0, screenHeight - thickness)
+    }
     if (this.cornerBox) {
+      this.cornerBox.position.set(0, screenHeight - thickness)
       this.cornerBox.clear()
       this.cornerBox.rect(0, 0, thickness, thickness)
       this.cornerBox.fill(backgroundColor)
@@ -205,6 +210,7 @@ export class RulerPlugin implements IPlugin {
     // 绘制垂直标尺
     this.drawVerticalRuler(
       screenHeight,
+      this.editor.worldHeight,
       transform,
       tickInterval,
       subTickCount,
@@ -276,6 +282,7 @@ export class RulerPlugin implements IPlugin {
   /** 绘制垂直标尺 */
   private drawVerticalRuler(
     screenHeight: number,
+    worldHeight: number,
     transform: ViewportTransform,
     tickInterval: number,
     subTickCount: number,
@@ -290,46 +297,53 @@ export class RulerPlugin implements IPlugin {
     this.vTicks.clear()
     this.vLabels.removeChildren()
 
-    // 背景
-    this.vBackground.rect(0, thickness, thickness, screenHeight - thickness)
+    // 背景（水平标尺在底部，左侧条从顶到底部条上沿）
+    this.vBackground.rect(0, 0, thickness, screenHeight - thickness)
     this.vBackground.fill(backgroundColor)
 
-    // 计算可见的世界坐标范围
+    // 垂直方向：在「显示坐标 displayY」上取刻度（与水平方向在 worldX 上取刻度对称），
+    // displayY = worldHeight - worldY，底边为 0、向上为正；避免按 worldY 网格取样导致 0 落在格点外而需强行插入刻度。
     const worldStartY = -transform.y / transform.scale
     const worldEndY = (screenHeight - transform.y) / transform.scale
 
-    // 计算起始刻度
-    const startTick = Math.floor(worldStartY / tickInterval) * tickInterval
+    const displayMin = worldHeight - worldEndY
+    const displayMax = worldHeight - worldStartY
+
     const subInterval = tickInterval / subTickCount
+    const startTick = Math.floor(displayMin / subInterval) * subInterval
 
     // 绘制刻度
     this.vTicks.setStrokeStyle({ width: 1, color: tickColor })
 
-    const labelGap = 12
-    const charWidth = this.options.fontSize * 0.65
-    let lastLabelEndY = -Infinity
+    const minLabelScreenInterval = 40
+    let lastLabelScreenY = -Infinity
 
-    for (let worldY = startTick; worldY <= worldEndY; worldY += subInterval) {
+    for (let displayY = startTick; displayY <= displayMax + 1e-6; displayY += subInterval) {
+      const worldY = worldHeight - displayY
       const screenY = worldY * transform.scale + transform.y
 
-      if (screenY < thickness) continue
+      if (screenY >= screenHeight - thickness) continue
 
-      const isMajor = Math.abs(worldY % tickInterval) < 0.01
+      const isMajor =
+        Math.abs(displayY / tickInterval - Math.round(displayY / tickInterval)) < 1e-5
       const tickWidth = isMajor ? thickness * 0.6 : thickness * 0.3
 
       this.vTicks.moveTo(thickness - tickWidth, screenY)
       this.vTicks.lineTo(thickness, screenY)
       this.vTicks.stroke()
 
-      if (isMajor && screenY >= lastLabelEndY + labelGap) {
-        const text = this.formatNumber(worldY)
-        const label = new Text({ text, style: this.textStyle })
+      // displayY 递增时 worldY 递减，screenY 沿屏幕向上变小，不能用 screenY - last（会为负）；用屏幕距
+      if (isMajor && Math.abs(screenY - lastLabelScreenY) >= minLabelScreenInterval) {
+        const label = new Text({
+          text: this.formatNumber(displayY),
+          style: this.textStyle
+        })
         label.rotation = -Math.PI / 2
         label.x = thickness - 4
         label.y = screenY - 2
         label.anchor.set(0, 1)
         this.vLabels.addChild(label)
-        lastLabelEndY = screenY + text.length * charWidth
+        lastLabelScreenY = screenY
       }
     }
   }
