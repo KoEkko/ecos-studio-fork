@@ -38,5 +38,8 @@ openspec/
 
 assets/*.json
 
+.cursor
+openspec/
+
 public/mock-design/*
 public/layout_source/*.json
