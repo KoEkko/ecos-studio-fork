@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
+/** Monaco workers: `vite-plugin-monaco-editor-esm` is validated against monaco-editor 0.52.x; 0.55+ worker paths differ. */
+import monacoEditorPlugin from 'vite-plugin-monaco-editor-esm'
 import { fileURLToPath, URL } from 'node:url'
 
 // https://vitejs.dev/config/
@@ -21,7 +23,8 @@ export default defineConfig({
         }
       }
     }),
-    tailwindcss()
+    tailwindcss(),
+    monacoEditorPlugin(),
   ],
   clearScreen: false,
   server: {
@@ -47,7 +50,8 @@ export default defineConfig({
       output: {
         manualChunks: {
           'vue-vendor': ['vue', 'vue-router'],
-          'primevue-vendor': ['primevue']
+          'primevue-vendor': ['primevue'],
+          'monaco-vendor': ['monaco-editor'],
         }
       }
     },
@@ -57,7 +61,7 @@ export default defineConfig({
     assetsInlineLimit: 4096
   },
   optimizeDeps: {
-    include: ['vue', 'vue-router', 'primevue']
-  }
+    include: ['vue', 'vue-router', 'primevue', 'monaco-editor'],
+  },
 })
 
