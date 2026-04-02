@@ -575,44 +575,6 @@ void loadLayoutData
           Layout Mode
         </div>
       </div>
-
-      <!-- Placement mode indicator -->
-      <div
-        v-if="layoutState.isPlacementMode.value"
-        class="absolute top-2 left-1/2 -translate-x-1/2 px-3 py-1.5 bg-emerald-900/80 text-emerald-300 text-xs rounded z-10 flex items-center gap-2"
-      >
-        <i class="ri-add-circle-line"></i>
-        <span>Placement Mode</span>
-        <span class="text-emerald-400/60 text-[10px]">Click to place | R rotate | Esc exit</span>
-      </div>
-
-      <!-- Selection hint -->
-      <div
-        v-if="layoutState.tileSelection.value && !layoutState.isPlacementMode.value"
-        class="absolute bottom-2 left-1/2 -translate-x-1/2 px-3 py-1.5 bg-slate-800/90 text-slate-200 text-xs rounded z-10 flex items-center gap-3 backdrop-blur-sm pointer-events-none select-none"
-      >
-        <template v-if="layoutState.tileSelection.value.type === 'instance'">
-          <span class="text-slate-400">Del</span><span>Delete instance</span>
-          <span class="text-slate-500">|</span>
-          <span class="text-slate-400">C</span><span>Copy and place</span>
-          <span class="text-slate-500">|</span>
-          <span class="text-slate-400">Drag</span><span>Move</span>
-        </template>
-        <template v-else-if="layoutState.tileSelection.value.type === 'segment'">
-          <span class="text-slate-400">Del</span><span>Delete segment</span>
-        </template>
-        <template v-else>
-          <span class="text-slate-400">Esc</span><span>Cancel selection</span>
-        </template>
-      </div>
-
-      <!-- Unsaved edits indicator -->
-      <div
-        v-if="layoutState.hasUnsavedEdits.value"
-        class="absolute bottom-2 right-2 px-2 py-1 bg-amber-900/60 text-amber-300 text-[10px] rounded z-10"
-      >
-        Unsaved edits
-      </div>
     </div>
   </div>
 </template>

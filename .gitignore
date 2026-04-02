@@ -1,6 +1,7 @@
 ws
 bazel-*
 .pnpm-store
+.vscode
 .setup-done
 # Nix result
 result

@@ -1153,18 +1153,16 @@ function stateClass(state: string): string {
 /* ==================== 指标分析 ==================== */
 .analysis-content {
   flex: 1;
-  padding: 10px;
+  padding: 8px;
   overflow: auto;
-  min-height: 0;
 }
 
 .charts-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  grid-auto-rows: minmax(128px, 1fr);
-  gap: 10px;
+  grid-template-rows: 1fr 1fr;
+  gap: 6px;
   height: 100%;
-  min-height: 260px;
 }
 
 /* Last row span adjustment for uneven items */
@@ -1183,21 +1181,16 @@ function stateClass(state: string): string {
 .chart-card {
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 6px;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  justify-content: flex-start;
-  gap: 8px;
-  padding: 8px;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px;
+  transition: border-color 0.15s ease;
   cursor: pointer;
   overflow: hidden;
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.12);
-}
-
-html.dark .chart-card {
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .chart-card:hover {
@@ -1210,187 +1203,27 @@ html.dark .chart-card {
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: 112px;
+  min-height: 0;
   font-size: 28px;
   color: var(--text-secondary);
   opacity: 0.25;
-  /* 浅色 PNG 在深色卡片内用衬底收边，避免整块发白刺眼 */
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  padding: 6px 8px;
 }
 
 .chart-visual img.chart-image {
   width: 100%;
   height: 100%;
-  min-height: 96px;
   object-fit: contain;
   display: block;
   opacity: 1;
-  border-radius: 4px;
-  background: #f3f4f6;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
-}
-
-html.dark .chart-visual img.chart-image {
-  background: #eceef2;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
 }
 
 .chart-label {
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 600;
-  line-height: 1.25;
-  color: var(--text-primary);
+  color: var(--text-secondary);
   text-align: center;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
   flex-shrink: 0;
-  letter-spacing: 0.02em;
-}
-
-/* ===== 图表预览 Lightbox ===== */
-.chart-lightbox-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(6px);
-}
-
-.chart-lightbox-content {
-  display: flex;
-  flex-direction: column;
-  max-width: 90vw;
-  max-height: 90vh;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-}
-
-.chart-lightbox-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0;
-}
-
-.chart-lightbox-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.chart-lightbox-close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 18px;
-  transition: background 0.15s, color 0.15s;
-}
-
-.chart-lightbox-close:hover {
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-}
-
-.chart-lightbox-body {
-  padding: 16px;
-  overflow: auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.chart-lightbox-body img {
-  max-width: 85vw;
-  max-height: 80vh;
-  object-fit: contain;
-  border-radius: 4px;
-}
-
-/* Lightbox 过渡动画 */
-.lightbox-enter-active {
-  transition: opacity 0.2s ease;
-}
-
-.lightbox-enter-active .chart-lightbox-content {
-  transition: transform 0.2s ease, opacity 0.2s ease;
-}
-
-.lightbox-leave-active {
-  transition: opacity 0.15s ease;
-}
-
-.lightbox-leave-active .chart-lightbox-content {
-  transition: transform 0.15s ease, opacity 0.15s ease;
-}
-
-.lightbox-enter-from {
-  opacity: 0;
-}
-
-.lightbox-enter-from .chart-lightbox-content {
-  opacity: 0;
-  transform: scale(0.92);
-}
-
-.lightbox-leave-to {
-  opacity: 0;
-}
-
-.lightbox-leave-to .chart-lightbox-content {
-  opacity: 0;
-  transform: scale(0.95);
-}
-
-.analysis-placeholder {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 20px;
-  border: 2px dashed var(--border-color);
-  border-radius: 8px;
-  background: var(--bg-primary);
-}
-
-.analysis-placeholder i {
-  font-size: 28px;
-  color: var(--text-secondary);
-  opacity: 0.3;
-}
-
-.analysis-placeholder p {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin: 0;
-}
-
-.analysis-placeholder span {
-  font-size: 10px;
-  color: var(--text-secondary);
-  opacity: 0.6;
 }
 
 /* ==================== Flow step log ==================== */
