@@ -9,11 +9,14 @@ interface Props {
   showTileGenerate?: boolean
   /** 正在生成瓦片时禁用按钮 */
   tileGenBusy?: boolean
+  /** 矢量版图模式：在 Select 工具上附加与画布选中区一致的快捷键说明 */
+  layoutTileShortcutsHint?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   showTileGenerate: false,
   tileGenBusy: false,
+  layoutTileShortcutsHint: false,
 })
 
 const emit = defineEmits<{
@@ -42,6 +45,13 @@ const tools = [
   { id: 'highlight', icon: 'ri-focus-3-line', tooltip: 'Highlight', shortcut: '' },
   { id: 'layers', icon: 'ri-stack-line', tooltip: 'Layers', shortcut: '' },
 ]
+
+function toolTitle(tool: (typeof tools)[number]): string {
+  if (tool.id === 'select' && props.layoutTileShortcutsHint) {
+    return `${tool.tooltip} · 版图 Esc / R / C / Del / Ctrl+Z / F`
+  }
+  return tool.tooltip
+}
 
 const setActiveTool = (toolId: string) => {
   const prev = activeTool.value
@@ -140,7 +150,7 @@ watch(() => props.editor, (editor) => {
       <button v-for="tool in tools" :key="tool.id" @click="setActiveTool(tool.id)" :class="{
         'bg-(--accent-color) text-white': activeTool === tool.id,
         'text-(--text-secondary) hover:text-(--text-primary) hover:bg-(--bg-hover)': activeTool !== tool.id
-      }" class="w-9 h-9 flex items-center justify-center rounded transition-all" :title="tool.tooltip">
+      }" class="w-9 h-9 flex items-center justify-center rounded transition-all" :title="toolTitle(tool)">
         <i :class="tool.icon" class="text-base"></i>
       </button>
 

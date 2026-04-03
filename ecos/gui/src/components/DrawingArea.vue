@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { shallowRef, markRaw, watch, ref, onUnmounted, computed } from 'vue'
+import { shallowRef, markRaw, watch, ref, onUnmounted, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { EditorContainer, type Editor } from '@/applications/editor'
 import {
@@ -33,6 +33,7 @@ import { isTauri } from '@/composables/useTauri'
 import { pickLayoutJsonPath, runLayoutTileGeneration } from '@/composables/useLayoutTileGen'
 import { getInfoApi } from '@/api/flow'
 import { CMDEnum, InfoEnum, StepEnum, ResponseEnum } from '@/api/type'
+import { RULER_THICKNESS } from '@/applications/editor/core/rulerConfig'
 
 const route = useRoute()
 const { currentProject, sseMessages, stepRefreshCounter } = useWorkspace()
@@ -97,9 +98,89 @@ watch(
   { immediate: true }
 )
 
-onUnmounted(() => {
-  detachCanvasPointerListeners?.()
+/** 画布底部居中、标尺上方：版图快捷键（可点击，与 TileInteraction / PlacementTool 一致） */
+const LAYOUT_HOTKEY_BAR_BOTTOM_PX = RULER_THICKNESS + 10
+
+function isMacPlatform(): boolean {
+  return typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.platform)
+}
+
+const showLayoutHotkeyBar = computed(() =>
+  layoutState.renderMode.value === 'layout'
+  && layoutState.tileActions.value != null
+  && layoutState.tileSelection.value != null,
+)
+
+const hotkeyDeleteApplicable = computed(() => {
+  if (layoutState.isPlacementMode.value) return false
+  const t = layoutState.tileSelection.value?.type
+  return t === 'instance' || t === 'segment'
 })
+
+const hotkeyCApplicable = computed(() =>
+  !layoutState.isPlacementMode.value
+  && layoutState.tileSelection.value?.type === 'instance'
+  && layoutState.tileSelection.value.cellId != null,
+)
+
+const hotkeyRApplicable = computed(() => layoutState.isPlacementMode.value)
+
+const hotkeyFitApplicable = computed(() => layoutState.tileSelection.value != null)
+
+function dispatchDeleteKey(): void {
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, cancelable: true }))
+}
+
+function dispatchBackspaceKey(): void {
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true }))
+}
+
+function dispatchPlaceKey(): void {
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', bubbles: true, cancelable: true }))
+}
+
+function dispatchEscapeKey(): void {
+  if (layoutState.isPlacementMode.value) {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+  } else {
+    layoutState.tileActions.value?.clearSelection()
+  }
+}
+
+function dispatchRotateKey(): void {
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', bubbles: true, cancelable: true }))
+}
+
+function dispatchUndoChord(): void {
+  const mac = isMacPlatform()
+  window.dispatchEvent(new KeyboardEvent('keydown', {
+    key: 'z',
+    bubbles: true,
+    cancelable: true,
+    ctrlKey: !mac,
+    metaKey: mac,
+  }))
+}
+
+function dispatchRedoChord(): void {
+  const mac = isMacPlatform()
+  if (mac) {
+    window.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'z',
+      bubbles: true,
+      cancelable: true,
+      metaKey: true,
+      shiftKey: true,
+    }))
+  } else {
+    window.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'y',
+      bubbles: true,
+      cancelable: true,
+      ctrlKey: true,
+    }))
+  }
+}
 
 // Layout modules (not reactive — managed imperatively)
 let dataStore: LayoutDataStore | null = null
@@ -597,6 +678,26 @@ function handleFitToView(): void {
   viewportAnimator.fitToBbox({ x: sel.bboxX, y: sel.bboxY, w: sel.bboxW, h: sel.bboxH })
 }
 
+/** 版图选中时：F 适应选中包围盒（与 Fit 按钮一致） */
+function onWindowKeyDownForLayoutFit(e: KeyboardEvent): void {
+  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+  if (e.key !== 'f' && e.key !== 'F') return
+  if (e.ctrlKey || e.metaKey || e.altKey) return
+  if (layoutState.renderMode.value !== 'layout') return
+  if (!layoutState.tileSelection.value) return
+  e.preventDefault()
+  handleFitToView()
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', onWindowKeyDownForLayoutFit)
+})
+
+onUnmounted(() => {
+  detachCanvasPointerListeners?.()
+  window.removeEventListener('keydown', onWindowKeyDownForLayoutFit)
+})
+
 // 保留 loadLayoutData 供未来切换回 JSON 模式使用
 void loadLayoutData
 </script>
@@ -607,6 +708,7 @@ void loadLayoutData
       :editor="editor"
       :show-tile-generate="showTileGenerate"
       :tile-gen-busy="tileGenBusy"
+      :layout-tile-shortcuts-hint="layoutState.renderMode.value === 'layout' && layoutState.tileSelection.value != null"
       @toolChange="onToolChange"
       @generateTiles="onGenerateTilesFromToolbar"
     />
@@ -633,6 +735,90 @@ void loadLayoutData
         Load error: {{ layoutState.loadingMessage.value }}
       </div>
 
+      <!-- 有选中时展示：底部居中、标尺上方，版图快捷键（可点击） -->
+      <div
+        v-if="showLayoutHotkeyBar"
+        class="absolute left-1/2 z-30 max-w-[min(100%,56rem)] -translate-x-1/2 pointer-events-none px-3"
+        :style="{ bottom: `${LAYOUT_HOTKEY_BAR_BOTTOM_PX}px` }"
+      >
+        <div
+          class="pointer-events-auto flex flex-wrap items-center justify-center gap-x-1 gap-y-1 rounded-lg border border-(--border-color) bg-(--bg-primary)/95 px-2 py-1.5 shadow-lg backdrop-blur-sm"
+          role="toolbar"
+          aria-label="版图快捷键"
+        >
+          <button
+            type="button"
+            class="rounded border border-(--border-color) bg-(--bg-secondary) px-1.5 py-0.5 font-mono text-[10px] leading-tight text-(--text-primary) hover:bg-(--bg-hover) sm:text-[11px]"
+            title="放置模式：退出放置；否则：清除选中"
+            @click="dispatchEscapeKey"
+          >
+            Esc
+          </button>
+          <button
+            type="button"
+            class="rounded border border-(--border-color) bg-(--bg-secondary) px-1.5 py-0.5 font-mono text-[10px] leading-tight text-(--text-primary) hover:bg-(--bg-hover) disabled:cursor-not-allowed disabled:opacity-40 sm:text-[11px]"
+            :disabled="!hotkeyRApplicable"
+            title="放置模式：旋转 cell 朝向（90° 步进）"
+            @click="dispatchRotateKey"
+          >
+            R
+          </button>
+          <button
+            type="button"
+            class="rounded border border-(--border-color) bg-(--bg-secondary) px-1.5 py-0.5 font-mono text-[10px] leading-tight text-(--text-primary) hover:bg-(--bg-hover) disabled:cursor-not-allowed disabled:opacity-40 sm:text-[11px]"
+            :disabled="!hotkeyCApplicable"
+            title="选中 instance：复制 cell 并进入放置（C）"
+            @click="dispatchPlaceKey"
+          >
+            C
+          </button>
+          <button
+            type="button"
+            class="rounded border border-(--border-color) bg-(--bg-secondary) px-1.5 py-0.5 font-mono text-[10px] leading-tight text-(--text-primary) hover:bg-(--bg-hover) disabled:cursor-not-allowed disabled:opacity-40 sm:text-[11px]"
+            :disabled="!hotkeyDeleteApplicable"
+            title="删除（Delete）"
+            @click="dispatchDeleteKey"
+          >
+            Del
+          </button>
+          <button
+            type="button"
+            class="rounded border border-(--border-color) bg-(--bg-secondary) px-1.5 py-0.5 font-mono text-[10px] leading-tight text-(--text-primary) hover:bg-(--bg-hover) disabled:cursor-not-allowed disabled:opacity-40 sm:text-[11px]"
+            :disabled="!hotkeyDeleteApplicable"
+            title="删除（Backspace）"
+            @click="dispatchBackspaceKey"
+          >
+            ⌫
+          </button>
+          <button
+            type="button"
+            class="rounded border border-(--border-color) bg-(--bg-secondary) px-1.5 py-0.5 font-mono text-[10px] leading-tight text-(--text-primary) hover:bg-(--bg-hover) sm:text-[11px]"
+            title="撤销（Ctrl+Z）"
+            @click="dispatchUndoChord"
+          >
+            {{ isMacPlatform() ? '⌘Z' : 'Ctrl+Z' }}
+          </button>
+          <button
+            type="button"
+            class="rounded border border-(--border-color) bg-(--bg-secondary) px-1.5 py-0.5 font-mono text-[10px] leading-tight text-(--text-primary) hover:bg-(--bg-hover) sm:text-[11px]"
+            :title="isMacPlatform() ? '重做（⇧⌘Z）' : '重做（Ctrl+Y）'"
+            @click="dispatchRedoChord"
+          >
+            {{ isMacPlatform() ? '⇧⌘Z' : 'Ctrl+Y' }}
+          </button>
+          <button
+            type="button"
+            class="rounded border border-(--accent-color)/40 bg-(--accent-color)/15 px-1.5 py-0.5 font-mono text-[10px] leading-tight text-(--text-primary) hover:bg-(--accent-color)/25 disabled:cursor-not-allowed disabled:opacity-40 sm:text-[11px]"
+            :disabled="!hotkeyFitApplicable"
+            title="适应选中（F）"
+            aria-label="适应选中到视口（F）"
+            @click="handleFitToView"
+          >
+            F
+          </button>
+        </div>
+      </div>
+
       <!-- 鼠标 EDA 坐标（屏幕 → 世界 → 显示） -->
       <div
         class="absolute top-2 right-2 z-20 flex flex-col items-end gap-1 pointer-events-none"
@@ -640,7 +826,6 @@ void loadLayoutData
         <div
           v-if="cursorEda"
           class="rounded border border-(--border-color) bg-(--bg-primary)/90 px-2 py-1 font-mono text-[11px] text-(--text-primary) tabular-nums shadow-sm"
-          title="EDA / 显示坐标（左下原点，Y 向上，与标尺一致）"
         >
           <span class="text-(--text-secondary)">X</span> {{ formatCursorCoord(cursorEda.x) }}
           <span class="ml-2 text-(--text-secondary)">Y</span> {{ formatCursorCoord(cursorEda.y) }}
