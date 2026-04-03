@@ -60,6 +60,16 @@ export class ViewportAnimator {
   }
 
   /**
+   * 直接改 scale/position 不会触发 pixi-viewport 的 `zoomed`/`moved`，
+   * TileManager、选中框线宽等依赖这些事件做瓦片刷新与 UI 更新。
+   */
+  private _emitViewportSyncEvents(): void {
+    // 与插件 `animate` 等路径一致，满足 pixi-viewport 事件载荷类型
+    this.viewport.emit('zoomed', { viewport: this.viewport, type: 'animate' })
+    this.viewport.emit('moved', { viewport: this.viewport, type: 'animate' })
+  }
+
+  /**
    * 动画过渡到目标视口。位置线性插值，缩放对数插值。
    */
   animateTo(target: ViewportState, duration = 500): Promise<void> {
@@ -87,6 +97,7 @@ export class ViewportAnimator {
 
         this.viewport.scale.set(scale)
         this.viewport.moveCenter(cx, cy)
+        this._emitViewportSyncEvents()
 
         if (t < 1) {
           this._animId = requestAnimationFrame(tick)
