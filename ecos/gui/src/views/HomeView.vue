@@ -1226,6 +1226,38 @@ function stateClass(state: string): string {
   flex-shrink: 0;
 }
 
+.analysis-placeholder {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 20px;
+  border: 2px dashed var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-primary);
+}
+
+.analysis-placeholder i {
+  font-size: 28px;
+  color: var(--text-secondary);
+  opacity: 0.3;
+}
+
+.analysis-placeholder p {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.analysis-placeholder span {
+  font-size: 10px;
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
 /* ==================== Flow step log ==================== */
 .flow-log-content {
   flex: 1;
