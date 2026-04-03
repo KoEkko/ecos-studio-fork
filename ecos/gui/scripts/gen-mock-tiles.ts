@@ -2,15 +2,12 @@
 /**
  * gen-mock-tiles.ts
  *
- * 将 GCD 布局 JSON 源数据转换为文档规范的瓦片金字塔格式:
- *   public/mock-design/
- *     manifest.json
- *     cells.bin
- *     global.bin
- *     tiles/raster/{z}/{x}/{y}.png
- *     tiles/vector/{z}/{x}/{y}.bin
+ * 将 Floorplan ECC 单文件布局 JSON（如 test_snip_Floorplan.json）转为瓦片金字塔:
+ *   <out>/
+ *     manifest.json, cells.bin, global.bin
+ *     tiles/raster/{z}/{x}/{y}.png, tiles/vector/{z}/{x}/{y}.bin
  *
- * 运行方式: cd ecos/gui && npx tsx scripts/gen-mock-tiles.ts
+ * 运行: npx tsx scripts/gen-mock-tiles.ts --input <floorplan.json> --out <outputDir>
  */
 
 import fs from 'node:fs'
@@ -18,24 +15,19 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import zlib from 'node:zlib'
 
-// ─── 路径配置 ────────────────────────────────────────────────────────────────
-const ROOT = process.cwd()
-const SOURCE_DIR    = path.join(ROOT, 'public/layout_source')
-const SOURCE_PREFIX = '20_layout_json_top_layout_json'
-const SOURCE_HEADER = path.join(SOURCE_DIR, `${SOURCE_PREFIX}-header.json`)
-const OUT_DIR       = path.join(ROOT, 'public/mock-design')
-
-/** 扫描 SOURCE_DIR，收集所有 `${SOURCE_PREFIX}-N.json` 分片文件，按 N 升序排列 */
-function discoverSourceDataFiles(): string[] {
-  const pattern = new RegExp(`^${SOURCE_PREFIX.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)\\.json$`)
-  const entries = fs.readdirSync(SOURCE_DIR)
-  const matched: { idx: number; file: string }[] = []
-  for (const name of entries) {
-    const m = name.match(pattern)
-    if (m) matched.push({ idx: parseInt(m[1]!, 10), file: path.join(SOURCE_DIR, name) })
+function parseCli(): { input: string; out: string } {
+  const args = process.argv.slice(2)
+  let input = ''
+  let out = ''
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--input' && args[i + 1]) { input = args[++i]!; continue }
+    if (args[i] === '--out' && args[i + 1]) { out = args[++i]!; continue }
   }
-  matched.sort((a, b) => a.idx - b.idx)
-  return matched.map(m => m.file)
+  if (!input || !out) {
+    console.error('Usage: tsx scripts/gen-mock-tiles.ts --input <floorplan.json> --out <outputDir>')
+    process.exit(1)
+  }
+  return { input: path.resolve(input), out: path.resolve(out) }
 }
 
 // ─── 配置常量 ────────────────────────────────────────────────────────────────
@@ -45,26 +37,45 @@ const MIN_FEATURE_FLOOR    = 50      // 过滤退化形状（<50 DBU），避免
 const MAX_Z_HARD_CAP       = 10      // 硬上限：防止小设计因计算偏差生成过多瓦片
 
 
-// ─── 图层定义 ────────────────────────────────────────────────────────────────
-// GDS layerId → { name, rgb, alpha(0-255), zOrder }
-const LAYER_STYLES: Record<number, { name: string; rgb: [number, number, number]; alpha: number; zOrder: number }> = {
-  0:  { name: 'overlap', rgb: [120, 120, 120], alpha: 76,  zOrder: 0  },
-  7:  { name: 'met1',    rgb: [ 65, 105, 225], alpha: 153, zOrder: 10 },
-  8:  { name: 'via1',    rgb: [  0, 206, 209], alpha: 200, zOrder: 15 },
-  9:  { name: 'met2',    rgb: [ 50, 205,  50], alpha: 153, zOrder: 20 },
-  10: { name: 'via2',    rgb: [127, 255,   0], alpha: 200, zOrder: 25 },
-  11: { name: 'met3',    rgb: [255, 215,   0], alpha: 153, zOrder: 30 },
-  12: { name: 'via3',    rgb: [255, 140,   0], alpha: 200, zOrder: 35 },
-  13: { name: 'met4',    rgb: [232,  69,  60], alpha: 153, zOrder: 40 },
-  14: { name: 'via4',    rgb: [255, 105, 180], alpha: 200, zOrder: 45 },
-  15: { name: 'met5',    rgb: [147, 112, 219], alpha: 153, zOrder: 50 },
+// ─── 图层（由 layerInfo 在运行时构建）──────────────────────────────────────────
+const PALETTE: Array<[number, number, number]> = [
+  [120, 120, 120], [65, 105, 225], [0, 206, 209], [50, 205, 50], [127, 255, 0],
+  [255, 215, 0], [255, 140, 0], [232, 69, 60], [255, 105, 180], [147, 112, 219],
+  [255, 99, 71], [32, 178, 170], [186, 85, 211], [60, 179, 113], [123, 104, 238],
+  [70, 130, 180], [218, 165, 32], [205, 92, 92], [106, 90, 205], [30, 144, 255],
+  [220, 20, 60],
+]
+
+interface LayerStyle {
+  name: string
+  rgb: [number, number, number]
+  alpha: number
+  zOrder: number
 }
 
-const USED_LAYER_IDS = [0, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+interface LayerRuntime {
+  /** GDS / 源 id → manifest 中 0-based layerIdx */
+  gdsIdToIdx: Record<number, number>
+  /** layerIdx → 样式 */
+  byIdx: LayerStyle[]
+}
 
-// layerId → 0-based index into manifest.layers (用于 bin 文件中的 layerIdx 字段)
-const LAYER_ID_TO_IDX: Record<number, number> = {}
-USED_LAYER_IDS.forEach((id, idx) => { LAYER_ID_TO_IDX[id] = idx })
+function buildLayerRuntime(layerInfo: Array<{ id: number; layername: string }>): LayerRuntime {
+  const sorted = [...layerInfo].sort((a, b) => a.id - b.id)
+  const gdsIdToIdx: Record<number, number> = {}
+  const byIdx: LayerStyle[] = []
+  sorted.forEach((li, i) => {
+    gdsIdToIdx[li.id] = i
+    const rgb = PALETTE[i % PALETTE.length]!
+    byIdx.push({
+      name: String(li.layername || `layer_${li.id}`).toLowerCase().replace(/\s+/g, '_'),
+      rgb,
+      alpha: i === 0 ? 76 : 153,
+      zOrder: i * 5,
+    })
+  })
+  return { gdsIdToIdx, byIdx }
+}
 
 // ─── 类型定义 ────────────────────────────────────────────────────────────────
 interface ScreenRect {
@@ -139,47 +150,42 @@ function encodePNG(pixels: Buffer, w: number, h: number): Buffer {
   ])
 }
 
-// ─── 解析源数据 ───────────────────────────────────────────────────────────────
-function parseSource(dieH: number): { rawInsts: Array<{ name: string; rects: ScreenRect[] }>; totalBoxes: number } {
-  const sourceFiles = discoverSourceDataFiles()
-  if (sourceFiles.length === 0) throw new Error(`未找到源数据文件 (前缀: ${SOURCE_PREFIX}-*.json)`)
-  console.log(`  发现 ${sourceFiles.length} 个源数据分片`)
-
+// ─── 解析源数据（单文件 Floorplan JSON 的 data 数组）────────────────────────────
+function parseSourceData(
+  data: unknown[],
+  dieH: number,
+  rt: LayerRuntime,
+): { rawInsts: Array<{ name: string; rects: ScreenRect[] }>; totalBoxes: number } {
   const rawInsts: Array<{ name: string; rects: ScreenRect[] }> = []
   let totalBoxes = 0
 
-  for (const filePath of sourceFiles) {
-    const fileName = path.basename(filePath)
-    console.log(`  读取 ${fileName}...`)
-    const rawData = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
+  for (const group of data) {
+    const g = group as { type?: string; 'struct name'?: string; children?: unknown[] }
+    if (g.type !== 'group' || !g.children) continue
+    const rects: ScreenRect[] = []
+    for (const child of g.children) {
+      const c = child as { type?: string; layer?: number; path?: [number, number][] }
+      if (c.type !== 'box' || !c.path) continue
+      const layerIdx = rt.gdsIdToIdx[c.layer as number]
+      if (layerIdx === undefined) continue
 
-    for (const group of rawData.data) {
-      if (group.type !== 'group') continue
-      const rects: ScreenRect[] = []
-      for (const child of group.children) {
-        if (child.type !== 'box') continue
-        const layerIdx = LAYER_ID_TO_IDX[child.layer as number]
-        if (layerIdx === undefined) continue
-
-        const pts = child.path as [number, number][]
-        let xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity
-        for (const [x, y] of pts) {
-          if (x < xMin) xMin = x; if (x > xMax) xMax = x
-          if (y < yMin) yMin = y; if (y > yMax) yMax = y
-        }
-        // GDS Y 向上 → screen Y 向下: screenY = dieH - gdsY
-        rects.push({
-          minX: xMin,
-          maxX: xMax,
-          minY: dieH - yMax,
-          maxY: dieH - yMin,
-          layerIdx,
-        })
+      const pts = c.path
+      let xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity
+      for (const [x, y] of pts) {
+        if (x < xMin) xMin = x; if (x > xMax) xMax = x
+        if (y < yMin) yMin = y; if (y > yMax) yMax = y
       }
-      if (rects.length > 0) {
-        rawInsts.push({ name: group['struct name'] as string, rects })
-        totalBoxes += rects.length
-      }
+      rects.push({
+        minX: xMin,
+        maxX: xMax,
+        minY: dieH - yMax,
+        maxY: dieH - yMin,
+        layerIdx,
+      })
+    }
+    if (rects.length > 0) {
+      rawInsts.push({ name: String(g['struct name'] ?? 'instance'), rects })
+      totalBoxes += rects.length
     }
   }
   return { rawInsts, totalBoxes }
@@ -333,129 +339,17 @@ function buildCellsBin(cellDefs: Map<number, CellDef>): Buffer {
  * 格式:
  *   [File Header: 12 bytes]
  *     u32 magic=0x45434756  u16 version=1  u16 reserved  u32 shapeCount
- *   [Shape Table, per shape: 24 bytes]
- *     u32 shapeId  u8 layerIdx  u8 type  u16 nameIdx  i32 x  i32 y  i32 w  i32 h
- *   [String Pool]
- *     u32 stringCount  per string: u16 len + utf8 bytes
+ *   [Shape Table...]  [String Pool...]
  *
- * 为测试用途合成几条假电源条和垂直 rail
+ * 仅输出空 global（shapeCount=0）。不再注入测试用假电源条，避免与真实布局 JSON 中未出现的层名（如 T4M2、RDL）混淆。
  */
-function buildGlobalBin(dieW: number, dieH: number): Buffer {
-  // type: 0=power_stripe(VDD), 1=ground_stripe(VSS), 2=io_pin, 3=blockage
-  const shapes = [
-    { id: 1, layerIdx: LAYER_ID_TO_IDX[15]!, type: 0, nameIdx: 0, x: 0,                          y: Math.floor(dieH * 0.25), w: dieW, h: 600 },  // MET5 H VDD
-    { id: 2, layerIdx: LAYER_ID_TO_IDX[15]!, type: 1, nameIdx: 1, x: 0,                          y: Math.floor(dieH * 0.50), w: dieW, h: 600 },  // MET5 H VSS
-    { id: 3, layerIdx: LAYER_ID_TO_IDX[15]!, type: 0, nameIdx: 0, x: 0,                          y: Math.floor(dieH * 0.75), w: dieW, h: 600 },  // MET5 H VDD
-    { id: 4, layerIdx: LAYER_ID_TO_IDX[13]!, type: 0, nameIdx: 0, x: Math.floor(dieW * 0.25), y: 0, w: 500, h: dieH },  // MET4 V VDD
-    { id: 5, layerIdx: LAYER_ID_TO_IDX[13]!, type: 1, nameIdx: 1, x: Math.floor(dieW * 0.50), y: 0, w: 500, h: dieH },  // MET4 V VSS
-    { id: 6, layerIdx: LAYER_ID_TO_IDX[13]!, type: 0, nameIdx: 0, x: Math.floor(dieW * 0.75), y: 0, w: 500, h: dieH },  // MET4 V VDD
-  ]
-  const names = ['VDD', 'VSS']
-
-  // File header (12 bytes)
+function buildGlobalBin(_dieW: number, _dieH: number, _rt: LayerRuntime): Buffer {
   const fileHdr = Buffer.alloc(12)
   fileHdr.writeUInt32LE(0x45434756, 0)  // "ECGV"
-  fileHdr.writeUInt16LE(1, 4)           // version
-  fileHdr.writeUInt16LE(0, 6)           // reserved
-  fileHdr.writeUInt32LE(shapes.length, 8)
-
-  // Shape table (24 bytes × n)
-  const shapeBuf = Buffer.alloc(shapes.length * 24)
-  shapes.forEach((s, i) => {
-    const o = i * 24
-    shapeBuf.writeUInt32LE(s.id, o)
-    shapeBuf[o + 4] = s.layerIdx
-    shapeBuf[o + 5] = s.type
-    shapeBuf.writeUInt16LE(s.nameIdx, o + 6)
-    shapeBuf.writeInt32LE(s.x, o + 8)
-    shapeBuf.writeInt32LE(s.y, o + 12)
-    shapeBuf.writeInt32LE(s.w, o + 16)
-    shapeBuf.writeInt32LE(s.h, o + 20)
-  })
-
-  // String pool
-  const strParts: Buffer[] = []
-  const strCount = Buffer.alloc(4)
-  strCount.writeUInt32LE(names.length, 0)
-  strParts.push(strCount)
-  for (const name of names) {
-    const nb = Buffer.from(name, 'utf8')
-    const lenBuf = Buffer.alloc(2)
-    lenBuf.writeUInt16LE(nb.length, 0)
-    strParts.push(lenBuf, nb)
-  }
-
-  return Buffer.concat([fileHdr, shapeBuf, ...strParts])
-}
-
-// ─── 模拟 routing 生成 ────────────────────────────────────────────────────────
-interface FlatSeg { x: number; y: number; w: number; h: number }
-interface FlatGroup { layerIdx: number; direction: number; wireWidth: number; rects: FlatSeg[] }
-
-interface RoutingWire {
-  layerIdx: number; direction: number; wireWidth: number
-  x: number; y: number; w: number; h: number
-}
-
-/**
- * 全局生成 mock routing，基于所有 instance 的位置，
- * 保证所有 Z 级别看到的走线完全一致。
- */
-function generateGlobalRouting(cellInsts: CellInst[]): RoutingWire[] {
-  if (cellInsts.length < 2) return []
-
-  const met1Idx = LAYER_ID_TO_IDX[7]!
-  const met2Idx = LAYER_ID_TO_IDX[9]!
-  const WIRE_W  = 140
-
-  const wires: RoutingWire[] = []
-  const sorted = [...cellInsts].sort((a, b) => a.originY - b.originY || a.originX - b.originX)
-
-  for (let i = 0; i < sorted.length - 1; i++) {
-    const a = sorted[i]!, b = sorted[i + 1]!
-    const aCx = a.originX + Math.floor(a.bboxW / 2)
-    const aCy = a.originY + Math.floor(a.bboxH / 2)
-    const bCx = b.originX + Math.floor(b.bboxW / 2)
-    const bCy = b.originY + Math.floor(b.bboxH / 2)
-
-    if (Math.abs(aCy - bCy) < a.bboxH * 2) {
-      const x0 = Math.min(aCx, bCx), x1 = Math.max(aCx, bCx)
-      if (x1 - x0 > WIRE_W * 2) {
-        wires.push({ layerIdx: met1Idx, direction: 0, wireWidth: WIRE_W,
-          x: x0, y: aCy - Math.floor(WIRE_W / 2), w: x1 - x0, h: WIRE_W })
-      }
-    } else {
-      const y0 = Math.min(aCy, bCy), y1 = Math.max(aCy, bCy)
-      if (y1 - y0 > WIRE_W * 2) {
-        wires.push({ layerIdx: met2Idx, direction: 1, wireWidth: WIRE_W,
-          x: aCx - Math.floor(WIRE_W / 2), y: y0, w: WIRE_W, h: y1 - y0 })
-      }
-    }
-  }
-  return wires
-}
-
-/** 从全局走线集合中提取与瓦片重叠的走线（存储原始完整坐标，渲染时由前端裁剪） */
-function getRoutingForTile(
-  wires: RoutingWire[],
-  tileBounds: { x: number; y: number; x2: number; y2: number },
-): FlatGroup[] {
-  const groups = new Map<string, FlatGroup>()
-
-  for (const w of wires) {
-    if (w.x >= tileBounds.x2 || w.x + w.w <= tileBounds.x ||
-        w.y >= tileBounds.y2 || w.y + w.h <= tileBounds.y) continue
-
-    const key = `${w.layerIdx}:${w.direction}:${w.wireWidth}`
-    let group = groups.get(key)
-    if (!group) {
-      group = { layerIdx: w.layerIdx, direction: w.direction, wireWidth: w.wireWidth, rects: [] }
-      groups.set(key, group)
-    }
-    group.rects.push({ x: w.x, y: w.y, w: w.w, h: w.h })
-  }
-
-  return [...groups.values()]
+  fileHdr.writeUInt16LE(1, 4)
+  fileHdr.writeUInt16LE(0, 6)
+  fileHdr.writeUInt32LE(0, 8)
+  return fileHdr
 }
 
 // ─── 矢量瓦片 ─────────────────────────────────────────────────────────────────
@@ -463,24 +357,14 @@ function getRoutingForTile(
  * 格式:
  *   [Header: 16 bytes]
  *     u32 magic=0x45434F53  u16 version=2  u8 flags  u8 reserved
- *     u32 instanceCount  u32 flatRectCount
+ *     u32 instanceCount  u32 flatRectCount (=0)
  *   [Section B: Instance Table]
  *     per inst: u32 instanceId  u32 cellId  i32 originX  i32 originY  u8 orient  [17 bytes]
- *   [Section C: Flat Geometry]
- *     per group: u8 layerIdx  u8 direction  u16 wireWidth  u32 segCount
- *                segCount × [i32 x, i32 y, i32 w, i32 h]
  */
-function buildVectorTile(instances: CellInst[], flatGroups?: FlatGroup[]): Buffer {
+function buildVectorTile(instances: CellInst[]): Buffer {
   const INST_SIZE = 17
 
-  let flatRectCount = 0
-  if (flatGroups) {
-    for (const g of flatGroups) flatRectCount += g.rects.length
-  }
-
-  let flags = 0
-  if (instances.length > 0) flags |= 1  // bit0: has_instances
-  if (flatRectCount > 0)    flags |= 2  // bit1: has_flat_geometry
+  const flags = instances.length > 0 ? 1 : 0  // bit0: has_instances
 
   const header = Buffer.alloc(16)
   header.writeUInt32LE(0x45434F53, 0)  // "ECOS"
@@ -488,7 +372,7 @@ function buildVectorTile(instances: CellInst[], flatGroups?: FlatGroup[]): Buffe
   header[6] = flags
   header[7] = 0
   header.writeUInt32LE(instances.length, 8)
-  header.writeUInt32LE(flatRectCount, 12)
+  header.writeUInt32LE(0, 12)          // flatRectCount
 
   const instBuf = Buffer.alloc(instances.length * INST_SIZE)
   instances.forEach((inst, i) => {
@@ -500,30 +384,7 @@ function buildVectorTile(instances: CellInst[], flatGroups?: FlatGroup[]): Buffe
     instBuf[o + 16] = inst.orient
   })
 
-  // Section C: flat geometry
-  const flatParts: Buffer[] = []
-  if (flatGroups && flatRectCount > 0) {
-    for (const g of flatGroups) {
-      const ghdr = Buffer.alloc(8)
-      ghdr[0] = g.layerIdx
-      ghdr[1] = g.direction
-      ghdr.writeUInt16LE(g.wireWidth, 2)
-      ghdr.writeUInt32LE(g.rects.length, 4)
-      flatParts.push(ghdr)
-
-      const rectBuf = Buffer.alloc(g.rects.length * 16)
-      g.rects.forEach((r, i) => {
-        const o = i * 16
-        rectBuf.writeInt32LE(r.x, o)
-        rectBuf.writeInt32LE(r.y, o + 4)
-        rectBuf.writeInt32LE(r.w, o + 8)
-        rectBuf.writeInt32LE(r.h, o + 12)
-      })
-      flatParts.push(rectBuf)
-    }
-  }
-
-  return Buffer.concat([header, instBuf, ...flatParts])
+  return Buffer.concat([header, instBuf])
 }
 
 // ─── 栅格瓦片渲染 ─────────────────────────────────────────────────────────────
@@ -532,20 +393,20 @@ function renderRasterTile(
   cellDefs:  Map<number, CellDef>,
   tileBounds: { x: number; y: number; x2: number; y2: number },
   tileWorldSize: number,
+  rt: LayerRuntime,
 ): Buffer {
   const S = TILE_PIXEL_SIZE
   const pixels = Buffer.alloc(S * S * 4) // 全透明 (RGBA = 0,0,0,0)
 
   const scale = S / tileWorldSize
 
-  // 按 zOrder 从低到高渲染各层
-  const sortedLayers = USED_LAYER_IDS.slice().sort(
-    (a, b) => LAYER_STYLES[a]!.zOrder - LAYER_STYLES[b]!.zOrder
-  )
+  const sortedLayerIdx = rt.byIdx
+    .map((s, i) => ({ i, z: s.zOrder }))
+    .sort((a, b) => a.z - b.z)
+    .map(x => x.i)
 
-  for (const layerId of sortedLayers) {
-    const layerIdx = LAYER_ID_TO_IDX[layerId]!
-    const style    = LAYER_STYLES[layerId]!
+  for (const layerIdx of sortedLayerIdx) {
+    const style = rt.byIdx[layerIdx]!
     const [sr, sg, sb] = style.rgb
     const sa = style.alpha / 255
 
@@ -599,22 +460,44 @@ function renderRasterTile(
   return pixels
 }
 
+function parseDbuPerMicron(units: unknown): number {
+  if (typeof units !== 'string') return 1000
+  const parts = units.trim().split(/\s+/)
+  const first = parseFloat(parts[0] || '1')
+  if (first >= 10) return Math.round(first)
+  return 1000
+}
+
 // ─── 主流程 ───────────────────────────────────────────────────────────────────
 function main() {
-  console.log('\n🚀 GCD Mock Tile Generator\n')
+  console.log('\n🚀 Floorplan tile generator\n')
 
-  // ── 读取 header ─────────────────────────────────────────────────────────────
-  const header = JSON.parse(fs.readFileSync(SOURCE_HEADER, 'utf-8'))
-  const diePts  = header.diearea.path as [number, number][]
+  const { input, out: OUT_DIR } = parseCli()
+  const merged = JSON.parse(fs.readFileSync(input, 'utf-8')) as {
+    diearea?: { path?: [number, number][] }
+    layerInfo?: Array<{ id: number; layername: string }>
+    data?: unknown[]
+    units?: string
+    'design name'?: string
+  }
+
+  if (!merged.diearea?.path?.length) throw new Error('Invalid JSON: missing diearea.path')
+  if (!merged.layerInfo?.length) throw new Error('Invalid JSON: missing layerInfo')
+  if (!Array.isArray(merged.data)) throw new Error('Invalid JSON: missing data array')
+
+  const diePts = merged.diearea.path
   const dieMinX = Math.min(...diePts.map(p => p[0]))
   const dieMinY = Math.min(...diePts.map(p => p[1]))
-  const dieW    = Math.max(...diePts.map(p => p[0])) - dieMinX  // 84710
-  const dieH    = Math.max(...diePts.map(p => p[1])) - dieMinY  // 84710
+  const dieW = Math.max(...diePts.map(p => p[0])) - dieMinX
+  const dieH = Math.max(...diePts.map(p => p[1])) - dieMinY
 
-  console.log(`📐 Die area: ${dieW} × ${dieH} DBU (${(dieW/1000).toFixed(1)} × ${(dieH/1000).toFixed(1)} μm)`)
+  const rt = buildLayerRuntime(merged.layerInfo)
+  const dbuPerMicron = parseDbuPerMicron(merged.units)
+  const designName = String(merged['design name'] ?? 'design')
 
-  // ── 解析源数据 ───────────────────────────────────────────────────────────────
-  const { rawInsts, totalBoxes } = parseSource(dieH)
+  console.log(`📐 Die area: ${dieW} × ${dieH} DBU (${(dieW / dbuPerMicron).toFixed(3)} × ${(dieH / dbuPerMicron).toFixed(3)} μm)`)
+
+  const { rawInsts, totalBoxes } = parseSourceData(merged.data, dieH, rt)
   console.log(`📊 ${rawInsts.length} instances, ${totalBoxes} boxes`)
 
   // ── 最小特征尺寸 ─────────────────────────────────────────────────────────────
@@ -672,16 +555,17 @@ function main() {
 
   // ── global.bin ───────────────────────────────────────────────────────────────
   console.log('📦 写入 global.bin...')
-  const globalBuf  = buildGlobalBin(dieW, dieH)
+  const globalBuf  = buildGlobalBin(dieW, dieH, rt)
   fs.writeFileSync(path.join(OUT_DIR, 'global.bin'), globalBuf)
   const globalHash = 'sha256:' + crypto.createHash('sha256').update(globalBuf).digest('hex')
   console.log(`   ${globalBuf.length} bytes`)
 
   // ── manifest.json ────────────────────────────────────────────────────────────
+  const sortedLayerInfo = [...merged.layerInfo].sort((a, b) => a.id - b.id)
   const manifest = {
     version:     1,
-    designName:  'gcd',
-    dbuPerMicron: 1000,
+    designName,
+    dbuPerMicron,
     dieArea: { x: 0, y: 0, w: dieW, h: dieH },
     tileConfig: {
       tilePixelSize: TILE_PIXEL_SIZE,
@@ -691,13 +575,13 @@ function main() {
       rasterFormat:  'png',
       vectorFormat:  'bin',
     },
-    layers: USED_LAYER_IDS.map((id, idx) => {
-      const s = LAYER_STYLES[id]!
+    layers: sortedLayerInfo.map((li, idx) => {
+      const s = rt.byIdx[idx]!
       const hex = '#' + s.rgb.map(v => v.toString(16).padStart(2, '0')).join('')
       return {
         id:             idx,
         name:           s.name,
-        originalLayerId: id,
+        originalLayerId: li.id,
         zOrder:         s.zOrder,
         color:          hex,
         alpha:          +(s.alpha / 255).toFixed(2),
@@ -715,11 +599,6 @@ function main() {
   }
   fs.writeFileSync(path.join(OUT_DIR, 'manifest.json'), JSON.stringify(manifest, null, 2))
   console.log('📦 写入 manifest.json')
-
-  // ── 全局 routing 生成 ────────────────────────────────────────────────────────
-  console.log('\n🔌 生成 mock routing...')
-  const globalRouting = generateGlobalRouting(cellInsts)
-  console.log(`   ${globalRouting.length} 条走线`)
 
   // ── 生成瓦片 ─────────────────────────────────────────────────────────────────
   console.log('\n🗺  生成瓦片...')
@@ -748,11 +627,7 @@ function main() {
           inst.originY + inst.bboxH > tbY
         )
 
-        const hasRouting = globalRouting.some(w =>
-          w.x < tileBounds.x2 && w.x + w.w > tileBounds.x &&
-          w.y < tileBounds.y2 && w.y + w.h > tileBounds.y
-        )
-        const hasVectorContent = visible.length > 0 || hasRouting
+        const hasVectorContent = visible.length > 0
 
         // 高 Z：空矢量瓦片不生成文件
         if (!isLowZ && !hasVectorContent) {
@@ -763,7 +638,7 @@ function main() {
         if (isLowZ) {
           const rasterDir = path.join(OUT_DIR, `tiles/raster/${z}/${tx}`)
           fs.mkdirSync(rasterDir, { recursive: true })
-          const pixels = renderRasterTile(visible, cellDefs, tileBounds, tileWorldSize)
+          const pixels = renderRasterTile(visible, cellDefs, tileBounds, tileWorldSize, rt)
           const png    = encodePNG(pixels, TILE_PIXEL_SIZE, TILE_PIXEL_SIZE)
           fs.writeFileSync(path.join(rasterDir, `${ty}.png`), png)
           rasterCount++
@@ -772,16 +647,14 @@ function main() {
           if (hasVectorContent) {
             const vecDir = path.join(OUT_DIR, `tiles/vector/${z}/${tx}`)
             fs.mkdirSync(vecDir, { recursive: true })
-            const flatGroups = getRoutingForTile(globalRouting, tileBounds)
-            const bin = buildVectorTile(visible, flatGroups)
+            const bin = buildVectorTile(visible)
             fs.writeFileSync(path.join(vecDir, `${ty}.bin`), bin)
             vectorCount++
           }
         } else {
           const vecDir = path.join(OUT_DIR, `tiles/vector/${z}/${tx}`)
           fs.mkdirSync(vecDir, { recursive: true })
-          const flatGroups = getRoutingForTile(globalRouting, tileBounds)
-          const bin = buildVectorTile(visible, flatGroups)
+          const bin = buildVectorTile(visible)
           fs.writeFileSync(path.join(vecDir, `${ty}.bin`), bin)
           vectorCount++
         }
@@ -795,7 +668,8 @@ function main() {
 
   console.log(`\n✅ 完成!`)
   console.log(`   栅格: ${rasterCount} 块  矢量: ${vectorCount} 块  空瓦片跳过: ${emptySkipped}`)
-  console.log(`   cell 类型复用率: ${(1 - cellDefs.size / cellInsts.length).toFixed(1)}%`)
+  const reuse = cellInsts.length > 0 ? (1 - cellDefs.size / cellInsts.length) : 0
+  console.log(`   cell 类型复用率: ${(reuse * 100).toFixed(1)}%`)
   console.log(`   cells.bin vs 展开: ${(cellsBuf.length / 1024).toFixed(0)} KB vs ~${Math.round(totalBoxes * 16 / 1024)} KB`)
   console.log(`\n📁 输出目录: ${OUT_DIR}`)
 }

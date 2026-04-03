@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { shallowRef, markRaw, watch, ref, onUnmounted } from 'vue'
+import { shallowRef, markRaw, watch, ref, onUnmounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { EditorContainer, type Editor } from '@/applications/editor'
 import {
@@ -23,10 +23,14 @@ import {
   EditManager,
   PlacementTool,
 } from '@/applications/editor/tile'
+import type { CellDefStore } from '@/applications/editor/tile/CellDefStore'
+import type { GlobalLayerStore } from '@/applications/editor/tile/GlobalLayerStore'
 import DrawingToolbar from './DrawingToolbar.vue'
 import { useWorkspace } from '@/composables/useWorkspace'
 import { useEDA } from '@/composables/useEDA'
 import { useLayoutState } from '@/composables/useLayoutState'
+import { isTauri } from '@/composables/useTauri'
+import { pickLayoutJsonPath, runLayoutTileGeneration } from '@/composables/useLayoutTileGen'
 import { getInfoApi } from '@/api/flow'
 import { CMDEnum, InfoEnum, StepEnum, ResponseEnum } from '@/api/type'
 
@@ -36,6 +40,17 @@ const { getResourceUrl } = useEDA()
 const layoutState = useLayoutState()
 
 const editor = shallowRef<Editor | null>(null)
+
+/** get_info(layout) 返回的布局 JSON 相对路径，供工具栏生成瓦片 */
+const layoutJsonRelativePath = ref<string | null>(null)
+const tileGenBusy = ref(false)
+const showTileGenerate = computed(() => isTauri() && import.meta.env.DEV)
+
+/** 当前路由阶段名，用作瓦片缓存子目录 stepKey（与 handleStageChange 一致） */
+const currentStepKey = computed(() => {
+  const pathParts = route.path.split('/')
+  return pathParts[pathParts.length - 1] || 'home'
+})
 
 /** 鼠标在画布上时的 EDA/显示坐标（屏幕 → 世界 → display，与标尺一致） */
 const cursorEda = ref<{ x: number; y: number } | null>(null)
@@ -259,7 +274,27 @@ async function loadLayoutData(headerJson: RawHeaderJSON, dataJson: RawDataJSON):
   }
 }
 
-async function loadTileLayout(baseUrl: string): Promise<void> {
+/** manifest.layer id（= layerIdx）在 cells.bin / global.bin 中是否出现几何 */
+function manifestLayerIdsWithGeometry(
+  cellStore: CellDefStore,
+  globalStore: GlobalLayerStore,
+): Set<number> {
+  const ids = new Set<number>()
+  for (const cid of cellStore.getAllCellIds()) {
+    const def = cellStore.getCellDef(cid)
+    if (!def) continue
+    for (const { layerIdx, rects } of def.layers) {
+      if (rects.length > 0) ids.add(layerIdx)
+    }
+  }
+  for (const s of globalStore.shapes) {
+    ids.add(s.layerIdx)
+  }
+  return ids
+}
+
+/** @param localRoot 瓦片输出目录绝对路径；在 Tauri 下传入可避免 asset:// 无法用 fetch 读 manifest/瓦片 */
+async function loadTileLayout(baseUrl: string, localRoot?: string): Promise<void> {
   const ed = editor.value
   if (!ed?.view) return
 
@@ -269,8 +304,16 @@ async function loadTileLayout(baseUrl: string): Promise<void> {
   layoutState.loadingMessage.value = 'Loading tile manifest...'
 
   try {
-    tileManager = markRaw(new TileManager(ed.view, baseUrl))
+    tileManager = markRaw(new TileManager(ed.view, baseUrl, localRoot))
     await tileManager.init()
+    await Promise.all([tileManager.cellStore.ready, tileManager.globalStore.ready])
+
+    // 与 COORDINATES.md 一致：瓦片数据是 Pixi 世界坐标 [0,dieW)×[0,dieH)，须同步 Editor 世界盒，
+    // 否则 worldToDisplay / 标尺使用的 worldHeight 仍是旧值（如默认 4000），鼠标 EDA 读数会错。
+    {
+      const d = tileManager.manifest!.dieArea
+      ed.setWorldBounds(d.w, d.h)
+    }
 
     // ViewportAnimator
     viewportAnimator = markRaw(new ViewportAnimator(ed.view))
@@ -364,8 +407,10 @@ async function loadTileLayout(baseUrl: string): Promise<void> {
       },
     }
 
-    // 注册图层列表和操作给 LayerPanel 使用
-    layoutState.tileLayers.value = mf.layers.map(l => ({
+    // 注册图层列表和操作给 LayerPanel：只列当前数据集中有几何的 layer（cells + global）
+    const usedLayerIds = manifestLayerIdsWithGeometry(tileManager.cellStore, tileManager.globalStore)
+    const layersForUi = mf.layers.filter(l => usedLayerIds.has(l.id))
+    layoutState.tileLayers.value = layersForUi.map(l => ({
       id: l.id, name: l.name, color: l.color,
       alpha: l.alpha, zOrder: l.zOrder, visible: true,
     }))
@@ -378,14 +423,17 @@ async function loadTileLayout(baseUrl: string): Promise<void> {
         )
       },
       showAll: () => {
-        for (const l of mf.layers) tileManager!.setLayerVisible(l.id, true)
+        for (const l of layersForUi) tileManager!.setLayerVisible(l.id, true)
         layoutState.tileLayers.value = layoutState.tileLayers.value.map(l => ({ ...l, visible: true }))
       },
       hideAll: () => {
-        for (const l of mf.layers) tileManager!.setLayerVisible(l.id, false)
+        for (const l of layersForUi) tileManager!.setLayerVisible(l.id, false)
         layoutState.tileLayers.value = layoutState.tileLayers.value.map(l => ({ ...l, visible: false }))
       },
     }
+
+    // 瓦片就绪后去掉步骤预览用的底图，避免与矢量/栅格瓦片叠在一起
+    ed.clearBackground()
 
     layoutState.renderMode.value = 'layout'
     layoutState.loadingState.value = 'ready'
@@ -426,19 +474,7 @@ const handleStageChange = async (stage: string) => {
 
     if (layoutResponse.response === ResponseEnum.success && layoutResponse.data?.info) {
       const info = layoutResponse.data.info
-
-      // Tile-based rendering (highest priority)
-      if (info.manifest_url) {
-        await loadTileLayout(info.manifest_url)
-        return
-      }
-
-      // Dev fallback: load mock tile data when no backend data is available
-      if (import.meta.env.DEV) {
-        console.log('load mock tile data')
-        await loadTileLayout('/mock-design')
-        return
-      }
+      layoutJsonRelativePath.value = pickLayoutJsonPath(info)
 
       // Fallback to image mode
       const imagePath = info.image
@@ -453,10 +489,45 @@ const handleStageChange = async (stage: string) => {
 
     editor.value?.clearBackground()
     cleanupLayout()
+    layoutJsonRelativePath.value = null
   } catch (error) {
     console.error('Failed to load stage results:', error)
     editor.value?.clearBackground()
     cleanupLayout()
+    layoutJsonRelativePath.value = null
+  }
+}
+
+async function onGenerateTilesFromToolbar(): Promise<void> {
+  const projectPath = currentProject.value?.path
+  const rel = layoutJsonRelativePath.value
+  if (!projectPath || !rel) {
+    layoutState.loadingState.value = 'error'
+    layoutState.loadingMessage.value =
+      '未找到布局 JSON 路径：请确认当前步骤的 get_info(layout) 已返回 json/info 等字段。'
+    return
+  }
+
+  tileGenBusy.value = true
+  layoutState.loadingState.value = 'loading'
+  layoutState.loadingMessage.value = 'Rendering layout…'
+  try {
+    const { baseUrl, outDir, fromCache } = await runLayoutTileGeneration({
+      projectPath,
+      layoutJsonRelative: rel,
+      stepKey: currentStepKey.value,
+    })
+    if (fromCache) {
+      layoutState.loadingMessage.value = '加载缓存的版图瓦片…'
+    }
+    await loadTileLayout(baseUrl, outDir)
+  } catch (err) {
+    console.error('Tile generation failed:', err)
+    layoutState.loadingState.value = 'error'
+    layoutState.loadingMessage.value = String(err)
+    cleanupLayout()
+  } finally {
+    tileGenBusy.value = false
   }
 }
 
@@ -532,7 +603,13 @@ void loadLayoutData
 
 <template>
   <div class="flex flex-col h-full overflow-hidden">
-    <DrawingToolbar :editor="editor" @toolChange="onToolChange" />
+    <DrawingToolbar
+      :editor="editor"
+      :show-tile-generate="showTileGenerate"
+      :tile-gen-busy="tileGenBusy"
+      @toolChange="onToolChange"
+      @generateTiles="onGenerateTilesFromToolbar"
+    />
 
     <div class="relative flex-1 overflow-hidden">
       <EditorContainer @ready="onEditorReady" />

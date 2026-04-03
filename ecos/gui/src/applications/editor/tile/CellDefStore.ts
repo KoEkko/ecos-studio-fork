@@ -44,10 +44,15 @@ export class CellDefStore {
     return this.buf !== null
   }
 
-  async load(url: string): Promise<void> {
-    const res = await fetch(url)
-    if (!res.ok) throw new Error(`cells.bin fetch failed: ${res.status}`)
-    this.buf = await res.arrayBuffer()
+  /** 支持 HTTP(S) URL，或 Tauri 下已读入的 ArrayBuffer（避免 asset:// 无法用 fetch） */
+  async load(source: string | ArrayBuffer): Promise<void> {
+    if (source instanceof ArrayBuffer) {
+      this.buf = source
+    } else {
+      const res = await fetch(source)
+      if (!res.ok) throw new Error(`cells.bin fetch failed: ${res.status}`)
+      this.buf = await res.arrayBuffer()
+    }
     this._buildIndex()
     this.resolveReady()
   }

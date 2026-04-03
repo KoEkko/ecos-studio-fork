@@ -5,6 +5,10 @@ import { fileURLToPath, URL } from 'node:url'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  define: {
+    // ecos/gui 根目录（供 Tauri 内调用 gen-mock-tiles.ts）
+    __ECOS_GUI_ROOT__: JSON.stringify(fileURLToPath(new URL('.', import.meta.url))),
+  },
   base: './',
   resolve: {
     alias: {

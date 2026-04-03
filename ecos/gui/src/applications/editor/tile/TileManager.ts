@@ -12,6 +12,8 @@
  *   8. 未保存编辑（dirty）时：低 Z 仍走矢量瓦片，避免栅格快照与编辑状态不一致
  */
 
+import { readFile, readTextFile } from '@tauri-apps/plugin-fs'
+import { join } from '@tauri-apps/api/path'
 import { Container, Sprite, Graphics, Texture, Ticker } from 'pixi.js'
 import type { Viewport } from 'pixi-viewport'
 import type {
@@ -68,9 +70,21 @@ function hexToNum(hex: string): number {
 }
 
 // ─── TileManager ─────────────────────────────────────────────────────────────
+function u8ToArrayBuffer(u8: Uint8Array): ArrayBuffer {
+  const ab = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength)
+  return ab as ArrayBuffer
+}
+
+function isFsNotFound(e: unknown): boolean {
+  const m = e instanceof Error ? e.message : String(e)
+  return /ENOENT|not found|No such file|os error 2/i.test(m)
+}
+
 export class TileManager {
   private viewport: Viewport
   private baseUrl:  string
+  /** 若设置，则从本地目录读瓦片（Tauri），避免 convertFileSrc 的 asset:// 无法用 fetch */
+  private readonly localRoot: string | undefined
   manifest: Manifest | null = null
   readonly cellStore   = new CellDefStore()
   readonly globalStore = new GlobalLayerStore()
@@ -124,9 +138,10 @@ export class TileManager {
   private _editDirtyGetter: (() => boolean) | null = null
   private _lastEditDirtyState = false
 
-  constructor(viewport: Viewport, baseUrl: string) {
+  constructor(viewport: Viewport, baseUrl: string, localRoot?: string) {
     this.viewport = viewport
     this.baseUrl  = baseUrl
+    this.localRoot = localRoot
 
     this.rootContainer.label = 'tile-root'
     this.globalContainer.label = 'global-layer'
@@ -182,9 +197,15 @@ export class TileManager {
 
   // ─── 初始化 ─────────────────────────────────────────────────────────────────
   async init(): Promise<void> {
-    const res = await fetch(`${this.baseUrl}/manifest.json`)
-    if (!res.ok) throw new Error(`manifest.json fetch failed: ${res.status}`)
-    this.manifest = await res.json() as Manifest
+    if (this.localRoot) {
+      const manifestPath = await join(this.localRoot, 'manifest.json')
+      const text = await readTextFile(manifestPath)
+      this.manifest = JSON.parse(text) as Manifest
+    } else {
+      const res = await fetch(`${this.baseUrl}/manifest.json`)
+      if (!res.ok) throw new Error(`manifest.json fetch failed: ${res.status}`)
+      this.manifest = await res.json() as Manifest
+    }
 
     const { dieArea, layers } = this.manifest
     this._maxSide = Math.max(dieArea.w, dieArea.h)
@@ -226,14 +247,32 @@ export class TileManager {
     this.rootContainer.addChildAt(bg, 0)
 
     // 并行加载 cells.bin 和 global.bin
-    this.cellStore.load(`${this.baseUrl}/${this.manifest.cellsFile.path}`)
+    const man = this.manifest!
+    const [cellsBuf, globalBuf] = await Promise.all([
+      this.localRoot
+        ? u8ToArrayBuffer(await readFile(await join(this.localRoot, man.cellsFile.path)))
+        : (async () => {
+            const r = await fetch(`${this.baseUrl}/${man.cellsFile.path}`)
+            if (!r.ok) throw new Error(`cells.bin fetch failed: ${r.status}`)
+            return r.arrayBuffer()
+          })(),
+      this.localRoot
+        ? u8ToArrayBuffer(await readFile(await join(this.localRoot, man.globalFile.path)))
+        : (async () => {
+            const r = await fetch(`${this.baseUrl}/${man.globalFile.path}`)
+            if (!r.ok) throw new Error(`global.bin fetch failed: ${r.status}`)
+            return r.arrayBuffer()
+          })(),
+    ])
+
+    void this.cellStore.load(cellsBuf)
       .then(() => {
         console.log(`[TileManager] cells.bin ready, ${this.cellStore.cellCount} cell types`)
         this._scheduleUpdate()
       })
       .catch(e => console.error('[TileManager] cells.bin load failed:', e))
 
-    this.globalStore.load(`${this.baseUrl}/${this.manifest.globalFile.path}`)
+    void this.globalStore.load(globalBuf)
       .then(() => {
         console.log(`[TileManager] global.bin ready, ${this.globalStore.shapes.length} shapes`)
         this.globalStore.render(this._preparedLayers)
@@ -681,24 +720,41 @@ export class TileManager {
     if (signal.aborted) return
     const { dieArea, tileConfig } = this.manifest!
     const key    = `${z}/${x}/${y}`
-    const url    = `${this.baseUrl}/tiles/raster/${z}/${x}/${y}.${tileConfig.rasterFormat}`
+    const relRaster = `tiles/raster/${z}/${x}/${y}.${tileConfig.rasterFormat}`
     const size   = this._maxSide / (1 << z)
     const worldX = dieArea.x + x * size
     const worldY = dieArea.y + y * size
 
-    const res = await fetch(url, { signal })
-    if (res.status === 404) {
-      this._knownEmpty.add(key)
-      this._scheduleUpdate()
-      return
+    let blob: Blob
+    if (this.localRoot) {
+      try {
+        const u8 = await readFile(await join(this.localRoot, relRaster))
+        blob = new Blob([u8])
+      } catch (e) {
+        if (signal.aborted) return
+        if (isFsNotFound(e)) {
+          this._knownEmpty.add(key)
+          this._scheduleUpdate()
+          return
+        }
+        this._scheduleUpdate()
+        this._debounceTileLoads()
+        return
+      }
+    } else {
+      const res = await fetch(`${this.baseUrl}/${relRaster}`, { signal })
+      if (res.status === 404) {
+        this._knownEmpty.add(key)
+        this._scheduleUpdate()
+        return
+      }
+      if (!res.ok) {
+        this._scheduleUpdate()
+        this._debounceTileLoads()
+        return
+      }
+      blob = await res.blob()
     }
-    if (!res.ok) {
-      this._scheduleUpdate()
-      this._debounceTileLoads()
-      return
-    }
-
-    const blob = await res.blob()
     if (signal.aborted) return
 
     let bitmap: ImageBitmap
@@ -738,21 +794,38 @@ export class TileManager {
   private async _loadVector(z: number, x: number, y: number, signal: AbortSignal): Promise<void> {
     if (signal.aborted) return
     const key = `${z}/${x}/${y}`
-    const url = `${this.baseUrl}/tiles/vector/${z}/${x}/${y}.bin`
+    const relVec = `tiles/vector/${z}/${x}/${y}.bin`
 
-    const res = await fetch(url, { signal })
-    if (res.status === 404) {
-      this._knownEmpty.add(key)
-      this._scheduleUpdate()
-      return
+    let buf: ArrayBuffer
+    if (this.localRoot) {
+      try {
+        const u8 = await readFile(await join(this.localRoot, relVec))
+        buf = u8ToArrayBuffer(u8)
+      } catch (e) {
+        if (signal.aborted) return
+        if (isFsNotFound(e)) {
+          this._knownEmpty.add(key)
+          this._scheduleUpdate()
+          return
+        }
+        this._scheduleUpdate()
+        this._debounceTileLoads()
+        return
+      }
+    } else {
+      const res = await fetch(`${this.baseUrl}/${relVec}`, { signal })
+      if (res.status === 404) {
+        this._knownEmpty.add(key)
+        this._scheduleUpdate()
+        return
+      }
+      if (!res.ok) {
+        this._scheduleUpdate()
+        this._debounceTileLoads()
+        return
+      }
+      buf = await res.arrayBuffer()
     }
-    if (!res.ok) {
-      this._scheduleUpdate()
-      this._debounceTileLoads()
-      return
-    }
-
-    const buf = await res.arrayBuffer()
     if (signal.aborted) return
 
     const parsed = this._parseVectorTile(buf)

@@ -5,12 +5,20 @@ import { SelectPlugin } from '@/applications/editor/plugins'
 
 interface Props {
   editor?: Editor | null
+  /** 是否显示「从布局 JSON 生成瓦片」工具（Tauri 开发模式等） */
+  showTileGenerate?: boolean
+  /** 正在生成瓦片时禁用按钮 */
+  tileGenBusy?: boolean
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  showTileGenerate: false,
+  tileGenBusy: false,
+})
 
 const emit = defineEmits<{
   toolChange: [toolId: string]
+  generateTiles: []
 }>()
 
 const activeTool = ref('hand')
@@ -134,6 +142,24 @@ watch(() => props.editor, (editor) => {
         'text-(--text-secondary) hover:text-(--text-primary) hover:bg-(--bg-hover)': activeTool !== tool.id
       }" class="w-9 h-9 flex items-center justify-center rounded transition-all" :title="tool.tooltip">
         <i :class="tool.icon" class="text-base"></i>
+      </button>
+
+      <div v-if="showTileGenerate" class="w-px h-6 bg-(--border-color) mx-0.5" />
+
+      <button
+        v-if="showTileGenerate"
+        type="button"
+        :disabled="tileGenBusy"
+        @click="emit('generateTiles')"
+        :class="[
+          tileGenBusy
+            ? 'opacity-50 cursor-wait text-(--text-secondary)'
+            : 'text-(--text-secondary) hover:text-(--text-primary) hover:bg-(--bg-hover)',
+          'w-9 h-9 flex items-center justify-center rounded transition-all shrink-0',
+        ]"
+        title="Rendering layout"
+      >
+        <i class="ri-grid-fill text-base" :class="{ 'animate-pulse': tileGenBusy }"></i>
       </button>
     </div>
 

@@ -35,10 +35,15 @@ export class GlobalLayerStore {
 
   get isLoaded(): boolean { return this._loaded }
 
-  async load(url: string): Promise<void> {
-    const res = await fetch(url)
-    if (!res.ok) throw new Error(`global.bin fetch failed: ${res.status}`)
-    this.buf = await res.arrayBuffer()
+  /** 支持 HTTP(S) URL，或 Tauri 下已读入的 ArrayBuffer */
+  async load(source: string | ArrayBuffer): Promise<void> {
+    if (source instanceof ArrayBuffer) {
+      this.buf = source
+    } else {
+      const res = await fetch(source)
+      if (!res.ok) throw new Error(`global.bin fetch failed: ${res.status}`)
+      this.buf = await res.arrayBuffer()
+    }
     this._parse()
     this._loaded = true
     this.resolveReady()
