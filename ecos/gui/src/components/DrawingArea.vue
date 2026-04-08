@@ -22,6 +22,7 @@ import {
   ViewportAnimator,
   EditManager,
   PlacementTool,
+  DrcViolationOverlay,
 } from '@/applications/editor/tile'
 import type { CellDefStore } from '@/applications/editor/tile/CellDefStore'
 import type { GlobalLayerStore } from '@/applications/editor/tile/GlobalLayerStore'
@@ -30,7 +31,16 @@ import { useWorkspace } from '@/composables/useWorkspace'
 import { useEDA } from '@/composables/useEDA'
 import { useLayoutState } from '@/composables/useLayoutState'
 import { isTauri } from '@/composables/useTauri'
-import { pickLayoutJsonPath, runLayoutTileGeneration } from '@/composables/useLayoutTileGen'
+import {
+  deriveDrcStepPathFromLayoutJsonRelative,
+  pickDrcJsonPath,
+  pickLayoutJsonPath,
+  resolveLayoutJsonAbsolutePath,
+} from '@/composables/useLayoutTileGen'
+import { parseDrcStepJson, violationToFitRect } from '@/composables/drcStepParser'
+import { readTextFile } from '@tauri-apps/plugin-fs'
+import { runLayoutTileGenerationSingleFlight } from '@/composables/layoutTilePipeline'
+import { useLayoutTilePrefetchStore } from '@/stores/layoutTilePrefetchStore'
 import { getInfoApi } from '@/api/flow'
 import { CMDEnum, InfoEnum, StepEnum, ResponseEnum } from '@/api/type'
 import { RULER_THICKNESS } from '@/applications/editor/core/rulerConfig'
@@ -39,11 +49,14 @@ const route = useRoute()
 const { currentProject, sseMessages, stepRefreshCounter } = useWorkspace()
 const { getResourceUrl } = useEDA()
 const layoutState = useLayoutState()
+const tilePrefetchStore = useLayoutTilePrefetchStore()
 
 const editor = shallowRef<Editor | null>(null)
 
 /** get_info(layout) 返回的布局 JSON 相对路径，供工具栏生成瓦片 */
 const layoutJsonRelativePath = ref<string | null>(null)
+/** DRC 结果 JSON 相对路径：get_info 显式字段，或与布局同目录的 `drc.step.json` */
+const drcJsonRelativePath = ref<string | null>(null)
 const tileGenBusy = ref(false)
 const showTileGenerate = computed(() => isTauri() && import.meta.env.DEV)
 
@@ -87,6 +100,14 @@ function attachCanvasPointerTracking(ed: Editor): void {
     detachCanvasPointerListeners = null
   }
 }
+
+watch(
+  () => currentProject.value?.path,
+  (p) => {
+    tilePrefetchStore.setProject(p ?? null)
+  },
+  { immediate: true },
+)
 
 watch(
   () => editor.value,
@@ -195,6 +216,7 @@ let tileInteraction: TileInteraction | null = null
 let viewportAnimator: ViewportAnimator | null = null
 let editManager: EditManager | null = null
 let placementTool: PlacementTool | null = null
+let drcViolationOverlay: DrcViolationOverlay | null = null
 
 // 记住最近选中的 instance cell 信息，用于 Place 工具
 let lastSelectedCellId: number | null = null
@@ -246,6 +268,14 @@ function cleanupLayout(): void {
   tileInteraction = null
   viewportAnimator = null
   tileManager = null
+
+  drcViolationOverlay?.destroy()
+  drcViolationOverlay = null
+  layoutState.drcOverlayReady.value = false
+  layoutState.drcViolationCount.value = 0
+  layoutState.drcViolations.value = []
+  layoutState.focusDrcViolationByIndex.value = null
+  layoutState.tileDieWorldH.value = 0
 
   layoutState.selectedGroups.value = []
   layoutState.dataStore.value = null
@@ -374,6 +404,32 @@ function manifestLayerIdsWithGeometry(
   return ids
 }
 
+async function loadDrcViolationOverlayAfterTiles(_ed: Editor, dieWorldH: number): Promise<void> {
+  layoutState.drcOverlayReady.value = false
+  layoutState.drcViolationCount.value = 0
+  layoutState.drcViolations.value = []
+  if (!isTauri() || !drcViolationOverlay) return
+
+  const projectPath = currentProject.value?.path
+  const drcRel = drcJsonRelativePath.value
+  if (!projectPath || !drcRel) return
+
+  try {
+    const abs = await resolveLayoutJsonAbsolutePath(projectPath, drcRel)
+    const text = await readTextFile(abs)
+    const raw = JSON.parse(text) as unknown
+    const violations = parseDrcStepJson(raw, dieWorldH)
+    drcViolationOverlay.setViolations(violations)
+    layoutState.drcViolations.value = violations
+    layoutState.drcViolationCount.value = violations.length
+    layoutState.drcOverlayReady.value = true
+  } catch (e) {
+    console.warn('[drc overlay] load failed:', e)
+    drcViolationOverlay.setViolations([])
+    layoutState.drcViolations.value = []
+  }
+}
+
 /** @param localRoot 瓦片输出目录绝对路径；在 Tauri 下传入可避免 asset:// 无法用 fetch 读 manifest/瓦片 */
 async function loadTileLayout(baseUrl: string, localRoot?: string): Promise<void> {
   const ed = editor.value
@@ -402,6 +458,13 @@ async function loadTileLayout(baseUrl: string, localRoot?: string): Promise<void
       viewportAnimator.setManifest(tileManager.manifest)
     }
 
+    layoutState.focusDrcViolationByIndex.value = (index: number) => {
+      const list = layoutState.drcViolations.value
+      const v = list[index]
+      if (!v || !viewportAnimator) return
+      void viewportAnimator.fitToBbox(violationToFitRect(v), 0.18, 450)
+    }
+
     // TileInteraction (RBush + hit-test + selection overlay)
     tileInteraction = markRaw(new TileInteraction(
       ed.view,
@@ -419,9 +482,12 @@ async function loadTileLayout(baseUrl: string, localRoot?: string): Promise<void
     // 绑定 EditManager → TileInteraction
     tileInteraction.setEditManager(editManager)
 
-    // 挂载 overlays 到 viewport（渲染顺序：edit → ghost → highlight → selection）
+    // 挂载 overlays 到 viewport（渲染顺序：edit → ghost → highlight → drc → selection）
     ed.view.addChild(tileInteraction.ghostOverlay)
     ed.view.addChild(tileInteraction.highlightOverlay)
+    drcViolationOverlay = markRaw(new DrcViolationOverlay(ed.view))
+    drcViolationOverlay.bindViewportEvents()
+    ed.view.addChild(drcViolationOverlay)
     ed.view.addChild(tileInteraction.selectionOverlay)
 
     // PlacementTool
@@ -464,6 +530,7 @@ async function loadTileLayout(baseUrl: string, localRoot?: string): Promise<void
     // 注册 tile 操作回调给 PropertiesPanel 使用
     const mf = tileManager.manifest!
     layoutState.tileDbuPerMicron.value = mf.dbuPerMicron
+    layoutState.tileDieWorldH.value = mf.dieArea.h
     layoutState.tileActions.value = {
       clearSelection: () => tileInteraction?.clearSelection(),
       fitToView: () => handleFitToView(),
@@ -516,6 +583,8 @@ async function loadTileLayout(baseUrl: string, localRoot?: string): Promise<void
     // 瓦片就绪后去掉步骤预览用的底图，避免与矢量/栅格瓦片叠在一起
     ed.clearBackground()
 
+    void loadDrcViolationOverlayAfterTiles(ed, mf.dieArea.h)
+
     layoutState.renderMode.value = 'layout'
     layoutState.loadingState.value = 'ready'
     layoutState.loadingMessage.value = ''
@@ -556,6 +625,9 @@ const handleStageChange = async (stage: string) => {
     if (layoutResponse.response === ResponseEnum.success && layoutResponse.data?.info) {
       const info = layoutResponse.data.info
       layoutJsonRelativePath.value = pickLayoutJsonPath(info)
+      drcJsonRelativePath.value = pickDrcJsonPath(info)
+        ?? deriveDrcStepPathFromLayoutJsonRelative(layoutJsonRelativePath.value ?? '')
+        ?? null
 
       // Fallback to image mode
       const imagePath = info.image
@@ -571,11 +643,13 @@ const handleStageChange = async (stage: string) => {
     editor.value?.clearBackground()
     cleanupLayout()
     layoutJsonRelativePath.value = null
+    drcJsonRelativePath.value = null
   } catch (error) {
     console.error('Failed to load stage results:', error)
     editor.value?.clearBackground()
     cleanupLayout()
     layoutJsonRelativePath.value = null
+    drcJsonRelativePath.value = null
   }
 }
 
@@ -593,10 +667,12 @@ async function onGenerateTilesFromToolbar(): Promise<void> {
   layoutState.loadingState.value = 'loading'
   layoutState.loadingMessage.value = 'Rendering layout…'
   try {
-    const { baseUrl, outDir, fromCache } = await runLayoutTileGeneration({
+    tilePrefetchStore.clearDeferredPrefetchQueue()
+    const { baseUrl, outDir, fromCache } = await runLayoutTileGenerationSingleFlight({
       projectPath,
       layoutJsonRelative: rel,
       stepKey: currentStepKey.value,
+      source: 'user',
     })
     if (fromCache) {
       layoutState.loadingMessage.value = '加载缓存的版图瓦片…'

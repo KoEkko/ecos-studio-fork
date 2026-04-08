@@ -27,7 +27,7 @@ function hideAll(): void {
     <div class="panel-header">
       <div class="header-left">
         <i class="ri-stack-line"></i>
-        <span>Layers</span>
+        <span class="header-en">Layers</span>
         <span v-if="layers.length" class="layer-count">{{ visibleCount }}/{{ layers.length }}</span>
       </div>
       <div class="header-actions">
@@ -41,7 +41,7 @@ function hideAll(): void {
     </div>
 
     <div v-if="layers.length === 0" class="empty-state">
-      No layers loaded
+      尚未加载工艺层：请生成版图瓦片后，此处可开关各层可见性。
     </div>
 
     <div v-else class="layer-list">
@@ -101,6 +101,14 @@ function hideAll(): void {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.header-en {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-tertiary, #666);
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .layer-count {
