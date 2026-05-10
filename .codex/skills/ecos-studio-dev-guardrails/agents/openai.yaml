@@ -1,0 +1,4 @@
+interface:
+  display_name: "ECOS Studio Dev Guardrails"
+  short_description: "Enforce user-gated builds and git safety on ECOS Studio"
+  default_prompt: "Use this skill when working in ecos-studio to enforce build and git guardrails."
