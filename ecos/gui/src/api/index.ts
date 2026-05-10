@@ -6,6 +6,7 @@ export {
   alovaInstance,
   checkApiHealth,
   initApiPort,
+  syncApiPort,
   waitForApiReady,
   type WaitForApiReadyOptions,
   API_BASE_URL

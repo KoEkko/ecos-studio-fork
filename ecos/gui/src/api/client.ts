@@ -91,6 +91,17 @@ export async function initApiPort(): Promise<number> {
 }
 
 /**
+ * Re-sync the HTTP client with the Tauri backend's current API port.
+ *
+ * This is intentionally called before workspace operations, not only during
+ * app startup. A packaged AppImage may start its FastAPI child after an older
+ * API server is already listening on 8765, so the real port can become 8766+.
+ */
+export async function syncApiPort(): Promise<number> {
+  return initApiPort()
+}
+
+/**
  * Check if the API server is available
  *
  * @param options.timeoutMs - Abort timeout for a single request (default 3000 ms).
@@ -123,6 +134,8 @@ export interface WaitForApiReadyOptions {
  * Use before workspace/critical API calls so the GUI does not race the FastAPI child process.
  */
 export async function waitForApiReady(options?: WaitForApiReadyOptions): Promise<void> {
+  await syncApiPort()
+
   const timeoutMs = options?.timeoutMs ?? 180_000
   const intervalMs = options?.intervalMs ?? 250
   const healthTimeoutMs = options?.healthTimeoutMs ?? 1500
