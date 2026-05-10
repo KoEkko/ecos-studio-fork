@@ -483,7 +483,8 @@ export function useWorkspace() {
         sim_programs_dir: config?.parameters?.sim_programs_dir as string | undefined,
         sim_tests_out_dir: config?.parameters?.sim_tests_out_dir as string | undefined,
         sim_soc_root: config?.parameters?.sim_soc_root as string | undefined,
-        sim_build_test_script: config?.parameters?.sim_build_test_script as string | undefined
+        sim_build_test_script: config?.parameters?.sim_build_test_script as string | undefined,
+        soc_variant: config?.parameters?.soc_variant as string | undefined
       })
       console.log(response)
       if (response.response === 'success') {

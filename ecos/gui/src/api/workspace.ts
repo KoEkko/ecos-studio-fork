@@ -73,6 +73,7 @@ export interface CreateWorkspaceRequest {
     sim_tests_out_dir?: string,
     sim_soc_root?: string,
     sim_build_test_script?: string,
+    soc_variant?: string,
   }
 }
 
@@ -131,6 +132,7 @@ export function createWorkspaceApi(
     sim_tests_out_dir?: string
     sim_soc_root?: string
     sim_build_test_script?: string
+    soc_variant?: string
   }
 ) {
   return alovaInstance.Post<WorkspaceResponse>(`${workspaceApiBase(options.designTool)}/create_workspace`, {
@@ -160,7 +162,8 @@ export function createWorkspaceApi(
       sim_programs_dir: options.sim_programs_dir || '',
       sim_tests_out_dir: options.sim_tests_out_dir || '',
       sim_soc_root: options.sim_soc_root || '',
-      sim_build_test_script: options.sim_build_test_script || ''
+      sim_build_test_script: options.sim_build_test_script || '',
+      soc_variant: options.soc_variant || ''
     }
   } as CreateWorkspaceRequest)
 }

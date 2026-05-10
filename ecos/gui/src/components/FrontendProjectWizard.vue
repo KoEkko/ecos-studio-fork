@@ -119,81 +119,37 @@
               <div v-else-if="currentStep === 2" key="step2" class="max-w-2xl mx-auto w-full">
                 <div class="mb-10">
                   <h2 class="text-2xl font-bold text-(--text-primary)">Design Inputs</h2>
-                  <p class="text-(--text-secondary) mt-2">Choose the RTL manifests and entry points used by the frontend flow.</p>
+                  <p class="text-(--text-secondary) mt-2">Select your CPU RTL filelist and target SoC.</p>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                  <div class="group">
-                    <label class="block text-sm font-semibold text-(--text-primary) mb-2 group-focus-within:text-(--accent-color) transition-colors duration-200">
-                      Top Module Name <span class="text-red-500">*</span>
-                    </label>
-                    <input v-model="config.parameters.top_module" type="text" placeholder="e.g. ysyxSoCTop"
-                      class="w-full px-4 py-3 bg-(--bg-secondary)/40 border border-(--border-color) rounded-xl text-(--text-primary) placeholder:text-(--text-secondary)/50 focus:outline-none focus:border-(--accent-color) focus:bg-(--bg-primary)/80 transition-colors duration-200 shadow-sm" />
-                  </div>
-                  <div class="group">
-                    <label class="block text-sm font-semibold text-(--text-primary) mb-2 group-focus-within:text-(--accent-color) transition-colors duration-200">
-                      Clock Signal Name <span class="text-red-500">*</span>
-                    </label>
-                    <input v-model="config.parameters.clock" type="text" placeholder="e.g. clk"
-                      class="w-full px-4 py-3 bg-(--bg-secondary)/40 border border-(--border-color) rounded-xl text-(--text-primary) placeholder:text-(--text-secondary)/50 focus:outline-none focus:border-(--accent-color) focus:bg-(--bg-primary)/80 transition-colors duration-200 shadow-sm" />
-                  </div>
-                </div>
-
-                <div class="space-y-5">
+                <div class="space-y-8">
                   <PathPicker
-                    label="CPU Filelist"
+                    label="CPU RTL Filelist"
                     required
                     icon="ri-file-list-3-line"
                     :model-value="config.parameters.cpu_filelist"
-                    @browse="selectFile('cpu_filelist', 'Select CPU Filelist')"
+                    @browse="selectCpuFilelist"
                   />
-                  <PathPicker
-                    label="SoC Filelist"
-                    required
-                    icon="ri-file-list-3-line"
-                    :model-value="config.parameters.soc_filelist"
-                    @browse="selectFile('soc_filelist', 'Select SoC Filelist')"
-                  />
-                </div>
 
-                <div class="mt-8">
-                  <div @dragover.prevent="isDragging = true" @dragleave.prevent="isDragging = false"
-                    @drop.prevent="handleFileDrop" :class="[
-                      'relative border-2 border-dashed rounded-2xl p-8 text-center transition-colors duration-200 cursor-pointer group',
-                      isDragging
-                        ? 'border-(--accent-color) bg-(--accent-color)/5'
-                        : 'border-(--border-color) hover:border-(--accent-color)/50 hover:bg-(--bg-secondary)/40'
-                    ]" @click="selectRtlFiles">
-                    <div class="flex flex-col items-center">
-                      <div
-                        class="w-16 h-16 rounded-2xl bg-(--bg-secondary)/50 border border-(--border-color) flex items-center justify-center mb-4 shadow-sm transition-colors duration-200"
-                        :class="{ 'border-(--accent-color) text-(--accent-color)': isDragging }">
-                        <i class="ri-upload-cloud-2-line text-3xl" :class="isDragging ? 'text-(--accent-color)' : 'text-(--text-secondary) group-hover:text-(--accent-color)'"></i>
-                      </div>
-                      <h3 class="text-base font-bold text-(--text-primary) mb-2">Add optional RTL files</h3>
-                      <p class="text-sm text-(--text-secondary) mb-5 max-w-sm">Supports Verilog and SystemVerilog source files</p>
-                      <button type="button"
-                        class="px-6 py-2.5 bg-(--accent-color) text-white rounded-xl hover:opacity-90 shadow-sm transition-opacity duration-200 font-medium cursor-pointer">
-                        Browse Files
-                      </button>
-                    </div>
-                  </div>
-
-                  <div v-if="config.rtl_list.length > 0" class="mt-6 space-y-2">
-                    <div v-for="file in config.rtl_list" :key="file"
-                      class="flex items-center justify-between px-4 py-3 bg-(--bg-secondary)/30 rounded-xl border border-(--border-color) group hover:bg-(--bg-secondary)/60 transition-colors duration-200 shadow-sm">
-                      <div class="flex items-center gap-3 min-w-0">
-                        <div class="w-9 h-9 rounded-lg bg-(--bg-primary)/80 flex items-center justify-center border border-(--border-color)/50 shadow-sm">
-                          <i class="ri-file-code-line text-lg text-(--text-secondary)"></i>
+                  <div>
+                    <label class="block text-sm font-semibold text-(--text-primary) mb-3">
+                      Target SoC <span class="text-red-500">*</span>
+                    </label>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <button v-for="soc in socVariants" :key="soc.id" type="button" @click="selectSoc(soc.id)"
+                        class="group text-left p-4 rounded-xl border transition-all duration-200 cursor-pointer bg-(--bg-secondary)/30 hover:bg-(--bg-secondary)/70"
+                        :class="selectedSocId === soc.id
+                          ? 'border-(--accent-color) ring-2 ring-(--accent-color)/20'
+                          : 'border-(--border-color) hover:border-(--text-secondary)'">
+                        <div class="flex items-center justify-between gap-3">
+                          <div class="w-10 h-10 rounded-lg bg-(--bg-primary)/80 border border-(--border-color) flex items-center justify-center">
+                            <i class="ri-cpu-line text-lg"
+                              :class="selectedSocId === soc.id ? 'text-(--accent-color)' : 'text-(--text-secondary)'"></i>
+                          </div>
+                          <i v-if="selectedSocId === soc.id" class="ri-check-line text-(--accent-color) text-xl"></i>
                         </div>
-                        <div class="min-w-0">
-                          <p class="font-medium text-(--text-primary) truncate text-sm" :title="file">{{ basename(file) }}</p>
-                          <p class="text-xs text-(--text-secondary) truncate opacity-70">{{ file }}</p>
-                        </div>
-                      </div>
-                      <button @click.stop="removeRtlFile(file)"
-                        class="w-8 h-8 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-500/10 transition-colors duration-200 cursor-pointer text-(--text-secondary) hover:text-red-500 shrink-0">
-                        <i class="ri-delete-bin-line"></i>
+                        <h3 class="mt-4 text-sm font-bold text-(--text-primary)">{{ soc.name }}</h3>
+                        <p class="mt-1 text-xs text-(--text-secondary)">{{ soc.description }}</p>
                       </button>
                     </div>
                   </div>
@@ -201,94 +157,6 @@
               </div>
 
               <div v-else-if="currentStep === 3" key="step3" class="max-w-2xl mx-auto w-full">
-                <div class="mb-10">
-                  <h2 class="text-2xl font-bold text-(--text-primary)">Simulation Setup</h2>
-                  <p class="text-(--text-secondary) mt-2">Configure the Verilator simulation inputs used by the sim step.</p>
-                </div>
-
-                <div class="space-y-5">
-                  <PathPicker
-                    label="Testbench"
-                    icon="ri-terminal-box-line"
-                    :model-value="config.parameters.testbench"
-                    @browse="selectFile('testbench', 'Select Testbench Source')"
-                  />
-
-                  <div>
-                    <div class="flex items-center justify-between mb-3">
-                      <label class="block text-sm font-semibold text-(--text-primary)">
-                        C/C++ Sources
-                      </label>
-                      <button @click="selectCppSources"
-                        class="text-xs font-medium text-(--accent-color) hover:text-(--accent-color)/80 transition-colors duration-200 flex items-center gap-1 cursor-pointer">
-                        <i class="ri-add-line"></i> Add Sources
-                      </button>
-                    </div>
-                    <div v-if="config.parameters.sim_cpp_sources.length === 0"
-                      class="flex items-center justify-center py-8 px-4 border-2 border-dashed border-(--border-color) rounded-2xl bg-(--bg-secondary)/20 text-(--text-secondary)">
-                      <div class="text-center">
-                        <i class="ri-file-code-line text-3xl opacity-40"></i>
-                        <p class="text-sm mt-2">No C/C++ sources selected</p>
-                      </div>
-                    </div>
-                    <div v-else class="space-y-2">
-                      <div v-for="file in config.parameters.sim_cpp_sources" :key="file"
-                        class="flex items-center justify-between px-4 py-3 bg-(--bg-secondary)/30 rounded-xl border border-(--border-color) group hover:bg-(--bg-secondary)/60 transition-colors duration-200 shadow-sm">
-                        <div class="flex items-center gap-3 min-w-0">
-                          <i class="ri-file-code-line text-(--text-secondary)"></i>
-                          <span class="text-sm text-(--text-primary) truncate" :title="file">{{ file }}</span>
-                        </div>
-                        <button @click.stop="removeCppSource(file)"
-                          class="w-8 h-8 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-500/10 transition-colors duration-200 cursor-pointer text-(--text-secondary) hover:text-red-500 shrink-0">
-                          <i class="ri-delete-bin-line"></i>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <TextListField label="Compile Flags" v-model="simCflagsText" placeholder="-I/path/to/SoC" />
-                    <TextListField label="Link Flags" v-model="simLdflagsText" placeholder="-ldl" />
-                  </div>
-
-                  <TextListField label="Run Arguments" v-model="simRunArgsText" placeholder="--max-cycles&#10;10000000" />
-
-                  <div class="p-6 rounded-2xl bg-(--bg-secondary)/20 border border-(--border-color) space-y-5">
-                    <div class="flex items-center justify-between gap-4">
-                      <div>
-                        <h3 class="text-sm font-bold text-(--text-primary) flex items-center gap-2">
-                          <i class="ri-play-list-2-line text-(--accent-color)"></i>
-                          Simulation Cases
-                        </h3>
-                        <p class="text-xs text-(--text-secondary) mt-1">Program settings can be completed later in Configure.</p>
-                      </div>
-                      <label class="flex items-center gap-2 text-sm text-(--text-primary) cursor-pointer shrink-0">
-                        <input v-model="config.parameters.sim_build_all_programs" type="checkbox"
-                          class="w-4 h-4" />
-                        Build all
-                      </label>
-                    </div>
-
-                    <TextListField label="Program Names" v-model="simProgramNamesText" placeholder="rtthread" />
-
-                    <PathPicker
-                      label="Programs Directory"
-                      icon="ri-folder-code-line"
-                      :model-value="config.parameters.sim_programs_dir"
-                      @browse="selectDirectory('sim_programs_dir', 'Select Programs Directory')"
-                    />
-
-                    <PathPicker
-                      label="Tests Output Directory"
-                      icon="ri-folder-upload-line"
-                      :model-value="config.parameters.sim_tests_out_dir"
-                      @browse="selectDirectory('sim_tests_out_dir', 'Select Tests Output Directory')"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div v-else-if="currentStep === 4" key="step4" class="max-w-2xl mx-auto w-full">
                 <div class="mb-10 text-center">
                   <div class="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-4 border border-green-500/20 shadow-sm">
                     <i class="ri-check-double-line text-3xl text-green-500"></i>
@@ -300,22 +168,13 @@
                 <div class="space-y-5">
                   <ReviewSection title="Project details" icon="ri-folder-info-line" @edit="jumpToStep(1)">
                     <ReviewItem label="Project Name" :value="config.parameters.design || '-'" />
-                    <ReviewItem label="Top Module" :value="config.parameters.top_module || '-'" monospace />
                     <ReviewItem label="Save Location" :value="config.directory || '-'" monospace wide />
                   </ReviewSection>
 
                   <ReviewSection title="Design inputs" icon="ri-file-list-3-line" @edit="jumpToStep(2)">
                     <ReviewItem label="CPU Filelist" :value="config.parameters.cpu_filelist || '-'" monospace wide />
-                    <ReviewItem label="SoC Filelist" :value="config.parameters.soc_filelist || '-'" monospace wide />
-                    <ReviewItem label="Optional RTL Files" :value="String(config.rtl_list.length)" />
-                    <ReviewItem label="Clock" :value="config.parameters.clock || '-'" monospace />
-                  </ReviewSection>
-
-                  <ReviewSection title="Simulation" icon="ri-terminal-box-line" @edit="jumpToStep(3)">
-                    <ReviewItem label="Testbench" :value="config.parameters.testbench || '-'" monospace wide />
-                    <ReviewItem label="C/C++ Sources" :value="String(config.parameters.sim_cpp_sources.length)" />
-                    <ReviewItem label="Run Arguments" :value="String(config.parameters.sim_run_args.length)" />
-                    <ReviewItem label="Programs" :value="config.parameters.sim_program_names.length ? config.parameters.sim_program_names.join(', ') : '-'" />
+                    <ReviewItem label="Target SoC" :value="selectedSoc?.name || '-'" />
+                    <ReviewItem label="SoC Filelist" :value="selectedSoc?.filelist || '-'" monospace wide />
                   </ReviewSection>
                 </div>
               </div>
@@ -336,19 +195,19 @@
                 Cancel
               </button>
 
-              <button v-if="highestStep === 4 && currentStep < 4" @click="returnToReview" :disabled="!canProceed"
+              <button v-if="highestStep === FINAL_STEP && currentStep < FINAL_STEP" @click="returnToReview" :disabled="!canProceed"
                 class="px-6 py-3 bg-(--bg-secondary)/50 text-(--text-primary) border border-(--border-color) rounded-xl hover:bg-(--bg-secondary) hover:border-(--text-secondary) shadow-sm hover:shadow-md transition-all duration-200 font-semibold cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                 <i class="ri-check-double-line"></i>
                 Save & Return
               </button>
 
-              <button v-if="currentStep < 4" @click="nextStep" :disabled="!canProceed"
+              <button v-if="currentStep < FINAL_STEP" @click="nextStep" :disabled="!canProceed"
                 class="px-8 py-3 bg-(--accent-color) text-white rounded-xl hover:bg-(--accent-color)/90 shadow-sm hover:shadow-md transition-all duration-200 font-semibold cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-sm">
                 Continue
                 <i class="ri-arrow-right-line"></i>
               </button>
 
-              <button v-else @click="createProject" :disabled="isCreating"
+              <button v-else @click="createProject" :disabled="isCreating || !canProceed"
                 class="px-8 py-3 bg-(--accent-color) text-white rounded-xl hover:opacity-90 shadow-md hover:shadow-lg transition-all duration-200 font-bold cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                 <i v-if="isCreating" class="ri-loader-4-line animate-spin"></i>
                 <i v-else class="ri-rocket-line"></i>
@@ -367,6 +226,23 @@ import { computed, defineComponent, h, ref } from 'vue'
 import { open } from '@tauri-apps/plugin-dialog'
 import type { WorkspaceConfig } from '../types'
 
+const ECC_FE_ROOT = '/home/luyoung/ecos-studio/ecc-fe'
+const FINAL_STEP = 3
+
+interface SocVariant {
+  id: string
+  name: string
+  description: string
+  root: string
+  filelist: string
+  testbench: string
+  simCppSources: string[]
+  simCflags: string[]
+  simLdflags: string[]
+  programsDir: string
+  buildTestScript: string
+}
+
 interface FrontendParameters extends Record<string, unknown> {
   design: string
   description: string
@@ -384,6 +260,9 @@ interface FrontendParameters extends Record<string, unknown> {
   sim_programs_dir: string
   sim_tests_out_dir: string
   sim_build_all_programs: boolean
+  sim_soc_root: string
+  sim_build_test_script: string
+  soc_variant: string
 }
 
 interface FrontendWorkspaceConfig extends WorkspaceConfig {
@@ -398,16 +277,21 @@ interface Emits {
 
 const emit = defineEmits<Emits>()
 
+const socVariants: SocVariant[] = [
+  createSocVariant('soc1', 'SoC 1', 'Default SoC test platform', 'SoC'),
+  createSocVariant('soc2', 'SoC 2', 'Alternative SoC test platform', 'SoC2'),
+  createSocVariant('soc3', 'SoC 3', 'Extended SoC test platform', 'SoC3'),
+]
+
 const currentStep = ref(1)
 const highestStep = ref(1)
-const isDragging = ref(false)
 const isCreating = ref(false)
+const selectedSocId = ref('')
 
 const steps = [
   { id: 1, title: 'Basic Info' },
   { id: 2, title: 'Design Inputs' },
-  { id: 3, title: 'Simulation Setup' },
-  { id: 4, title: 'Review & Create' },
+  { id: 3, title: 'Review & Create' },
 ]
 
 const config = ref<FrontendWorkspaceConfig>({
@@ -426,16 +310,23 @@ const config = ref<FrontendWorkspaceConfig>({
     testbench: '',
     sim_cpp_sources: [],
     sim_cflags: [],
-    sim_ldflags: ['-ldl'],
-    sim_run_args: ['--max-cycles', '10000000'],
-    sim_program_names: ['rtthread'],
+    sim_ldflags: [],
+    sim_run_args: [],
+    sim_program_names: [],
     sim_programs_dir: '',
     sim_tests_out_dir: '',
     sim_build_all_programs: false,
+    sim_soc_root: '',
+    sim_build_test_script: '',
+    soc_variant: '',
   },
   origin_def: '',
   origin_verilog: '',
   rtl_list: [],
+})
+
+const selectedSoc = computed(() => {
+  return socVariants.find((soc) => soc.id === selectedSocId.value) || null
 })
 
 const CHINESE_CHAR_RE = /[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/
@@ -465,33 +356,12 @@ const canProceed = computed(() => {
         && !designNameError.value
         && !directoryError.value
     case 2:
-      return config.value.parameters.top_module.trim() !== ''
-        && config.value.parameters.clock.trim() !== ''
-        && config.value.parameters.cpu_filelist.trim() !== ''
-        && config.value.parameters.soc_filelist.trim() !== ''
+      return config.value.parameters.cpu_filelist.trim() !== ''
+        && selectedSoc.value !== null
     default:
-      return true
+      return config.value.parameters.cpu_filelist.trim() !== ''
+        && selectedSoc.value !== null
   }
-})
-
-const simCflagsText = computed({
-  get: () => config.value.parameters.sim_cflags.join('\n'),
-  set: (value: string) => { config.value.parameters.sim_cflags = splitLines(value) },
-})
-
-const simLdflagsText = computed({
-  get: () => config.value.parameters.sim_ldflags.join('\n'),
-  set: (value: string) => { config.value.parameters.sim_ldflags = splitLines(value) },
-})
-
-const simRunArgsText = computed({
-  get: () => config.value.parameters.sim_run_args.join('\n'),
-  set: (value: string) => { config.value.parameters.sim_run_args = splitLines(value) },
-})
-
-const simProgramNamesText = computed({
-  get: () => config.value.parameters.sim_program_names.join('\n'),
-  set: (value: string) => { config.value.parameters.sim_program_names = splitList(value) },
 })
 
 const selectLocation = async () => {
@@ -505,112 +375,65 @@ const selectLocation = async () => {
   }
 }
 
-const selectFile = async (field: keyof FrontendParameters, title: string) => {
+const selectCpuFilelist = async () => {
   const result = await open({
     multiple: false,
-    title,
-  })
-  if (result) {
-    config.value.parameters[field] = result as never
-  }
-}
-
-const selectDirectory = async (field: keyof FrontendParameters, title: string) => {
-  const result = await open({
-    directory: true,
-    multiple: false,
-    title,
-  })
-  if (result) {
-    config.value.parameters[field] = result as never
-  }
-}
-
-const selectRtlFiles = async () => {
-  const result = await open({
-    multiple: true,
     filters: [{
-      name: 'HDL Files',
-      extensions: ['v', 'sv', 'vh', 'svh'],
+      name: 'Filelists',
+      extensions: ['f', 'fl', 'filelist'],
     }],
-    title: 'Select RTL Files',
+    title: 'Select CPU RTL Filelist',
   })
   if (result) {
-    const files = Array.isArray(result) ? result : [result]
-    addRtlFiles(files as string[])
+    config.value.parameters.cpu_filelist = result as string
   }
 }
 
-const selectCppSources = async () => {
-  const result = await open({
-    multiple: true,
-    filters: [{
-      name: 'C/C++ Sources',
-      extensions: ['c', 'cc', 'cpp', 'cxx', 'h', 'hpp'],
-    }],
-    title: 'Select C/C++ Sources',
-  })
-  if (result) {
-    const files = Array.isArray(result) ? result : [result]
-    addCppSources(files as string[])
+function selectSoc(id: string) {
+  selectedSocId.value = id
+}
+
+function createSocVariant(id: string, name: string, description: string, dirName: string): SocVariant {
+  const root = `${ECC_FE_ROOT}/fecompiler/thirdparty/${dirName}`
+  return {
+    id,
+    name,
+    description,
+    root,
+    filelist: `${root}/filelist.soc.f`,
+    testbench: `${root}/driver/main.cpp`,
+    simCppSources: [
+      `${root}/driver/dpi_mem.cpp`,
+      `${root}/driver/difftest.cpp`,
+    ],
+    simCflags: [`-I${root}`],
+    simLdflags: ['-ldl'],
+    programsDir: `${root}/tests/programs`,
+    buildTestScript: `${root}/scripts/build_test.sh`,
   }
 }
 
-const handleFileDrop = (event: DragEvent) => {
-  isDragging.value = false
-  const files = event.dataTransfer?.files
-  if (!files) return
-  addRtlFiles(Array.from(files).map((f) => f.name))
-}
-
-function addRtlFiles(paths: string[]) {
-  const existing = new Set(config.value.rtl_list)
-  for (const path of paths) {
-    if (!existing.has(path)) {
-      config.value.rtl_list.push(path)
-      existing.add(path)
-    }
+function applySocDefaults(parameters: FrontendParameters, soc: SocVariant): FrontendParameters {
+  return {
+    ...parameters,
+    soc_variant: soc.id,
+    soc_filelist: soc.filelist,
+    testbench: soc.testbench,
+    sim_cpp_sources: [...soc.simCppSources],
+    sim_cflags: [...soc.simCflags],
+    sim_ldflags: [...soc.simLdflags],
+    sim_run_args: [],
+    sim_program_names: [],
+    sim_programs_dir: soc.programsDir,
+    sim_tests_out_dir: '',
+    sim_build_all_programs: false,
+    sim_soc_root: soc.root,
+    sim_build_test_script: soc.buildTestScript,
   }
-}
-
-function removeRtlFile(path: string) {
-  config.value.rtl_list = config.value.rtl_list.filter((f) => f !== path)
-}
-
-function addCppSources(paths: string[]) {
-  const existing = new Set(config.value.parameters.sim_cpp_sources)
-  for (const path of paths) {
-    if (!existing.has(path)) {
-      config.value.parameters.sim_cpp_sources.push(path)
-      existing.add(path)
-    }
-  }
-}
-
-function removeCppSource(path: string) {
-  config.value.parameters.sim_cpp_sources = config.value.parameters.sim_cpp_sources.filter((f) => f !== path)
-}
-
-function splitLines(value: string): string[] {
-  return value
-    .split(/\r?\n/)
-    .map((item) => item.trim())
-    .filter(Boolean)
-}
-
-function splitList(value: string): string[] {
-  return value
-    .split(/[\n,]/)
-    .map((item) => item.trim())
-    .filter(Boolean)
-}
-
-function basename(path: string): string {
-  return path.split(/[/\\]/).filter(Boolean).pop() || path
 }
 
 const nextStep = () => {
-  if (currentStep.value < 4 && canProceed.value) {
+  if (currentStep.value < FINAL_STEP && canProceed.value) {
     currentStep.value++
     highestStep.value = Math.max(highestStep.value, currentStep.value)
   }
@@ -638,26 +461,21 @@ const handleStepClick = (targetStep: number) => {
 
 const returnToReview = () => {
   if (canProceed.value) {
-    jumpToStep(4)
+    jumpToStep(FINAL_STEP)
   }
 }
 
 const createProject = async () => {
+  const soc = selectedSoc.value
+  if (!soc) return
   isCreating.value = true
   try {
-    const parameters = {
-      ...config.value.parameters,
-      sim_cpp_sources: [...config.value.parameters.sim_cpp_sources],
-      sim_cflags: [...config.value.parameters.sim_cflags],
-      sim_ldflags: [...config.value.parameters.sim_ldflags],
-      sim_run_args: [...config.value.parameters.sim_run_args],
-      sim_program_names: [...config.value.parameters.sim_program_names],
-    }
+    const parameters = applySocDefaults(config.value.parameters, soc)
     emit('create', {
       ...config.value,
       designTool: 'frontend',
       parameters,
-      rtl_list: [...config.value.rtl_list],
+      rtl_list: [],
     })
   } finally {
     isCreating.value = false
@@ -686,7 +504,7 @@ const PathPicker = defineComponent({
           h('input', {
             value: props.modelValue,
             readonly: true,
-            placeholder: 'Choose a file or folder...',
+            placeholder: 'Choose a file...',
             class: 'w-full pl-10 pr-4 py-3 bg-(--bg-secondary)/40 border border-(--border-color) rounded-xl text-(--text-primary) placeholder:text-(--text-secondary)/50 cursor-pointer focus:bg-(--bg-primary)/80 transition-colors duration-200 shadow-sm truncate',
             onClick: () => emit('browse'),
           }),
@@ -696,27 +514,6 @@ const PathPicker = defineComponent({
           onClick: () => emit('browse'),
         }, 'Browse'),
       ]),
-    ])
-  },
-})
-
-const TextListField = defineComponent({
-  props: {
-    label: { type: String, required: true },
-    modelValue: { type: String, default: '' },
-    placeholder: { type: String, default: '' },
-  },
-  emits: ['update:modelValue'],
-  setup(props, { emit }) {
-    return () => h('div', { class: 'group' }, [
-      h('label', { class: 'block text-sm font-semibold text-(--text-primary) mb-2 group-focus-within:text-(--accent-color) transition-colors duration-200' }, props.label),
-      h('textarea', {
-        value: props.modelValue,
-        rows: 4,
-        placeholder: props.placeholder,
-        class: 'w-full px-4 py-3 bg-(--bg-secondary)/40 border border-(--border-color) rounded-xl text-(--text-primary) placeholder:text-(--text-secondary)/50 focus:outline-none focus:border-(--accent-color) focus:bg-(--bg-primary)/80 transition-colors duration-200 shadow-sm resize-none font-mono text-sm',
-        onInput: (event: Event) => emit('update:modelValue', (event.target as HTMLTextAreaElement).value),
-      }),
     ])
   },
 })
