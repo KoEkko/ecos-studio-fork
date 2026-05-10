@@ -23,6 +23,10 @@ export enum InfoEnum {
 }
 
 export enum StepEnum {
+  PREPARE = "prepare",
+  ELAB = "elab",
+  LINT = "lint",
+  SIM = "sim",
   RTL2GDS = "RTL2GDS",
   INIT = "Init",
   SOC = "SOC",
@@ -70,6 +74,10 @@ export const STEP_METADATA: Record<string, StepMetadata> = {
   'configure': { label: 'Config', icon: 'ri-settings-3-line', path: 'configure', showInSidebar: true, group: 'setup' },
 
   // 运行步骤 (key 为 flow.json 中的 step.name 小写)
+  [StepEnum.PREPARE.toLowerCase()]: { label: 'Prepare', icon: 'ri-file-list-3-line', path: StepEnum.PREPARE, showInSidebar: true, group: 'run' },
+  [StepEnum.ELAB.toLowerCase()]: { label: 'Elab', icon: 'ri-node-tree', path: StepEnum.ELAB, showInSidebar: true, group: 'run' },
+  [StepEnum.LINT.toLowerCase()]: { label: 'Lint', icon: 'ri-shield-check-line', path: StepEnum.LINT, showInSidebar: true, group: 'run' },
+  [StepEnum.SIM.toLowerCase()]: { label: 'Sim', icon: 'ri-terminal-box-line', path: StepEnum.SIM, showInSidebar: true, group: 'run' },
   [StepEnum.SYNTHESIS.toLowerCase()]: { label: 'Synthesis', icon: 'ri-node-tree', path: StepEnum.SYNTHESIS, showInSidebar: true, group: 'run' },
   [StepEnum.FLOORPLAN.toLowerCase()]: { label: 'Floorplan', icon: 'ri-layout-4-line', path: StepEnum.FLOORPLAN, showInSidebar: true, group: 'run' },
   [StepEnum.NETLIST_OPT.toLowerCase()]: { label: 'FixFanout', icon: 'ri-share-line', path: StepEnum.NETLIST_OPT, showInSidebar: false, group: 'run' },
@@ -118,6 +126,7 @@ export enum StateEnum {
   Success = "Success",
   Ongoing = "Ongoing",
   Pending = "Pending",
+  Incomplete = "Incomplete",
   Imcomplete = "Imcomplete",
   // Ignored = "Ignored",
 }

@@ -75,12 +75,12 @@ function transformFlowData(flowData: FlowData): FlowStage[] {
  * 从工程读取 flow.json，返回全部 run 步骤的 path（用作路由 stepKey）。
  * 读取失败时回退为 STEP_METADATA 中 `group === 'run'` 的全集。
  */
-export async function loadFlowRunStepKeysFromProject(projectPath: string): Promise<string[]> {
+export async function loadFlowRunStepKeysFromProject(projectPath: string, designTool?: import('@/types').DesignTool): Promise<string[]> {
   if (!isTauri() || !projectPath) {
     return fallbackRunStepKeys()
   }
   try {
-    const homeData = await fetchSharedHomeData(projectPath, true)
+    const homeData = await fetchSharedHomeData(projectPath, true, designTool)
     if (!homeData?.flow) {
       return fallbackRunStepKeys()
     }
@@ -208,7 +208,7 @@ export function useFlowStages() {
       const projectPath = currentProject.value.path
 
       // 通过共享缓存获取 home.json 数据（去重，不会重复请求）
-      const homeData = await fetchSharedHomeData(projectPath, isInTauri)
+      const homeData = await fetchSharedHomeData(projectPath, isInTauri, currentProject.value.designTool)
       if (!homeData) {
         console.warn('Failed to get home data')
         dynamicFlowStages.value = []

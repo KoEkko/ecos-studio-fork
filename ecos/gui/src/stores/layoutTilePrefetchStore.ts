@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { CMDEnum, InfoEnum, ResponseEnum, StepEnum } from '@/api/type'
 import { getInfoApi } from '@/api/flow'
+import type { DesignTool } from '@/types'
 import { isTauri } from '@/composables/useTauri'
 import { loadFlowRunStepKeysFromProject } from '@/composables/useFlowStages'
 import { pickLayoutJsonPath } from '@/composables/useLayoutTileGen'
@@ -29,6 +30,7 @@ export const useLayoutTilePrefetchStore = defineStore('layoutTilePrefetch', () =
   const enabled = ref(true)
   const paused = ref(false)
   const projectPath = ref<string | null>(null)
+  const designTool = ref<DesignTool>('backend')
   const stepStates = ref<Record<string, StepPrefetchState>>({})
   const cachedTiles = ref<Record<string, LayoutTileGenResult>>({})
   /** 待预热任务（顺序即执行顺序：当前路由 → 用户访问顺序 → flow 剩余顺序） */
@@ -107,9 +109,10 @@ export const useLayoutTilePrefetchStore = defineStore('layoutTilePrefetch', () =
     schedulePrefetchQueue()
   }
 
-  async function discoverAndSchedule(path: string): Promise<void> {
+  async function discoverAndSchedule(path: string, tool: DesignTool = designTool.value): Promise<void> {
     if (!enabled.value || !canPrefetchRuntime()) return
-    const stepKeys = await loadFlowRunStepKeysFromProject(path)
+    if (tool === 'frontend') return
+    const stepKeys = await loadFlowRunStepKeysFromProject(path, tool)
     canonicalFlowStepKeys.value = [...stepKeys]
     layoutJsonByStep.value = {}
 
@@ -122,7 +125,7 @@ export const useLayoutTilePrefetchStore = defineStore('layoutTilePrefetch', () =
         const layoutResponse = await getInfoApi({
           cmd: CMDEnum.get_info,
           data: { step: stepEnum, id: InfoEnum.layout },
-        })
+        }, tool)
         if (layoutResponse.response !== ResponseEnum.success || !layoutResponse.data?.info) continue
         const rel = pickLayoutJsonPath(layoutResponse.data.info)
         if (!rel) continue
@@ -142,13 +145,14 @@ export const useLayoutTilePrefetchStore = defineStore('layoutTilePrefetch', () =
       /* ignore */
     }
     if (v && projectPath.value && canPrefetchRuntime()) {
-      void discoverAndSchedule(projectPath.value)
+      void discoverAndSchedule(projectPath.value, designTool.value)
     }
   }
 
-  function setProject(path: string | null): void {
-    if (projectPath.value === path) return
+  function setProject(path: string | null, tool: DesignTool = 'backend'): void {
+    if (projectPath.value === path && designTool.value === tool) return
     projectPath.value = path
+    designTool.value = tool
     pendingQueue.value = []
     stepStates.value = {}
     cachedTiles.value = {}
@@ -157,8 +161,8 @@ export const useLayoutTilePrefetchStore = defineStore('layoutTilePrefetch', () =
     visitOrder.value = []
     currentRouteStepKey.value = null
     paused.value = false
-    if (path && enabled.value && canPrefetchRuntime()) {
-      void discoverAndSchedule(path)
+    if (path && tool !== 'frontend' && enabled.value && canPrefetchRuntime()) {
+      void discoverAndSchedule(path, tool)
     }
   }
 
@@ -232,6 +236,7 @@ export const useLayoutTilePrefetchStore = defineStore('layoutTilePrefetch', () =
     prefetchSupported,
     paused,
     projectPath,
+    designTool,
     stepStates,
     currentPrefetchingStepKey,
     cachedTiles,

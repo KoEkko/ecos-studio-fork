@@ -26,7 +26,7 @@
               class="ri-time-line absolute -top-1 -right-1 text-[10px] text-(--text-secondary) bg-(--bg-sidebar) rounded-full"></i>
             <i v-else-if="stage.state === 'Invalid'"
               class="ri-error-warning-fill absolute -top-1 -right-1 text-[10px] text-red-500 bg-(--bg-sidebar) rounded-full"></i>
-            <i v-else-if="stage.state === 'Incomplete'"
+            <i v-else-if="stage.state === 'Incomplete' || stage.state === 'Imcomplete'"
               class="ri-indeterminate-circle-fill absolute -top-1 -right-1 text-[10px] text-amber-500 bg-(--bg-sidebar) rounded-full"></i>
           </div>
 
@@ -55,7 +55,7 @@
             </div>
             <div>
               <h3 class="text-[14px] font-semibold text-(--text-primary) tracking-wide">Flow Overview</h3>
-              <p class="text-[11px] text-(--text-secondary) mt-0.5">RTL to GDS Pipeline</p>
+              <p class="text-[11px] text-(--text-secondary) mt-0.5">{{ flowOverviewSubtitle }}</p>
             </div>
           </div>
         </div>
@@ -143,7 +143,7 @@
                   <i class="ri-close-line text-red-500 text-sm"></i>
                 </div>
                 <!-- 未完成 -->
-                <div v-else-if="stage.state === 'Incomplete'"
+                <div v-else-if="stage.state === 'Incomplete' || stage.state === 'Imcomplete'"
                   class="w-[30px] h-[30px] rounded-full bg-amber-500/20 border-2 border-amber-500 flex items-center justify-center">
                   <i class="ri-indeterminate-circle-fill text-amber-500 text-sm"></i>
                 </div>
@@ -161,7 +161,7 @@
                     stage.state === 'Success' ? 'text-green-500' :
                       stage.state === 'Ongoing' ? 'text-blue-400' :
                         stage.state === 'Invalid' ? 'text-red-500' :
-                          stage.state === 'Incomplete' ? 'text-amber-500' :
+                          stage.state === 'Incomplete' || stage.state === 'Imcomplete' ? 'text-amber-500' :
                             'text-(--text-primary)'
                   ]">
                     {{ stage.label }}
@@ -444,6 +444,7 @@ const {
 
 // 当前阶段
 const { currentStage, showProgressPanel, showOverviewPanel, showSubflowPanel } = useCurrentStage()
+const { currentProject, triggerStepRefresh } = useWorkspace()
 
 // ============ Flow 概览计算 ============
 // 只统计 run 组的步骤
@@ -455,7 +456,7 @@ const flowStats = computed(() => {
     total: stages.length,
     success: stages.filter(s => s.state === 'Success').length,
     ongoing: stages.filter(s => s.state === 'Ongoing').length,
-    failed: stages.filter(s => s.state === 'Invalid' || s.state === 'Incomplete').length,
+    failed: stages.filter(s => s.state === 'Invalid' || s.state === 'Incomplete' || s.state === 'Imcomplete').length,
     pending: stages.filter(s => s.state === 'Pending' || s.state === 'Unstart' || !s.state).length
   }
 })
@@ -485,18 +486,19 @@ const toggleTheme = () => {
 const runMode = ref('run')
 const showModeMenu = ref(false)
 
-const runModes: Record<string, { label: string; icon: string; shortcut?: string }> = {
-  run: { label: 'Run RTL2GDS', icon: 'ri-play-fill' },
+const runModes = computed<Record<string, { label: string; icon: string; shortcut?: string }>>(() => ({
+  run: { label: currentProject.value?.designTool === 'frontend' ? 'Run Frontend Flow' : 'Run RTL2GDS', icon: 'ri-play-fill' },
   rerun: { label: 'ReRun', icon: 'ri-restart-line' },
-}
+}))
+
+const flowOverviewSubtitle = computed(() => {
+  return currentProject.value?.designTool === 'frontend' ? 'Frontend Pipeline' : 'RTL to GDS Pipeline'
+})
 
 // 点击外部关闭菜单
 const closeMenu = () => { showModeMenu.value = false }
 onMounted(() => document.addEventListener('click', closeMenu))
 onUnmounted(() => document.removeEventListener('click', closeMenu))
-
-// 跨组件刷新信号
-const { triggerStepRefresh } = useWorkspace()
 
 // ============ 事件处理 ============
 const handleRunFlow = async () => {

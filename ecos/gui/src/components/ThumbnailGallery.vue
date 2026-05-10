@@ -331,7 +331,7 @@ async function fetchTabInfo(tabId: InfoEnum) {
         step: currentStep.value,
         id: tabId
       }
-    })
+    }, currentProject.value?.designTool)
 
     console.log('getInfoApi response:', response)
 

@@ -21,7 +21,7 @@ export const flowExecutionActive = ref(false)
  */
 export function useFlowRunner() {
   const { isInTauri, ensureTauri } = useTauri()
-  const { showToast } = useWorkspace()
+  const { currentProject, showToast } = useWorkspace()
   const route = useRoute()
 
   // 状态（与 flowExecutionActive 同一引用）
@@ -76,7 +76,7 @@ export function useFlowRunner() {
           step: step as StepEnum,
           rerun: false
         }
-      })
+      }, currentProject.value?.designTool)
       console.log('run step result', result)
 
       if (result.data?.state === StateEnum.Success) {
@@ -134,30 +134,31 @@ export function useFlowRunner() {
     error.value = null
 
     try {
-      console.log('Starting rtl2gds flow...')
+      const flowName = currentProject.value?.designTool === 'frontend' ? 'Frontend Flow' : 'RTL2GDS'
+      console.log(`Starting ${flowName} flow...`)
 
       const result = await rtl2gdsApi({
         cmd: CMDEnum.rtl2gds,
         data: {
           rerun: false
         }
-      })
+      }, currentProject.value?.designTool)
       console.log('rtl2gds result:', result)
 
       if (result.response === 'success') {
         state.value = StateEnum.Success
         showToast({
           severity: 'success',
-          summary: 'RTL2GDS Completed',
+          summary: `${flowName} Completed`,
           detail: 'All flow steps finished successfully',
           life: 5000
         })
       } else {
-        state.value = StateEnum.Imcomplete
-        error.value = result.message?.[0] || 'rtl2gds failed'
+        state.value = StateEnum.Incomplete
+        error.value = result.message?.[0] || `${flowName} failed`
         showToast({
           severity: 'error',
-          summary: 'RTL2GDS Failed',
+          summary: `${flowName} Failed`,
           detail: error.value ?? 'Unknown error',
           life: 8000
         })
@@ -167,10 +168,11 @@ export function useFlowRunner() {
     } catch (err) {
       console.error('Run-all flow failed:', err)
       error.value = err instanceof Error ? err.message : String(err)
-      state.value = StateEnum.Imcomplete
+      state.value = StateEnum.Incomplete
+      const flowName = currentProject.value?.designTool === 'frontend' ? 'Frontend Flow' : 'RTL2GDS'
       showToast({
         severity: 'error',
-        summary: 'RTL2GDS Error',
+        summary: `${flowName} Error`,
         detail: error.value ?? 'Unknown error',
         life: 8000
       })

@@ -978,6 +978,7 @@ function stateIcon(state: string): string {
       return 'ri-checkbox-circle-fill'
     case 'Ongoing':
       return 'ri-loader-4-line spin'
+    case 'Incomplete':
     case 'Imcomplete':
       return 'ri-close-circle-fill'
     case 'Pending':
@@ -995,6 +996,7 @@ function stateClass(state: string): string {
       return 'state-success'
     case 'Ongoing':
       return 'state-ongoing'
+    case 'Incomplete':
     case 'Imcomplete':
       return 'state-failed'
     case 'Pending':

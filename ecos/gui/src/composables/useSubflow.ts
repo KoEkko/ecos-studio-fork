@@ -177,7 +177,7 @@ export function useSubflow() {
           step: stepEnum,
           id: InfoEnum.subflow
         }
-      })
+      }, currentProject.value?.designTool)
 
       console.log('get_info response:', response)
 
@@ -280,7 +280,7 @@ export function useSubflow() {
     subflowSteps.value = []
     error.value = null
     currentStepTitle.value = 'Run Flow'
-    currentStepEngine.value = 'ECC Engine'
+    currentStepEngine.value = currentProject.value?.designTool === 'frontend' ? 'FE Engine' : 'ECC Engine'
   }
 
   /**
@@ -288,7 +288,7 @@ export function useSubflow() {
    */
   function updateCurrentStep(stepEnum: StepEnum): void {
     currentStepTitle.value = getStepDisplayName(stepEnum)
-    currentStepEngine.value = 'ECC Engine'
+    currentStepEngine.value = currentProject.value?.designTool === 'frontend' ? 'FE Engine' : 'ECC Engine'
   }
 
   // 监听路由变化

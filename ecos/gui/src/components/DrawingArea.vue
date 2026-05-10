@@ -104,13 +104,14 @@ function attachCanvasPointerTracking(ed: Editor): void {
 }
 
 watch(
-  () => [currentProject.value?.path ?? null, currentStepKey.value] as const,
-  ([projectPath, stepKey], prev) => {
+  () => [currentProject.value?.path ?? null, currentStepKey.value, currentProject.value?.designTool ?? 'backend'] as const,
+  ([projectPath, stepKey, designTool], prev) => {
     const prevPath = prev?.[0] ?? null
-    if (projectPath !== prevPath) {
-      tilePrefetchStore.setProject(projectPath)
+    const prevDesignTool = prev?.[2] ?? 'backend'
+    if (projectPath !== prevPath || designTool !== prevDesignTool) {
+      tilePrefetchStore.setProject(projectPath, designTool)
     }
-    if (projectPath) {
+    if (projectPath && designTool !== 'frontend') {
       tilePrefetchStore.notifyNavigatedStep(stepKey)
     }
   },
@@ -533,7 +534,7 @@ const handleStageChange = async (stage: string) => {
     const layoutResponse = await getInfoApi({
       cmd: CMDEnum.get_info,
       data: { step: stepEnum, id: InfoEnum.layout }
-    })
+    }, currentProject.value?.designTool)
 
     if (layoutResponse.response === ResponseEnum.success && layoutResponse.data?.info) {
       const info = layoutResponse.data.info

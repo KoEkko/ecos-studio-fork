@@ -132,7 +132,7 @@ export function useStepConfigInfo() {
           step: stepEnum,
           id: InfoEnum.config,
         },
-      })
+      }, currentProject.value?.designTool)
       serverMessages.value = response.message ?? []
 
       const payload = extractInfoPayload(response)

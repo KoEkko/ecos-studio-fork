@@ -268,7 +268,7 @@ export function useParameters() {
     try {
       const projectPath = currentProject.value.path
 
-      const homeData = await fetchSharedHomeData(projectPath, isInTauri)
+      const homeData = await fetchSharedHomeData(projectPath, isInTauri, currentProject.value.designTool)
       if (!homeData) {
         console.warn('Failed to get home data')
         resetParametersState()

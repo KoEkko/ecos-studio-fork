@@ -13,6 +13,7 @@ import { flowExecutionActive } from './useFlowRunner'
 import { getHomePageApi } from '@/api/flow'
 import { ResponseEnum } from '@/api/type'
 import type { ECCResponse } from '@/api/sse'
+import type { DesignTool } from '@/types'
 import { requestProjectPathAccess, resolveProjectPathAccess } from '@/utils/projectFs'
 
 // ============ 类型定义 ============
@@ -415,12 +416,14 @@ async function runWithConcurrency<T>(
 export async function fetchSharedHomeData(
   projectPath: string,
   isInTauri: boolean,
+  designTool?: DesignTool,
 ): Promise<HomeData | null> {
+  const cacheKey = `${designTool ?? 'backend'}:${projectPath}`
   // 项目切换时使缓存失效
-  if (projectPath !== _cachedForProject) {
+  if (cacheKey !== _cachedForProject) {
     sharedHomeData.value = null
     _fetchPromise = null
-    _cachedForProject = projectPath
+    _cachedForProject = cacheKey
     _fetchGeneration += 1
     // 项目路径不同：所有模块级缓存（log、路径解析、home 资源 blob / 签名）
     // 全部失效，否则新项目首屏会闪一下旧项目的 step log / layout / metrics。
@@ -438,7 +441,7 @@ export async function fetchSharedHomeData(
 
   _fetchPromise = (async (): Promise<HomeData | null> => {
     const generation = _fetchGeneration
-    const isStale = () => generation !== _fetchGeneration || projectPath !== _cachedForProject
+    const isStale = () => generation !== _fetchGeneration || cacheKey !== _cachedForProject
 
     try {
       if (!isInTauri || !projectPath) return null
@@ -449,7 +452,7 @@ export async function fetchSharedHomeData(
       if (isStale()) return null
 
       // 调用 API 获取 home.json 路径
-      const apiResponse = await getHomePageApi()
+      const apiResponse = await getHomePageApi(designTool)
       if (apiResponse.response !== ResponseEnum.success || !apiResponse.data?.path) {
         console.warn('get_home_page API failed:', apiResponse.message)
         return null
@@ -1021,7 +1024,7 @@ export function useHomeData() {
     if (sid !== liveSession) return
     let flowRemote = sharedHomeData.value?.flow
     if (!flowRemote && currentProject.value?.path) {
-      const h = await fetchSharedHomeData(currentProject.value.path, isInTauri)
+      const h = await fetchSharedHomeData(currentProject.value.path, isInTauri, currentProject.value.designTool)
       flowRemote = h?.flow ?? ''
     }
     if (!flowRemote) return
@@ -1151,7 +1154,7 @@ export function useHomeData() {
   async function ensureFlowLogsLoaded(): Promise<void> {
     let flowPath = sharedHomeData.value?.flow
     if (!flowPath && isInTauri && currentProject.value?.path) {
-      const homeData = await fetchSharedHomeData(currentProject.value.path, isInTauri)
+      const homeData = await fetchSharedHomeData(currentProject.value.path, isInTauri, currentProject.value.designTool)
       flowPath = homeData?.flow ?? ''
     }
     if (flowPath) {
@@ -1216,7 +1219,7 @@ export function useHomeData() {
       // home.json（fetchSharedHomeData 内部会在项目路径变化时自动失效）。
       // 有更新时由 SSE notify → loadHomeDataFromPath 覆盖缓存，不需要每次
       // mount 都重请求后端再重读整个 home.json。
-      const homeData = await fetchSharedHomeData(currentProject.value.path, isInTauri)
+      const homeData = await fetchSharedHomeData(currentProject.value.path, isInTauri, currentProject.value.designTool)
       if (!homeData) {
         console.warn('Failed to get home data from shared cache')
         clearHomeData()
@@ -1363,7 +1366,7 @@ export function useHomeData() {
 
       let flowRemote = sharedHomeData.value?.flow
       if (!flowRemote) {
-        const h = await fetchSharedHomeData(currentProject.value.path, isInTauri)
+        const h = await fetchSharedHomeData(currentProject.value.path, isInTauri, currentProject.value.designTool)
         flowRemote = h?.flow ?? ''
       }
       if (!flowRemote) {
