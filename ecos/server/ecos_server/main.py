@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from ._log import ensure_api_logger
 from .ecc import sse_router, workspace_router
+from .frontend import workspace_router as frontend_workspace_router
 
 
 def _read_distribution_version(dist_name: str) -> str:
@@ -78,6 +79,7 @@ app.add_middleware(
 
 # Register routers
 app.include_router(workspace_router)
+app.include_router(frontend_workspace_router)
 app.include_router(sse_router)
 
 
@@ -88,7 +90,7 @@ async def root():
         "name": "ECOS Studio API",
         "version": _runtime_versions()["server"],
         "status": "running",
-        "tools": ["ecc"],
+        "tools": ["ecc", "frontend"],
     }
 
 

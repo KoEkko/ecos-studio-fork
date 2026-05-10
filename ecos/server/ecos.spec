@@ -245,6 +245,11 @@ hiddenimports.extend(
         "ecos_server.ecc.sse",
         "ecos_server.ecc.sse.models",
         "ecos_server.ecc.sse.notify_service",
+        "ecos_server.frontend",
+        "ecos_server.frontend.routers",
+        "ecos_server.frontend.routers.workspace",
+        "ecos_server.frontend.services",
+        "ecos_server.frontend.services.frontend",
         "ecos_server.sse",
         "ecos_server.sse.manager",
     ]
