@@ -57,12 +57,14 @@ export interface Thumbnail {
 }
 
 export type ProjectStatus = 'success' | 'failed' | 'running' | 'in_progress' | 'not_started'
+export type DesignTool = 'backend' | 'frontend'
 
 export interface Project {
   id: string
   name: string
   path: string
   lastOpened: Date
+  designTool?: DesignTool
   /** 是否被识别为 ECOS workspace（加载时异步检测，undefined 表示尚未检测） */
   workspaceRecognized?: boolean
 
@@ -97,6 +99,7 @@ export interface WorkspaceParameters {
 
 export interface WorkspaceConfig {
   directory: string;
+  designTool?: DesignTool;
   pdk: string;
   pdk_root: string;
   parameters: Partial<WorkspaceParameters> & Record<string, unknown>;

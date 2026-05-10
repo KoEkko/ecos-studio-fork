@@ -2,7 +2,6 @@
   <div
     class="flex flex-col items-center justify-center min-h-full w-full text-(--text-primary) relative overflow-y-auto overflow-x-hidden py-8">
 
-    <!-- 返回按钮 -->
     <button @click="goBack"
       class="absolute top-6 left-6 z-20 flex items-center gap-2 px-3 py-2 rounded-lg bg-(--bg-secondary) border border-(--border-color) hover:border-(--accent-color) text-(--text-secondary) hover:text-(--accent-color) transition-all duration-200 cursor-pointer text-sm">
       <i class="ri-arrow-left-line"></i>
@@ -10,20 +9,18 @@
     </button>
 
     <div class="relative z-10 flex flex-col items-center w-full">
-      <!-- Logo 和标题 -->
       <div class="flex items-center justify-center mb-12">
         <div class="relative">
           <div class="absolute -inset-4 bg-(--accent-color)/10 rounded-full blur-xl"></div>
-          <i class="ri-cpu-line text-6xl text-(--accent-color) relative"></i>
+          <i class="ri-code-s-slash-line text-6xl text-(--accent-color) relative"></i>
         </div>
         <div class="flex flex-col ml-5">
-          <h1 class="text-4xl font-bold text-(--text-primary) tracking-tight">ECC</h1>
+          <h1 class="text-4xl font-bold text-(--text-primary) tracking-tight">Frontend Design</h1>
         </div>
       </div>
 
-      <!-- 操作按钮 -->
       <div class="flex gap-5 mb-16">
-        <button @click="handleOpenProject"
+        <button @click="handleOpenWorkspace"
           class="group flex flex-col items-center gap-3 px-8 py-6 bg-(--bg-secondary) hover:bg-(--bg-sidebar) rounded-xl transition-all duration-300 hover:scale-[1.02] hover:-translate-y-1 border border-(--border-color) hover:border-(--accent-color) min-w-[180px] cursor-pointer shadow-sm hover:shadow-lg hover:shadow-(--accent-color)/5">
           <div
             class="w-14 h-14 rounded-xl bg-(--bg-primary) flex items-center justify-center group-hover:bg-(--accent-color)/10 transition-colors">
@@ -42,34 +39,32 @@
           </div>
           <span class="text-sm font-medium text-(--text-primary)">New Workspace</span>
         </button>
-
       </div>
 
-      <!-- 最近项目 -->
       <div class="w-full max-w-3xl px-4">
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-lg font-semibold text-(--text-primary) flex items-center gap-2">
             <i class="ri-time-line text-(--text-secondary)"></i>
             Recent Workspaces
           </h2>
-          <button v-if="backendProjects.length > 3" @click="showAllProjects = !showAllProjects"
+          <button v-if="frontendProjects.length > 3" @click="showAllProjects = !showAllProjects"
             class="text-sm text-(--accent-color) hover:opacity-80 transition-opacity cursor-pointer flex items-center gap-1">
             <template v-if="showAllProjects">
               Collapse
               <i class="ri-arrow-up-s-line"></i>
             </template>
             <template v-else>
-              View All ({{ backendProjects.length }})
+              View All ({{ frontendProjects.length }})
               <i class="ri-arrow-right-s-line"></i>
             </template>
           </button>
         </div>
 
-        <div v-if="backendProjects.length === 0"
+        <div v-if="frontendProjects.length === 0"
           class="text-center py-16 text-(--text-secondary) bg-(--bg-secondary)/50 rounded-xl border border-dashed border-(--border-color)">
           <i class="ri-folder-2-line text-5xl mb-4 opacity-30 block"></i>
           <p class="text-sm">No recent workspaces</p>
-          <p class="text-xs mt-2 opacity-60">Click "New Workspace" to start your chip design journey</p>
+          <p class="text-xs mt-2 opacity-60">Click "New Workspace" to start your frontend design flow</p>
         </div>
 
         <div v-else class="space-y-2">
@@ -93,10 +88,6 @@
                     :class="project.workspaceRecognized === false ? 'text-(--text-secondary)' : 'text-(--text-primary)'">
                     {{ project.name }}
                   </p>
-                  <span v-if="project.pdk"
-                    class="text-[10px] px-1.5 py-0.5 rounded bg-(--accent-color)/10 text-(--accent-color) font-medium shrink-0">
-                    {{ project.pdk }}
-                  </span>
                   <span v-if="project.status" :class="statusBadgeClass(project.status)"
                     class="text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0">
                     {{ statusLabel(project.status) }}
@@ -134,30 +125,35 @@
 
     </div>
 
-    <!-- New Project Wizard Modal -->
-    <NewProjectWizard v-if="showWizard" @close="showWizard = false" @create="handleWizardCreate" />
+    <FrontendProjectWizard v-if="showWizard" @close="showWizard = false" @create="handleWizardCreate" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { Project, ProjectStatus, WorkspaceConfig } from '../types'
-import NewProjectWizard from '../components/NewProjectWizard.vue'
+import FrontendProjectWizard from '../components/FrontendProjectWizard.vue'
 import { useWorkspace } from '../composables/useWorkspace'
 
 const router = useRouter()
-const { recentProjects, openProject, newProject, loadRecentProjects, removeRecentProject } = useWorkspace()
+const {
+  recentProjects,
+  openProject,
+  newProject,
+  loadRecentProjects,
+  removeRecentProject,
+} = useWorkspace()
 
 const showWizard = ref(false)
 const showAllProjects = ref(false)
 
-const backendProjects = computed(() => {
-  return recentProjects.value.filter(project => (project.designTool ?? 'backend') === 'backend')
+const frontendProjects = computed(() => {
+  return recentProjects.value.filter(project => project.designTool === 'frontend')
 })
 
 const displayedProjects = computed(() => {
-  return showAllProjects.value ? backendProjects.value : backendProjects.value.slice(0, 3)
+  return showAllProjects.value ? frontendProjects.value : frontendProjects.value.slice(0, 3)
 })
 
 onMounted(async () => {
@@ -168,13 +164,13 @@ const goBack = () => {
   router.push('/')
 }
 
-const handleOpenProject = async () => {
-  const success = await openProject()
+const handleOpenWorkspace = async () => {
+  const success = await openProject(undefined, { designTool: 'frontend' })
   if (success) router.push('/workspace')
 }
 
 const handleOpenRecent = async (project: Project) => {
-  const success = await openProject(project)
+  const success = await openProject(project, { designTool: 'frontend' })
   if (success) router.push('/workspace')
 }
 
@@ -184,7 +180,10 @@ const handleRemoveRecent = async (projectId: string) => {
 
 const handleWizardCreate = async (config: WorkspaceConfig) => {
   showWizard.value = false
-  const success = await newProject(config)
+  const success = await newProject({
+    ...config,
+    designTool: 'frontend'
+  })
   if (success) router.push('/workspace')
 }
 

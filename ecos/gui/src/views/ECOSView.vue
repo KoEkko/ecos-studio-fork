@@ -19,17 +19,14 @@
         <h3 class="text-xs font-semibold text-(--text-secondary) uppercase tracking-wider mb-3 px-1">Design Tools</h3>
         <div class="grid grid-cols-3 gap-4">
           <!-- Frontend Design -->
-          <div
-            class="group relative flex flex-col items-center justify-center py-8 bg-(--bg-secondary) rounded-xl border border-(--border-color) transition-all duration-200 opacity-50 cursor-default overflow-hidden">
-            <div class="w-12 h-12 rounded-xl bg-(--bg-primary) flex items-center justify-center mb-3">
-              <i class="ri-code-s-slash-line text-2xl text-(--text-secondary)"></i>
+          <button @click="navigateToFE"
+            class="group flex flex-col items-center justify-center py-8 bg-(--bg-secondary) rounded-xl border border-(--border-color) hover:border-(--accent-color) transition-all duration-200 hover:scale-[1.02] cursor-pointer hover:shadow-lg hover:shadow-(--accent-color)/5">
+            <div class="w-12 h-12 rounded-xl bg-(--bg-primary) flex items-center justify-center group-hover:bg-(--accent-color)/10 transition-colors mb-3">
+              <i class="ri-code-s-slash-line text-2xl text-(--text-secondary) group-hover:text-(--accent-color) transition-colors"></i>
             </div>
             <span class="text-sm font-medium text-(--text-primary) mb-1">Frontend Design</span>
             <span class="text-xs text-(--text-secondary)">RTL / Verilog / SystemVerilog</span>
-            <div class="absolute inset-0 flex items-center justify-center bg-(--bg-primary)/60">
-              <span class="text-xs font-medium text-(--text-secondary) bg-(--bg-secondary) px-3 py-1 rounded-full border border-(--border-color)">Coming Soon</span>
-            </div>
-          </div>
+          </button>
           <!-- SOC -->
           <div
             class="group relative flex flex-col items-center justify-center py-8 bg-(--bg-secondary) rounded-xl border border-(--border-color) transition-all duration-200 opacity-50 cursor-default overflow-hidden">
@@ -140,6 +137,10 @@
                 class="text-[10px] px-1.5 py-0.5 rounded bg-(--accent-color)/10 text-(--accent-color) font-medium shrink-0">
                 {{ lastProject.pdk }}
               </span>
+              <span
+                class="text-[10px] px-1.5 py-0.5 rounded bg-(--bg-primary) text-(--text-secondary) border border-(--border-color) font-medium shrink-0">
+                {{ designToolLabel(lastProject) }}
+              </span>
               <span v-if="lastProject.status" :class="statusBadgeClass(lastProject.status)"
                 class="text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0">
                 {{ statusLabel(lastProject.status) }}
@@ -175,7 +176,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import type { ProjectStatus } from '../types'
+import type { Project, ProjectStatus } from '../types'
 import { useWorkspace } from '../composables/useWorkspace'
 import { usePdkManager } from '../composables/usePdkManager'
 
@@ -191,6 +192,7 @@ const lastProject = computed(() => {
   return recentProjects.value.length > 0 ? recentProjects.value[0] : null
 })
 
+const navigateToFE = () => router.push('/fe')
 const navigateToECC = () => router.push('/ecc')
 const navigateToProjects = () => router.push('/projects')
 const handleNotReady = () => { /* placeholder */ }
@@ -229,6 +231,10 @@ function statusLabel(status: ProjectStatus): string {
     not_started: 'Not Started',
   }
   return map[status] || 'Unknown'
+}
+
+function designToolLabel(project: Project): string {
+  return project.designTool === 'frontend' ? 'Frontend' : 'Backend'
 }
 
 function formatDate(date: Date): string {

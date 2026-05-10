@@ -1,5 +1,5 @@
 import { ref, getCurrentInstance } from 'vue'
-import type { Project, ProjectStatus, WorkspaceConfig } from '../types'
+import type { DesignTool, Project, ProjectStatus, WorkspaceConfig } from '../types'
 import { useRouter } from 'vue-router'
 import { open } from '@tauri-apps/plugin-dialog'
 import { invoke } from '@tauri-apps/api/core'
@@ -10,12 +10,14 @@ import { useToast } from 'primevue/usetoast'
 import { loadWorkspaceApi, createWorkspaceApi, waitForApiReady } from '../api'
 import { createSSEClient, type SSEClient, type ECCResponse } from '../api/sse'
 import { isTauri } from './useTauri'
+import { normalizeDesignTool, projectDesignTool } from '@/utils/designTool'
 
 interface SerializedProject {
   id: string
   name: string
   path: string
   lastOpened: string
+  designTool?: DesignTool
   pdk?: string
   topModule?: string
   frequencyTarget?: number
@@ -130,12 +132,17 @@ export function useWorkspace() {
     return normalized
   }
 
+  const projectIdFor = (path: string, designTool?: DesignTool): string => {
+    return `${normalizeDesignTool(designTool)}:${normalizePath(path)}`
+  }
+
   /**
    * 序列化项目：将 Date 转换为 ISO 字符串
    */
   const serializeProject = (project: Project): SerializedProject => {
     return {
       ...project,
+      id: projectIdFor(project.path, project.designTool),
       path: normalizePath(project.path),
       lastOpened: project.lastOpened.toISOString()
     }
@@ -145,8 +152,13 @@ export function useWorkspace() {
    * 反序列化项目：将 ISO 字符串转换回 Date
    */
   const deserializeProject = (serialized: SerializedProject): Project => {
+    const designTool = normalizeDesignTool(serialized.designTool)
+    const path = normalizePath(serialized.path)
     return {
       ...serialized,
+      id: projectIdFor(path, designTool),
+      path,
+      designTool,
       lastOpened: new Date(serialized.lastOpened)
     }
   }
@@ -212,12 +224,15 @@ export function useWorkspace() {
       // 4. 恢复 currentProject：优先从持久化的 current_project_path 精确匹配
       if (!currentProject.value) {
         const savedCurrentPath = await store.get<string>('current_project_path')
+        const savedCurrentDesignTool = normalizeDesignTool(await store.get<DesignTool>('current_project_design_tool'))
         let restored: Project | undefined
 
         if (savedCurrentPath) {
           // 精确匹配上次打开的项目
           restored = projects.find(
-            p => normalizePath(p.path) === savedCurrentPath && p.workspaceRecognized !== false
+            p => normalizePath(p.path) === savedCurrentPath
+              && projectDesignTool(p) === savedCurrentDesignTool
+              && p.workspaceRecognized !== false
           )
         }
 
@@ -234,7 +249,7 @@ export function useWorkspace() {
             // reload 后需要重新通过 API 加载 workspace 状态并建立 SSE 连接
             try {
               if (!(await ensureApiReady())) return
-              const response = await loadWorkspaceApi(restored.path)
+              const response = await loadWorkspaceApi(restored.path, projectDesignTool(restored))
               if (response.response === 'success') {
                 const resolvedPath = normalizePath(response.data.directory || restored.path)
                 if (!(await registerProjectRoot(resolvedPath))) {
@@ -277,12 +292,14 @@ export function useWorkspace() {
       // 标准化路径
       const normalizedProject = {
         ...project,
-        path: normalizePath(project.path)
+        path: normalizePath(project.path),
+        id: projectIdFor(project.path, project.designTool),
       }
 
       // 去重：如果路径已存在，先删掉旧的
       const filtered = recentProjects.value.filter(
         p => normalizePath(p.path) !== normalizedProject.path
+          || projectDesignTool(p) !== projectDesignTool(normalizedProject)
       )
 
       // 置顶：把最新的放到第一位
@@ -299,7 +316,7 @@ export function useWorkspace() {
       return false
     }
   }
-  const openProject = async (project?: Project) => {
+  const openProject = async (project?: Project, options?: { designTool?: DesignTool }) => {
     try {
       if (currentProject.value) {
         await closeProject()
@@ -323,7 +340,8 @@ export function useWorkspace() {
       if (!(await ensureApiReady())) return false
 
       // 3. 通过 HTTP API 加载项目状态
-      const response = await loadWorkspaceApi(selectedPath)
+      const designTool = normalizeDesignTool(options?.designTool ?? project?.designTool)
+      const response = await loadWorkspaceApi(selectedPath, designTool)
       if (response.response === 'success') {
         const resolvedPath = normalizePath(response.data.directory || selectedPath)
         if (!(await registerProjectRoot(resolvedPath))) {
@@ -335,22 +353,25 @@ export function useWorkspace() {
           return false
         }
         const existingProject = recentProjects.value.find(
-          p => normalizePath(p.path) === resolvedPath
+          p => normalizePath(p.path) === resolvedPath && projectDesignTool(p) === designTool
         )
         const fallbackName = resolvedPath.split('/').filter(Boolean).pop() || resolvedPath
         const resolvedName = project?.name || existingProject?.name || fallbackName
+        const resolvedDesignTool = normalizeDesignTool(options?.designTool ?? project?.designTool ?? existingProject?.designTool)
 
         const loadedProject: Project = {
-          id: resolvedPath,
+          id: projectIdFor(resolvedPath, resolvedDesignTool),
           name: resolvedName,
           path: resolvedPath,
-          lastOpened: new Date()
+          lastOpened: new Date(),
+          designTool: resolvedDesignTool
         }
 
         currentProject.value = loadedProject
 
         // 持久化当前项目路径，以便 reload 后恢复
         await store.set('current_project_path', normalizePath(loadedProject.path))
+        await store.set('current_project_design_tool', loadedProject.designTool)
         await store.save()
 
         // 建立 SSE 连接
@@ -407,8 +428,9 @@ export function useWorkspace() {
 
       // 3. 通过 HTTP API 创建项目（传递更多配置信息）
       // 将前端参数映射为后端期望的格式 (参考 ics55_parameter.json)
+      const designTool = normalizeDesignTool(config?.designTool)
       const frontendParams = config?.parameters || {}
-      const pdkName = config?.pdk || 'ics55'
+      const pdkName = designTool === 'frontend' ? (config?.pdk || '') : (config?.pdk || 'ics55')
       const backendParameters = {
         // 基本设计信息 (必需)
         'Design': frontendParams.design || selectedPath.split('/').pop() || 'New_Chip_Design',
@@ -416,7 +438,7 @@ export function useWorkspace() {
         'Clock': frontendParams.clock || 'clk',
         'Frequency max [MHz]': frontendParams.frequency_max || 100,
         // PDK 信息
-        'PDK': pdkName,
+        ...(pdkName ? { 'PDK': pdkName } : {}),
         // 核心配置
         'Core': {
           'Utilitization': frontendParams.core_utilization || 0.5
@@ -438,12 +460,30 @@ export function useWorkspace() {
 
       const response = await createWorkspaceApi({
         directory: selectedPath,
+        designTool,
         pdk: pdkName,
         pdk_root: resolvedPdkRoot,
         parameters: backendParameters,
         origin_def: config?.origin_def,
         origin_verilog: config?.origin_verilog,
-        rtl_list: config?.rtl_list || []
+        rtl_list: config?.rtl_list || [],
+        cpu_filelist: config?.parameters?.cpu_filelist as string | undefined,
+        soc_filelist: config?.parameters?.soc_filelist as string | undefined,
+        testbench: config?.parameters?.testbench as string | undefined,
+        sim_cpp_sources: config?.parameters?.sim_cpp_sources as string[] | undefined,
+        sim_cflags: config?.parameters?.sim_cflags as string[] | undefined,
+        sim_ldflags: config?.parameters?.sim_ldflags as string[] | undefined,
+        sim_run_args: config?.parameters?.sim_run_args as string[] | undefined,
+        sim_images: config?.parameters?.sim_images as string[] | undefined,
+        sim_all_tests: config?.parameters?.sim_all_tests as boolean | undefined,
+        sim_tests_dir: config?.parameters?.sim_tests_dir as string | undefined,
+        sim_build_all_programs: config?.parameters?.sim_build_all_programs as boolean | undefined,
+        sim_program_names: config?.parameters?.sim_program_names as string[] | undefined,
+        sim_program_sources: config?.parameters?.sim_program_sources as string[] | undefined,
+        sim_programs_dir: config?.parameters?.sim_programs_dir as string | undefined,
+        sim_tests_out_dir: config?.parameters?.sim_tests_out_dir as string | undefined,
+        sim_soc_root: config?.parameters?.sim_soc_root as string | undefined,
+        sim_build_test_script: config?.parameters?.sim_build_test_script as string | undefined
       })
       console.log(response)
       if (response.response === 'success') {
@@ -457,16 +497,18 @@ export function useWorkspace() {
           return false
         }
         const createdProject: Project = {
-          id: resolvedPath,
+          id: projectIdFor(resolvedPath, designTool),
           name: backendParameters['Design'] as string,
           path: resolvedPath,
-          lastOpened: new Date()
+          lastOpened: new Date(),
+          designTool
         }
 
         currentProject.value = createdProject
 
         // 持久化当前项目路径，以便 reload 后恢复
         await store.set('current_project_path', normalizePath(createdProject.path))
+        await store.set('current_project_design_tool', createdProject.designTool)
         await store.save()
 
         // 建立 SSE 连接
@@ -505,7 +547,10 @@ export function useWorkspace() {
     if (!project) return
 
     const projectPath = normalizePath(project.path)
-    const idx = recentProjects.value.findIndex(p => normalizePath(p.path) === projectPath)
+    const projectTool = projectDesignTool(project)
+    const idx = recentProjects.value.findIndex(
+      p => normalizePath(p.path) === projectPath && projectDesignTool(p) === projectTool
+    )
     if (idx === -1) return
 
     const snapshot: Partial<Project> = {}
@@ -551,7 +596,8 @@ export function useWorkspace() {
     try {
       const paramsContent = await readTextFile(`${project.path}/home/parameters.json`)
       const params = JSON.parse(paramsContent)
-      snapshot.pdk = params['PDK'] || undefined
+      snapshot.designTool = projectDesignTool(project)
+      snapshot.pdk = snapshot.designTool === 'frontend' ? undefined : (params['PDK'] || undefined)
       snapshot.topModule = params['Top module'] || undefined
       snapshot.frequencyTarget = params['Frequency max [MHz]'] || undefined
       snapshot.coreUtilization = params['Core']?.['Utilitization'] || undefined
@@ -595,6 +641,7 @@ export function useWorkspace() {
     disconnectSSE()
     await clearProjectRoot()
     await store.delete('current_project_path')
+    await store.delete('current_project_design_tool')
     await store.save()
     await updateWindowTitle()
   }

@@ -77,6 +77,10 @@
                 class="text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0">
                 {{ statusLabel(project.status) }}
               </span>
+              <span
+                class="text-[10px] px-1.5 py-0.5 rounded bg-(--bg-primary) text-(--text-secondary) border border-(--border-color) font-medium shrink-0">
+                {{ designToolLabel(project) }}
+              </span>
               <span v-if="project.pdk"
                 class="text-[10px] px-1.5 py-0.5 rounded bg-(--accent-color)/10 text-(--accent-color) font-medium shrink-0">
                 {{ project.pdk }}
@@ -273,6 +277,10 @@ function statusLabel(status?: ProjectStatus): string {
     not_started: 'Not Started',
   }
   return map[status]
+}
+
+function designToolLabel(project: Project): string {
+  return project.designTool === 'frontend' ? 'Frontend' : 'Backend'
 }
 
 function statusIcon(status?: ProjectStatus): string {
