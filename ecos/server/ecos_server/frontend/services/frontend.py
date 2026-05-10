@@ -33,12 +33,43 @@ def _summarize_request(data: object) -> dict:
     return summary
 
 
-def _ensure_fecompiler_importable() -> None:
+def _iter_path_values(value: Any) -> list[str]:
+    if not value:
+        return []
+    if isinstance(value, (list, tuple, set)):
+        values: list[str] = []
+        for item in value:
+            values.extend(_iter_path_values(item))
+        return values
+    return [str(value)]
+
+
+def _add_fe_root_candidates(candidates: list[Path], root: Path) -> None:
+    candidates.append(root)
+    candidates.append(root / "ecc-fe")
+    if root.name == "fecompiler":
+        candidates.append(root.parent)
+    for parent in root.parents:
+        candidates.append(parent)
+        candidates.append(parent / "ecc-fe")
+
+
+def _ensure_fecompiler_importable(*hints: Any) -> None:
     """Add the ecc-fe submodule to sys.path in source-tree development."""
     candidates: list[Path] = []
     env_root = os.environ.get("ECOS_FE_COMPILER_ROOT", "").strip()
     if env_root:
-        candidates.append(Path(env_root).expanduser())
+        _add_fe_root_candidates(candidates, Path(env_root).expanduser())
+
+    for key in ("ECOS_STUDIO_ROOT", "BUILD_WORKSPACE_DIRECTORY", "PWD", "OLDPWD"):
+        env_value = os.environ.get(key, "").strip()
+        if env_value:
+            _add_fe_root_candidates(candidates, Path(env_value).expanduser())
+
+    for hint in hints:
+        for item in _iter_path_values(hint):
+            if item:
+                _add_fe_root_candidates(candidates, Path(item).expanduser())
 
     here = Path(__file__).resolve()
     for parent in here.parents:
@@ -206,11 +237,19 @@ class FrontendService:
         return bool(directory and os.path.exists(directory))
 
     def create_workspace(self, request: ECCRequest) -> ECCResponse:
-        _ensure_fecompiler_importable()
-        from fecompiler.data.workspace import CreateWorkspaceData, create_workspace
-
         data = request.data
         try:
+            _ensure_fecompiler_importable(
+                data.get("cpu_filelist", ""),
+                data.get("soc_filelist", ""),
+                data.get("testbench", ""),
+                data.get("sim_cpp_sources", []),
+                data.get("sim_programs_dir", ""),
+                data.get("sim_soc_root", ""),
+                data.get("sim_build_test_script", ""),
+            )
+            from fecompiler.data.workspace import CreateWorkspaceData, create_workspace
+
             parameters = dict(data.get("parameters", {}))
             parameters.setdefault("Design Tool", "frontend")
             if data.get("soc_variant"):
@@ -271,11 +310,11 @@ class FrontendService:
         )
 
     def load_workspace(self, request: ECCRequest) -> ECCResponse:
-        _ensure_fecompiler_importable()
-        from fecompiler.data.workspace import load_workspace
-
         directory = request.data.get("directory", "")
         try:
+            _ensure_fecompiler_importable(directory)
+            from fecompiler.data.workspace import load_workspace
+
             workspace = load_workspace(directory)
         except Exception as e:
             logger.exception("frontend load_workspace failed")
