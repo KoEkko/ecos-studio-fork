@@ -80,6 +80,13 @@ def _normalize_bool(value: Any) -> bool:
     return bool(value)
 
 
+def _resolve_path(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    return str(Path(text).expanduser().resolve())
+
+
 def _is_frontend_workspace(workspace: dict[str, Any]) -> bool:
     """Return True only for workspaces that look like an ecc-fe workspace."""
     params_path = workspace.get("parameters_path", "")
@@ -206,6 +213,8 @@ class FrontendService:
         try:
             parameters = dict(data.get("parameters", {}))
             parameters.setdefault("Design Tool", "frontend")
+            if data.get("soc_variant"):
+                parameters["soc_variant"] = data.get("soc_variant")
             spec = CreateWorkspaceData(
                 directory=data.get("directory", ""),
                 parameters=parameters,
@@ -416,6 +425,8 @@ class FrontendService:
             )
 
         try:
+            if step == "sim":
+                self._apply_sim_test_suite(data.get("sim_test_suite", ""))
             state = self.engine_flow.run_step(step, data.get("rerun", False))
         except Exception:
             state = StateEnum.Incomplete
@@ -435,6 +446,75 @@ class FrontendService:
             data=response_data,
             message=[f"run frontend step {step} failed with state {state.value}: {self._workspace_dir()}"],
         )
+
+    def _apply_sim_test_suite(self, suite: Any) -> None:
+        suite_name = str(suite or "").strip()
+        if not suite_name or suite_name == "default":
+            return
+        if not self.workspace:
+            return
+
+        if suite_name == "cpu_tests":
+            updates = {
+                "sim_all_tests": False,
+                "sim_images": [],
+                "sim_build_all_programs": True,
+                "sim_program_names": [],
+                "sim_run_args": self._default_cpu_tests_run_args(),
+            }
+        elif suite_name == "rtthread":
+            updates = {
+                "sim_all_tests": False,
+                "sim_images": [],
+                "sim_build_all_programs": False,
+                "sim_program_names": ["rtthread"],
+                "sim_run_args": ["--max-cycles", "10000000", "--wave", "/dev/null"],
+            }
+        else:
+            raise ValueError(f"unknown frontend sim test suite: {suite_name}")
+
+        self._update_workspace_parameters(updates)
+
+    def _default_cpu_tests_run_args(self) -> list[str]:
+        soc_root = self._workspace_soc_root()
+        if not soc_root:
+            return ["--max-cycles", "50000000"]
+        return [
+            "--max-cycles",
+            "50000000",
+            "--diff",
+            "--ref",
+            str(soc_root / "tools" / "riscv32-spike-so"),
+            "--diff-image-offset",
+            "0x100",
+            "--diff-reset-vector",
+            "0x80000000",
+        ]
+
+    def _workspace_soc_root(self) -> Path | None:
+        if not self.workspace:
+            return None
+        explicit = _resolve_path(self.workspace.get("sim_soc_root", ""))
+        if explicit and Path(explicit).exists():
+            return Path(explicit)
+        soc_filelist = _resolve_path(self.workspace.get("soc_filelist", ""))
+        if soc_filelist and Path(soc_filelist).exists():
+            return Path(soc_filelist).parent
+        return None
+
+    def _update_workspace_parameters(self, updates: dict[str, Any]) -> None:
+        if not self.workspace:
+            return
+        params_path = self.workspace.get("parameters_path", "")
+        with open(params_path, encoding="utf-8") as f:
+            parameters = json.load(f)
+
+        parameters.update(updates)
+
+        with open(params_path, "w", encoding="utf-8") as f:
+            json.dump(parameters, f, indent=2, ensure_ascii=False)
+
+        self.workspace.update(updates)
 
     def get_info(self, request: ECCRequest) -> ECCResponse:
         data = request.data

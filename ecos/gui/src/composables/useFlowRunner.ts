@@ -10,6 +10,10 @@ import { runStepApi, rtl2gdsApi, type RunStepResponse } from '@/api/flow'
 /** 任意流程命令执行中为 true，供 Home flow log 等订阅，避免多实例 composable 状态不一致 */
 export const flowExecutionActive = ref(false)
 
+export interface RunFlowOptions {
+  simTestSuite?: string
+}
+
 // ============ Composable ============
 
 /**
@@ -44,7 +48,7 @@ export function useFlowRunner() {
   /**
    * 运行当前步骤
    */
-  async function runFlow(): Promise<RunStepResponse | null> {
+  async function runFlow(options: RunFlowOptions = {}): Promise<RunStepResponse | null> {
     // 从动态路由参数获取当前步骤
     const step = getCurrentStep()
 
@@ -74,7 +78,8 @@ export function useFlowRunner() {
         cmd: CMDEnum.run_step,
         data: {
           step: step as StepEnum,
-          rerun: false
+          rerun: false,
+          sim_test_suite: options.simTestSuite
         }
       }, currentProject.value?.designTool)
       console.log('run step result', result)

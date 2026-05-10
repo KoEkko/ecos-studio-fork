@@ -388,9 +388,21 @@
 
         <!-- 底部操作栏 -->
         <div class="p-3 border-t border-(--border-color) bg-(--bg-secondary)/30 space-y-2">
+          <div v-if="showFrontendSimSuitePicker" class="frontend-sim-suite">
+            <span class="frontend-sim-suite-label">Test Suite</span>
+            <div class="frontend-sim-suite-options">
+              <button v-for="suite in frontendSimSuites" :key="suite.id" type="button"
+                class="frontend-sim-suite-option"
+                :class="{ active: selectedFrontendSimSuite === suite.id }"
+                @click="selectedFrontendSimSuite = suite.id">
+                <i :class="suite.icon"></i>
+                <span>{{ suite.label }}</span>
+              </button>
+            </div>
+          </div>
           <!-- 操作按钮组 -->
           <div class="flex gap-2">
-            <button @click="handleRunFlow" :disabled="isRunning"
+            <button @click="handleRunFlow" :disabled="isRunning || runDisabled"
               class="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-(--accent-color) text-white text-[11px] font-bold rounded hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-50 shadow-lg shadow-(--accent-color)/20">
               <i :class="isRunning ? 'ri-loader-4-line animate-spin' : 'ri-play-fill'"></i>
               {{ isRunning ? 'RUNNING' : 'RUN' }}
@@ -491,8 +503,22 @@ const runModes = computed<Record<string, { label: string; icon: string; shortcut
   rerun: { label: 'ReRun', icon: 'ri-restart-line' },
 }))
 
+const frontendSimSuites = [
+  { id: 'cpu_tests', label: 'CPU Tests', icon: 'ri-checkbox-multiple-line' },
+  { id: 'rtthread', label: 'RT-Thread', icon: 'ri-terminal-box-line' },
+]
+const selectedFrontendSimSuite = ref('')
+
 const flowOverviewSubtitle = computed(() => {
   return currentProject.value?.designTool === 'frontend' ? 'Frontend Pipeline' : 'RTL to GDS Pipeline'
+})
+
+const showFrontendSimSuitePicker = computed(() => {
+  return currentProject.value?.designTool === 'frontend' && currentStage.value.toLowerCase() === 'sim'
+})
+
+const runDisabled = computed(() => {
+  return showFrontendSimSuitePicker.value && !selectedFrontendSimSuite.value
 })
 
 // 点击外部关闭菜单
@@ -509,7 +535,9 @@ const handleRunFlow = async () => {
     await refreshFlowStages()
   } else {
     setRunStepOngoingByPath(currentStage.value)
-    await runFlow()
+    await runFlow({
+      simTestSuite: showFrontendSimSuitePicker.value ? selectedFrontendSimSuite.value : undefined,
+    })
     await Promise.all([
       refreshCurrentSubflow(),
       refreshFlowStages()
@@ -691,6 +719,55 @@ const handleRunFlow = async () => {
 
 .mode-menu-item.active .mode-item-shortcut {
   color: rgba(255, 255, 255, 0.6);
+}
+
+.frontend-sim-suite {
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.frontend-sim-suite-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.frontend-sim-suite-options {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
+.frontend-sim-suite-option {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.frontend-sim-suite-option:hover {
+  border-color: var(--text-secondary);
+}
+
+.frontend-sim-suite-option.active {
+  border-color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 14%, var(--bg-secondary));
+  color: var(--accent-color);
 }
 
 /* 菜单动画 */

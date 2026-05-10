@@ -38,6 +38,7 @@ export function rtl2gdsApi(request: RequestData<RTL2GDSRequest>, designTool?: De
 export interface RunStepRequest {
   step: StepEnum;
   rerun: boolean;
+  sim_test_suite?: string;
 }
 
 export interface RunStepResponse {
