@@ -39,6 +39,8 @@ export interface RunStepRequest {
   step: StepEnum;
   rerun: boolean;
   sim_test_suite?: string;
+  sim_cpu_test_mode?: 'all' | 'selected';
+  sim_cpu_test_cases?: string[];
 }
 
 export interface RunStepResponse {

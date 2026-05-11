@@ -12,6 +12,8 @@ export const flowExecutionActive = ref(false)
 
 export interface RunFlowOptions {
   simTestSuite?: string
+  simCpuTestMode?: 'all' | 'selected'
+  simCpuTestCases?: string[]
 }
 
 // ============ Composable ============
@@ -79,7 +81,9 @@ export function useFlowRunner() {
         data: {
           step: step as StepEnum,
           rerun: false,
-          sim_test_suite: options.simTestSuite
+          sim_test_suite: options.simTestSuite,
+          sim_cpu_test_mode: options.simCpuTestMode,
+          sim_cpu_test_cases: options.simCpuTestCases
         }
       }, currentProject.value?.designTool)
       console.log('run step result', result)

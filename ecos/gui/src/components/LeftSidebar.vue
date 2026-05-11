@@ -394,10 +394,41 @@
               <button v-for="suite in frontendSimSuites" :key="suite.id" type="button"
                 class="frontend-sim-suite-option"
                 :class="{ active: selectedFrontendSimSuite === suite.id }"
-                @click="selectedFrontendSimSuite = suite.id">
+                @click="selectFrontendSimSuite(suite.id)">
                 <i :class="suite.icon"></i>
                 <span>{{ suite.label }}</span>
               </button>
+            </div>
+
+            <div v-if="selectedFrontendSimSuite === 'cpu_tests'" class="frontend-cpu-tests">
+              <div class="frontend-cpu-test-mode">
+                <button type="button" class="frontend-cpu-mode-option"
+                  :class="{ active: selectedCpuTestMode === 'all' }"
+                  @click="selectedCpuTestMode = 'all'">
+                  <i class="ri-stack-line"></i>
+                  <span>All</span>
+                </button>
+                <button type="button" class="frontend-cpu-mode-option"
+                  :class="{ active: selectedCpuTestMode === 'selected' }"
+                  @click="selectedCpuTestMode = 'selected'">
+                  <i class="ri-list-check-3"></i>
+                  <span>Cases</span>
+                  <span v-if="selectedCpuTestCases.length > 0" class="frontend-cpu-case-count">
+                    {{ selectedCpuTestCases.length }}
+                  </span>
+                </button>
+              </div>
+
+              <div v-if="selectedCpuTestMode === 'selected'" class="frontend-cpu-case-list">
+                <label v-for="testCase in cpuTestCases" :key="testCase.id" class="frontend-cpu-case">
+                  <input v-model="selectedCpuTestCases" :value="testCase.id" type="checkbox"
+                    class="frontend-cpu-case-input">
+                  <span class="frontend-cpu-case-box">
+                    <i class="ri-check-line"></i>
+                  </span>
+                  <span class="frontend-cpu-case-label">{{ testCase.label }}</span>
+                </label>
+              </div>
             </div>
           </div>
           <!-- 操作按钮组 -->
@@ -503,11 +534,54 @@ const runModes = computed<Record<string, { label: string; icon: string; shortcut
   rerun: { label: 'ReRun', icon: 'ri-restart-line' },
 }))
 
-const frontendSimSuites = [
+type FrontendSimSuite = 'cpu_tests' | 'rtthread'
+type CpuTestMode = 'all' | 'selected'
+
+const frontendSimSuites: Array<{ id: FrontendSimSuite; label: string; icon: string }> = [
   { id: 'cpu_tests', label: 'CPU Tests', icon: 'ri-checkbox-multiple-line' },
   { id: 'rtthread', label: 'RT-Thread', icon: 'ri-terminal-box-line' },
 ]
-const selectedFrontendSimSuite = ref('')
+const selectedFrontendSimSuite = ref<FrontendSimSuite | ''>('')
+const selectedCpuTestMode = ref<CpuTestMode>('all')
+const selectedCpuTestCases = ref<string[]>([])
+
+const cpuTestCases = [
+  'add-longlong',
+  'add',
+  'bit',
+  'bubble-sort',
+  'crc32',
+  'div',
+  'dummy',
+  'fact',
+  'fib',
+  'goldbach',
+  'hello-str',
+  'if-else',
+  'leap-year',
+  'load-store',
+  'matrix-mul',
+  'max',
+  'mersenne',
+  'min3',
+  'mov-c',
+  'movsx',
+  'mul-longlong',
+  'pascal',
+  'prime',
+  'quick-sort',
+  'recursion',
+  'select-sort',
+  'shift',
+  'shuixianhua',
+  'string',
+  'sub-longlong',
+  'sum',
+  'switch',
+  'to-lower-case',
+  'unalign',
+  'wanshu',
+].map((name) => ({ id: name, label: name }))
 
 const flowOverviewSubtitle = computed(() => {
   return currentProject.value?.designTool === 'frontend' ? 'Frontend Pipeline' : 'RTL to GDS Pipeline'
@@ -518,8 +592,19 @@ const showFrontendSimSuitePicker = computed(() => {
 })
 
 const runDisabled = computed(() => {
-  return showFrontendSimSuitePicker.value && !selectedFrontendSimSuite.value
+  if (!showFrontendSimSuitePicker.value) return false
+  if (!selectedFrontendSimSuite.value) return true
+  return selectedFrontendSimSuite.value === 'cpu_tests'
+    && selectedCpuTestMode.value === 'selected'
+    && selectedCpuTestCases.value.length === 0
 })
+
+const selectFrontendSimSuite = (suite: FrontendSimSuite) => {
+  selectedFrontendSimSuite.value = suite
+  if (suite === 'cpu_tests' && !selectedCpuTestMode.value) {
+    selectedCpuTestMode.value = 'all'
+  }
+}
 
 // 点击外部关闭菜单
 const closeMenu = () => { showModeMenu.value = false }
@@ -535,8 +620,14 @@ const handleRunFlow = async () => {
     await refreshFlowStages()
   } else {
     setRunStepOngoingByPath(currentStage.value)
+    const isFrontendSimStep = showFrontendSimSuitePicker.value
+    const isCpuTests = isFrontendSimStep && selectedFrontendSimSuite.value === 'cpu_tests'
     await runFlow({
-      simTestSuite: showFrontendSimSuitePicker.value ? selectedFrontendSimSuite.value : undefined,
+      simTestSuite: isFrontendSimStep ? selectedFrontendSimSuite.value : undefined,
+      simCpuTestMode: isCpuTests ? selectedCpuTestMode.value : undefined,
+      simCpuTestCases: isCpuTests && selectedCpuTestMode.value === 'selected'
+        ? [...selectedCpuTestCases.value]
+        : undefined,
     })
     await Promise.all([
       refreshCurrentSubflow(),
@@ -768,6 +859,121 @@ const handleRunFlow = async () => {
   border-color: var(--accent-color);
   background: color-mix(in srgb, var(--accent-color) 14%, var(--bg-secondary));
   color: var(--accent-color);
+}
+
+.frontend-cpu-tests {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color);
+}
+
+.frontend-cpu-test-mode {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.frontend-cpu-mode-option {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 6px 7px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.frontend-cpu-mode-option:hover {
+  border-color: var(--text-secondary);
+}
+
+.frontend-cpu-mode-option.active {
+  border-color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 14%, var(--bg-secondary));
+  color: var(--accent-color);
+}
+
+.frontend-cpu-case-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-color) 18%, var(--bg-primary));
+  font-size: 9px;
+  line-height: 1;
+}
+
+.frontend-cpu-case-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 176px;
+  margin-top: 8px;
+  padding-right: 2px;
+  overflow-y: auto;
+}
+
+.frontend-cpu-case {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 26px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.frontend-cpu-case:hover {
+  border-color: var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.frontend-cpu-case-input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.frontend-cpu-case-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  color: transparent;
+  font-size: 10px;
+  transition: all 0.12s ease;
+  flex-shrink: 0;
+}
+
+.frontend-cpu-case-input:checked + .frontend-cpu-case-box {
+  border-color: var(--accent-color);
+  background: var(--accent-color);
+  color: #fff;
+}
+
+.frontend-cpu-case-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 600;
 }
 
 /* 菜单动画 */
