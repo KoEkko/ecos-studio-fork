@@ -33,10 +33,12 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { StepEnum } from '@/api/type'
+import { useWorkspace } from '@/composables/useWorkspace'
 import AIChatPanel from './AIChatPanel.vue'
 import StepConfigPanel from './StepConfigPanel.vue'
 
 const route = useRoute()
+const { currentProject } = useWorkspace()
 const stepEnumValues = Object.values(StepEnum)
 
 function stepFromRoutePath(): StepEnum | undefined {
@@ -44,8 +46,11 @@ function stepFromRoutePath(): StepEnum | undefined {
   return stepEnumValues.find((s) => s.toLowerCase() === segment.toLowerCase())
 }
 
-/** Synthesis 不提供步骤配置编辑，隐藏 Inspector 标签与面板 */
-const showStepConfigInspector = computed(() => stepFromRoutePath() !== StepEnum.SYNTHESIS)
+/** Frontend steps expose results/logs/artifacts instead of backend step config editing. */
+const showStepConfigInspector = computed(() => {
+  if (currentProject.value?.designTool === 'frontend') return false
+  return stepFromRoutePath() !== StepEnum.SYNTHESIS
+})
 
 const activeTab = ref<'chat' | 'inspector'>('chat')
 

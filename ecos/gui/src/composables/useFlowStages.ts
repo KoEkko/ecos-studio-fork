@@ -6,6 +6,7 @@ import { fetchSharedHomeData, convertRemoteToLocalPath } from './useHomeData'
 import { STEP_METADATA, getStepMetadata } from '@/api/type'
 import type { ECCResponse } from '@/api/sse'
 import { resolveProjectPathAccess } from '@/utils/projectFs'
+import type { DesignTool } from '@/types'
 
 // ============ 类型定义 ============
 
@@ -37,18 +38,20 @@ export interface FlowStage {
 
 // ============ 常量配置 ============
 
-/** 固定的设置页面步骤 - 从 STEP_METADATA 动态生成 */
-const FIXED_SETUP_STAGES: FlowStage[] = Object.entries(STEP_METADATA)
-  .filter(([_, meta]) => meta.group === 'setup' && meta.showInSidebar)
-  .map(([_, meta]) => ({
-    label: meta.label,
-    path: meta.path,
-    icon: meta.icon,
-    group: 'setup' as const,
-    state: 'pending',
-    runtime: '',
-    'peak memory (mb)': 0,
-  }))
+function setupStagesForDesignTool(designTool?: DesignTool): FlowStage[] {
+  return Object.entries(STEP_METADATA)
+    .filter(([_, meta]) => meta.group === 'setup' && meta.showInSidebar)
+    .filter(([_, meta]) => designTool !== 'frontend' || meta.path !== 'configure')
+    .map(([_, meta]) => ({
+      label: meta.label,
+      path: meta.path,
+      icon: meta.icon,
+      group: 'setup' as const,
+      state: 'pending',
+      runtime: '',
+      'peak memory (mb)': 0,
+    }))
+}
 
 /**
  * 将 flow.json 数据转换为 FlowStage 格式（与侧边栏加载逻辑一致）
@@ -122,7 +125,10 @@ export function useFlowStages() {
 
   // 合并后的完整流程步骤
   const flowStages = computed<FlowStage[]>(() => {
-    return [...FIXED_SETUP_STAGES, ...dynamicFlowStages.value]
+    return [
+      ...setupStagesForDesignTool(currentProject.value?.designTool),
+      ...dynamicFlowStages.value,
+    ]
   })
 
   /**
