@@ -19,15 +19,14 @@
       </button>
     </header>
 
-    <div v-if="!currentWave" class="empty-waveform">
-      <i class="ri-pulse-line"></i>
-      <span>Select a waveform from frontend simulation results</span>
-    </div>
-
-    <div v-else class="waveform-body">
+    <div class="waveform-body">
+      <div v-if="!currentWave" class="empty-waveform">
+        <i class="ri-pulse-line"></i>
+        <span>Select a waveform from frontend simulation results</span>
+      </div>
       <div v-if="loading || errorMessage" class="waveform-status" :class="{ error: errorMessage }">
         <i :class="loading ? 'ri-loader-4-line spin' : 'ri-error-warning-line'"></i>
-        <span>{{ errorMessage || 'Loading waveform...' }}</span>
+        <span>{{ errorMessage || loadingMessage }}</span>
       </div>
       <iframe
         ref="surferFrame"
@@ -52,6 +51,7 @@ const { currentWave, openRequestedAt } = storeToRefs(waveformStore)
 const surferFrame = ref<HTMLIFrameElement | null>(null)
 const frameReady = ref(false)
 const loading = ref(false)
+const waitingForSurfer = ref(false)
 const errorMessage = ref('')
 let loadToken = 0
 
@@ -61,10 +61,13 @@ const subtitle = computed(() => {
   return currentWave.value.caseName ? `${currentWave.value.caseName} · ${name}` : name
 })
 
+const loadingMessage = computed(() => (
+  waitingForSurfer.value ? 'Loading Surfer viewer...' : 'Loading waveform...'
+))
+
 watch(
   () => openRequestedAt.value,
   () => {
-    if (!frameReady.value) return
     void loadCurrentWave()
   },
 )
@@ -72,13 +75,13 @@ watch(
 watch(
   () => currentWave.value?.path,
   () => {
-    if (!frameReady.value) return
     void loadCurrentWave()
   },
 )
 
 async function handleFrameLoad(): Promise<void> {
   frameReady.value = true
+  waitingForSurfer.value = false
   await loadCurrentWave()
 }
 
@@ -87,7 +90,19 @@ async function loadCurrentWave(): Promise<void> {
   if (!wave) return
   const token = ++loadToken
   loading.value = true
+  waitingForSurfer.value = !frameReady.value
   errorMessage.value = ''
+
+  if (!frameReady.value) {
+    window.setTimeout(() => {
+      if (token === loadToken && !frameReady.value) {
+        loading.value = false
+        waitingForSurfer.value = false
+        errorMessage.value = 'Surfer viewer did not finish loading'
+      }
+    }, 12000)
+    return
+  }
 
   try {
     await syncApiPort()
@@ -96,6 +111,7 @@ async function loadCurrentWave(): Promise<void> {
     const iframe = surferFrame.value
     if (!iframe?.contentWindow) return
 
+    waitingForSurfer.value = false
     const fileUrl = waveformFileUrl(wave.path)
     const response = await fetch(fileUrl, { method: 'HEAD' })
     if (!response.ok) {
@@ -208,6 +224,13 @@ function fileName(path: string): string {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+}
+
+.waveform-body .empty-waveform {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: var(--bg-primary);
 }
 
 .waveform-status {
