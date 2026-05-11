@@ -41,7 +41,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { getApiBaseUrl, syncApiPort } from '@/api'
 import { useWaveformViewerStore } from '@/stores/waveformViewerStore'
@@ -50,11 +50,13 @@ const waveformStore = useWaveformViewerStore()
 const { currentWave, openRequestedAt } = storeToRefs(waveformStore)
 const surferFrame = ref<HTMLIFrameElement | null>(null)
 const frameReady = ref(false)
+const surferReady = ref(false)
 const apiReady = ref(false)
 const loading = ref(false)
 const waitingForSurfer = ref(false)
 const errorMessage = ref('')
 let loadToken = 0
+let frameReadyTimer: number | null = null
 
 const subtitle = computed(() => {
   if (!currentWave.value) return 'No waveform loaded'
@@ -71,8 +73,14 @@ const surferUrl = computed(() => (
 ))
 
 onMounted(async () => {
+  window.addEventListener('message', handleSurferMessage)
   await syncApiPort()
   apiReady.value = true
+})
+
+onUnmounted(() => {
+  window.removeEventListener('message', handleSurferMessage)
+  clearFrameReadyTimer()
 })
 
 watch(
@@ -82,17 +90,32 @@ watch(
   },
 )
 
-watch(
-  () => currentWave.value?.path,
-  () => {
-    void loadCurrentWave()
-  },
-)
-
 async function handleFrameLoad(): Promise<void> {
   frameReady.value = true
-  waitingForSurfer.value = false
+  armFrameReadyTimer()
   await loadCurrentWave()
+}
+
+function handleSurferMessage(event: MessageEvent): void {
+  if (!surferUrl.value || event.source !== surferFrame.value?.contentWindow) return
+  if (event.origin !== new URL(surferUrl.value).origin) return
+  const data = event.data as { source?: string; command?: string; message?: string }
+  if (data?.source !== 'ecos-surfer') return
+
+  if (data.command === 'SurferReady') {
+    surferReady.value = true
+    waitingForSurfer.value = false
+    clearFrameReadyTimer()
+    void loadCurrentWave()
+    return
+  }
+
+  if (data.command === 'SurferError') {
+    waitingForSurfer.value = false
+    loading.value = false
+    errorMessage.value = data.message || 'Surfer viewer failed to initialize'
+    clearFrameReadyTimer()
+  }
 }
 
 async function loadCurrentWave(): Promise<void> {
@@ -100,15 +123,15 @@ async function loadCurrentWave(): Promise<void> {
   if (!wave) return
   const token = ++loadToken
   loading.value = true
-  waitingForSurfer.value = !apiReady.value || !frameReady.value
+  waitingForSurfer.value = !apiReady.value || !frameReady.value || !surferReady.value
   errorMessage.value = ''
 
-  if (!apiReady.value || !frameReady.value) {
+  if (!apiReady.value || !frameReady.value || !surferReady.value) {
     window.setTimeout(() => {
-      if (token === loadToken && (!apiReady.value || !frameReady.value)) {
+      if (token === loadToken && (!apiReady.value || !frameReady.value || !surferReady.value)) {
         loading.value = false
         waitingForSurfer.value = false
-        errorMessage.value = 'Surfer viewer did not finish loading'
+        errorMessage.value = 'Surfer viewer did not finish loading. Check network access to app.surfer-project.org.'
       }
     }, 12000)
     return
@@ -123,7 +146,11 @@ async function loadCurrentWave(): Promise<void> {
 
     waitingForSurfer.value = false
     const fileUrl = waveformFileUrl(wave.path)
-    const response = await fetch(fileUrl, { method: 'HEAD' })
+    const response = await fetch(fileUrl, {
+      method: 'HEAD',
+      signal: AbortSignal.timeout(5000),
+    })
+    if (token !== loadToken) return
     if (!response.ok) {
       throw new Error(`Cannot load waveform: ${response.status} ${response.statusText}`)
     }
@@ -131,8 +158,6 @@ async function loadCurrentWave(): Promise<void> {
     const message = { command: 'LoadUrl', url: fileUrl }
     const targetOrigin = new URL(surferUrl.value).origin
     iframe.contentWindow.postMessage(message, targetOrigin)
-    window.setTimeout(() => iframe.contentWindow?.postMessage(message, targetOrigin), 600)
-    window.setTimeout(() => iframe.contentWindow?.postMessage(message, targetOrigin), 1500)
   } catch (err) {
     if (token === loadToken) {
       errorMessage.value = err instanceof Error ? err.message : String(err)
@@ -147,6 +172,22 @@ async function loadCurrentWave(): Promise<void> {
 function waveformFileUrl(path: string): string {
   const name = encodeURIComponent(fileName(path))
   return `${getApiBaseUrl()}/api/frontend/workspace/waveform/file/${name}?path=${encodeURIComponent(path)}`
+}
+
+function armFrameReadyTimer(): void {
+  clearFrameReadyTimer()
+  frameReadyTimer = window.setTimeout(() => {
+    if (surferReady.value) return
+    loading.value = false
+    waitingForSurfer.value = false
+    errorMessage.value = 'Surfer viewer loaded its frame but did not initialize. Check the local Surfer proxy.'
+  }, 12000)
+}
+
+function clearFrameReadyTimer(): void {
+  if (frameReadyTimer === null) return
+  window.clearTimeout(frameReadyTimer)
+  frameReadyTimer = null
 }
 
 function fileName(path: string): string {

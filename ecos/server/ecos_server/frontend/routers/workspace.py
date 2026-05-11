@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 from pathlib import Path
+from urllib.error import URLError
 from urllib.request import urlopen
 
 from fastapi import APIRouter, HTTPException, Query
@@ -16,6 +17,7 @@ fe_serv = frontend_service()
 router = APIRouter(prefix="/api/frontend/workspace", tags=["frontend-workspace"])
 
 SURFER_APP_BASE = "https://app.surfer-project.org"
+SURFER_FETCH_TIMEOUT_SECONDS = 8
 SURFER_ASSET_TYPES = {
     "integration.js": "application/javascript; charset=utf-8",
     "surfer.js": "application/javascript; charset=utf-8",
@@ -28,13 +30,41 @@ SURFER_ASSET_TYPES = {
 @lru_cache(maxsize=16)
 def _fetch_surfer_asset(asset: str) -> bytes:
     url = f"{SURFER_APP_BASE}/{asset}"
-    with urlopen(url, timeout=20) as response:
-        return response.read()
+    try:
+        with urlopen(url, timeout=SURFER_FETCH_TIMEOUT_SECONDS) as response:
+            return response.read()
+    except (TimeoutError, URLError, OSError) as exc:
+        raise RuntimeError(f"failed to fetch Surfer asset from {url}") from exc
 
 
 @lru_cache(maxsize=1)
 def _surfer_html() -> bytes:
     text = _fetch_surfer_asset("").decode("utf-8")
+    integration_script = _fetch_surfer_asset("integration.js").decode("utf-8")
+    setup_hooks = f"""
+        try {{
+            {integration_script}
+            register_message_listener();
+            window.__surfer_host_api = {{
+                postMessage: (message) => window.parent.postMessage({{
+                    source: 'ecos-surfer',
+                    command: 'SurferHostMessage',
+                    message,
+                }}, '*'),
+            }};
+            window.setTimeout(() => {{
+                window.parent.postMessage({{ source: 'ecos-surfer', command: 'SurferReady' }}, '*');
+            }}, 0);
+        }} catch (err) {{
+            window.parent.postMessage({{
+                source: 'ecos-surfer',
+                command: 'SurferError',
+                message: err && err.message ? err.message : String(err),
+            }}, '*');
+            throw err;
+        }}
+        """
+    text = text.replace("/*SURFER_SETUP_HOOKS*/", setup_hooks)
     text = text.replace(
         "navigator.serviceWorker.register('sw.js');",
         "console.debug('Surfer service worker disabled inside ECOS Studio');",
@@ -64,7 +94,10 @@ async def health_check():
 @router.get("/waveform/surfer/")
 def waveform_surfer():
     """Serve the Surfer web viewer through the local API origin."""
-    return _surfer_response(_surfer_html(), "text/html; charset=utf-8")
+    try:
+        return _surfer_response(_surfer_html(), "text/html; charset=utf-8")
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="failed to fetch Surfer viewer") from exc
 
 
 @router.get("/waveform/surfer/{asset}")
