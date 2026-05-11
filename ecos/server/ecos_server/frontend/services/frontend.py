@@ -788,6 +788,15 @@ class FrontendService:
 
     def _build_frontend_step_artifacts(self, step) -> list[dict[str, str]]:
         artifacts: list[dict[str, str]] = []
+        seen_paths: set[str] = set()
+
+        def _append_item(item: dict[str, str]) -> None:
+            path = str(item.get("path", "")).strip() if item else ""
+            if not path or path in seen_paths:
+                return
+            seen_paths.add(path)
+            artifacts.append(item)
+
         for label, path in (
             ("Output JSON", step.output.get("json", "")),
             ("Prepared inputs", Path(step.output.get("dir", "")) / "prepared_inputs.json"),
@@ -796,8 +805,80 @@ class FrontendService:
         ):
             item = _existing_path_item(path, label)
             if item:
-                artifacts.append(item)
+                _append_item(item)
+
+        if str(step.name).strip().lower() == "prepare":
+            for item in self._build_prepare_cpu_source_artifacts(step):
+                _append_item(item)
+
         return artifacts
+
+    def _build_prepare_cpu_source_artifacts(self, step) -> list[dict[str, str]]:
+        if not self.workspace:
+            return []
+
+        cpu_filelist = _resolve_path(self.workspace.get("cpu_filelist", ""))
+        if not cpu_filelist:
+            return []
+
+        cpu_sources = self._collect_cpu_filelist_sources(cpu_filelist)
+        if not cpu_sources:
+            return []
+
+        cpu_root = Path(cpu_filelist).expanduser().resolve().parent
+        artifacts: list[dict[str, str]] = []
+
+        for src in cpu_sources:
+            rel = self._cpu_source_relative_path(src, cpu_root)
+            artifacts.append(
+                {
+                    "label": f"CPU RTL · {rel}",
+                    "path": str(src),
+                }
+            )
+
+        return artifacts
+
+    def _collect_cpu_filelist_sources(self, cpu_filelist: str) -> list[Path]:
+        filelist_path = Path(cpu_filelist).expanduser().resolve()
+        if not filelist_path.is_file():
+            return []
+
+        try:
+            _ensure_fecompiler_importable(filelist_path)
+            from fecompiler.tools.prepare.runner import PrepareStep
+
+            parsed = PrepareStep._parse_sv_filelist(str(filelist_path))
+            raw_files = parsed.get("rtl_files", []) if isinstance(parsed, dict) else []
+        except Exception:
+            logger.exception("failed to parse CPU filelist for prepare artifacts: %s", filelist_path)
+            return []
+
+        collected: list[Path] = []
+        seen: set[str] = set()
+        for raw in raw_files:
+            try:
+                source_path = Path(str(raw)).expanduser().resolve()
+            except Exception:
+                continue
+            if source_path.suffix.lower() not in {".v", ".sv", ".vh", ".svh"}:
+                continue
+            if not source_path.is_file():
+                continue
+            key = str(source_path)
+            if key in seen:
+                continue
+            seen.add(key)
+            collected.append(source_path)
+
+        return collected
+
+    @staticmethod
+    def _cpu_source_relative_path(source: Path, cpu_root: Path) -> str:
+        try:
+            return source.relative_to(cpu_root).as_posix()
+        except ValueError:
+            return source.name
 
     def _build_frontend_sim_cases(self, step) -> list[dict[str, Any]]:
         cases_json = Path(step.report.get("dir", "")) / "cases.json"
