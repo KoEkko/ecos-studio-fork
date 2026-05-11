@@ -21,8 +21,12 @@ async def health_check():
 
 
 @router.get("/waveform/file")
-def waveform_file(path: str = Query(...)):
+@router.head("/waveform/file")
+@router.get("/waveform/file/{filename}")
+@router.head("/waveform/file/{filename}")
+def waveform_file(filename: str = "", path: str = Query(...)):
     """Serve a waveform file from the currently loaded frontend workspace."""
+    _ = filename
     try:
         resolved = fe_serv.resolve_waveform_file(path)
     except FileNotFoundError as exc:
