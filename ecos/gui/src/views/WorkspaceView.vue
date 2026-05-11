@@ -32,9 +32,10 @@ const isDrcStep = computed(() => {
 })
 
 const mainSplitter = ref<InstanceType<typeof Splitter> | null>(null)
+const rightPanelCollapsed = ref(false)
 
 watch(
-  [showLayoutSidePanels, isDrcStep],
+  [showLayoutSidePanels, isDrcStep, rightPanelCollapsed],
   async () => {
     await nextTick()
     mainSplitter.value?.resetState?.()
@@ -69,6 +70,10 @@ const handleMouseUp = () => {
   }
 }
 
+function toggleRightPanel(): void {
+  rightPanelCollapsed.value = !rightPanelCollapsed.value
+}
+
 onMounted(() => {
   document.addEventListener('mousedown', handleMouseDown)
   document.addEventListener('mouseup', handleMouseUp)
@@ -83,6 +88,16 @@ onUnmounted(() => {
 </script>
 <template>
   <div class="editor-view">
+    <button
+      type="button"
+      class="right-panel-toggle"
+      :class="{ collapsed: rightPanelCollapsed }"
+      :title="rightPanelCollapsed ? 'Show right panel' : 'Hide right panel'"
+      @click="toggleRightPanel"
+    >
+      <i :class="rightPanelCollapsed ? 'ri-sidebar-unfold-line' : 'ri-sidebar-fold-line'"></i>
+    </button>
+
     <Splitter v-if="isFrontendProject" ref="mainSplitter" class="flex-1 h-full border-none min-w-0">
       <SplitterPanel :size="75" :minSize="45" class="flex flex-col min-w-0">
         <Splitter layout="vertical" class="h-full border-none">
@@ -95,7 +110,7 @@ onUnmounted(() => {
         </Splitter>
       </SplitterPanel>
 
-      <SplitterPanel :size="25" :minSize="25" class="chat-panel overflow-hidden min-w-0 max-w-full">
+      <SplitterPanel v-if="!rightPanelCollapsed" :size="25" :minSize="25" class="chat-panel overflow-hidden min-w-0 max-w-full">
         <ChatInspectorPanel />
       </SplitterPanel>
     </Splitter>
@@ -147,7 +162,7 @@ onUnmounted(() => {
       </SplitterPanel>
 
       <!-- Right: Chat -->
-      <SplitterPanel :size="25" :minSize="25" class="chat-panel overflow-hidden min-w-0 max-w-full">
+      <SplitterPanel v-if="!rightPanelCollapsed" :size="25" :minSize="25" class="chat-panel overflow-hidden min-w-0 max-w-full">
         <ChatInspectorPanel />
       </SplitterPanel>
     </Splitter>
@@ -155,11 +170,40 @@ onUnmounted(() => {
 </template>
 <style scoped>
 .editor-view {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
   max-width: 100%;
   height: 100%;
+}
+
+.right-panel-toggle {
+  position: absolute;
+  top: 5px;
+  right: 8px;
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.right-panel-toggle:hover {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+  background: var(--bg-secondary);
+}
+
+.right-panel-toggle.collapsed {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-color) 20%, transparent);
 }
 
 :deep(.p-splitter) {
