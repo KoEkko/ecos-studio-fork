@@ -101,6 +101,10 @@ export async function syncApiPort(): Promise<number> {
   return initApiPort()
 }
 
+export function getApiBaseUrl(): string {
+  return API_BASE_URL
+}
+
 /**
  * Check if the API server is available
  *

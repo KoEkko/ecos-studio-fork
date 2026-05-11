@@ -120,9 +120,17 @@
                     </td>
                     <td>{{ testCase.returncode ?? '-' }}</td>
                     <td>
-                      <span class="path-pill" :title="testCase.wave || ''">
-                        {{ testCase.wave ? fileName(testCase.wave) : '-' }}
-                      </span>
+                      <button
+                        v-if="testCase.wave"
+                        type="button"
+                        class="path-pill path-button"
+                        :title="testCase.wave"
+                        @click.stop="openWaveform(testCase.wave, testCase.name)"
+                      >
+                        <i class="ri-pulse-line"></i>
+                        <span>{{ fileName(testCase.wave) }}</span>
+                      </button>
+                      <span v-else class="path-pill">-</span>
                     </td>
                     <td>
                       <span class="path-pill" :title="testCase.image || ''">
@@ -194,7 +202,7 @@
             </div>
             <div v-else class="file-list">
               <button v-for="item in artifacts" :key="item.path" type="button" class="file-row" :title="item.path"
-                @click="sendFileToInspector(item)">
+                @click="handleArtifactClick(item)">
                 <i :class="fileIcon(item.path)"></i>
                 <span class="file-row-main">
                   <strong>{{ item.label || fileName(item.path) }}</strong>
@@ -220,6 +228,7 @@ import { useWorkspace } from '@/composables/useWorkspace'
 import { useTauri } from '@/composables/useTauri'
 import { requestProjectPathAccess } from '@/utils/projectFs'
 import { useMessageStore } from '@/stores/messageStore'
+import { useWaveformViewerStore } from '@/stores/waveformViewerStore'
 
 interface PathItem {
   label: string
@@ -255,6 +264,7 @@ const route = useRoute()
 const { currentProject, sseMessages, stepRefreshCounter } = useWorkspace()
 const { isInTauri } = useTauri()
 const messageStore = useMessageStore()
+const waveformStore = useWaveformViewerStore()
 
 const stepEnumValues = Object.values(StepEnum)
 const currentStep = computed(() => {
@@ -395,6 +405,22 @@ async function sendFileToInspector(item: PathItem): Promise<void> {
   sendToInspector(item.label || fileName(item.path), content, format)
 }
 
+function handleArtifactClick(item: PathItem): void {
+  if (isWaveformPath(item.path)) {
+    openWaveform(item.path, caseNameFromArtifactLabel(item.label))
+    return
+  }
+  void sendFileToInspector(item)
+}
+
+function openWaveform(path: string, caseName?: string): void {
+  waveformStore.openWave({
+    path,
+    caseName,
+    step: currentStep.value || 'frontend',
+  })
+}
+
 function sendToInspector(title: string, content: unknown, format: 'json' | 'csv' | 'text' | 'html' = 'json'): void {
   messageStore.addInfoMessage({
     title,
@@ -440,10 +466,18 @@ function fileFormat(path: string): 'json' | 'csv' | 'text' | 'html' {
   return 'text'
 }
 
+function isWaveformPath(path: string): boolean {
+  return /\.(vcd|fst|ghw)$/i.test(path)
+}
+
+function caseNameFromArtifactLabel(label: string): string | undefined {
+  return label.endsWith(' wave') ? label.slice(0, -5) : undefined
+}
+
 function fileIcon(path: string): string {
   const ext = path.split('.').pop()?.toLowerCase()
   if (ext === 'json') return 'ri-braces-line'
-  if (ext === 'vcd' || ext === 'fst') return 'ri-pulse-line'
+  if (ext === 'vcd' || ext === 'fst' || ext === 'ghw') return 'ri-pulse-line'
   if (ext === 'bin' || ext === 'elf') return 'ri-cpu-line'
   if (ext === 'rpt') return 'ri-file-chart-line'
   return 'ri-file-text-line'
@@ -772,12 +806,33 @@ function fileIcon(path: string): string {
 }
 
 .path-pill {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   max-width: 180px;
   overflow: hidden;
   color: var(--text-secondary);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.path-pill span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.path-button {
+  height: 24px;
+  padding: 0 7px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  cursor: pointer;
+}
+
+.path-button:hover {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
 }
 
 .log-select {

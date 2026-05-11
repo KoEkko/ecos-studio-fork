@@ -4,6 +4,9 @@
       <button type="button" @click="activeTab = 'chat'" :class="tabClass(activeTab === 'chat')" title="AI Chat">
         <i class="ri-chat-3-line text-base"></i>
       </button>
+      <button type="button" @click="activeTab = 'wave'" :class="tabClass(activeTab === 'wave')" title="Waveform">
+        <i class="ri-pulse-line text-base"></i>
+      </button>
       <button
         v-if="showStepConfigInspector"
         type="button"
@@ -21,6 +24,11 @@
         <AIChatPanel v-if="activeTab === 'chat'" class="flex-1 min-h-0 h-full min-w-0 w-full max-w-full overflow-hidden" />
       </KeepAlive>
 
+      <WaveformPanel
+        v-if="activeTab === 'wave'"
+        class="flex-1 min-h-0 flex flex-col h-full min-w-0 overflow-hidden"
+      />
+
       <StepConfigPanel
         v-if="activeTab === 'inspector' && showStepConfigInspector"
         class="flex-1 min-h-0 flex flex-col h-full min-w-0 overflow-hidden"
@@ -32,11 +40,14 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { useWaveformViewerStore } from '@/stores/waveformViewerStore'
 import { StepEnum } from '@/api/type'
 import AIChatPanel from './AIChatPanel.vue'
 import StepConfigPanel from './StepConfigPanel.vue'
+import WaveformPanel from './WaveformPanel.vue'
 
 const route = useRoute()
+const waveformStore = useWaveformViewerStore()
 const stepEnumValues = Object.values(StepEnum)
 
 function stepFromRoutePath(): StepEnum | undefined {
@@ -47,7 +58,7 @@ function stepFromRoutePath(): StepEnum | undefined {
 /** Synthesis 不提供步骤配置编辑，隐藏 Inspector 标签与面板 */
 const showStepConfigInspector = computed(() => stepFromRoutePath() !== StepEnum.SYNTHESIS)
 
-const activeTab = ref<'chat' | 'inspector'>('chat')
+const activeTab = ref<'chat' | 'wave' | 'inspector'>('chat')
 
 watch(
   () => route.path,
@@ -55,6 +66,13 @@ watch(
     if (!showStepConfigInspector.value && activeTab.value === 'inspector') {
       activeTab.value = 'chat'
     }
+  },
+)
+
+watch(
+  () => waveformStore.openRequestedAt,
+  () => {
+    activeTab.value = 'wave'
   },
 )
 
