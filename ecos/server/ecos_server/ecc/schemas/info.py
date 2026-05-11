@@ -14,6 +14,7 @@ class InfoEnum(Enum):
     checklist = "checklist"  # step checklist
     sta = "sta"  # sta timing analysis
     config = "config"  # step configuration snapshot (e.g. flow_config path)
+    frontend_detail = "frontend_detail"  # frontend step summary, logs, reports, artifacts
 
 
 class NotifyEnum(Enum):

@@ -120,6 +120,28 @@ def _resolve_path(value: Any) -> str:
     return str(Path(text).expanduser().resolve())
 
 
+def _json_read(path: Any) -> Any:
+    text = str(path or "").strip()
+    if not text or not os.path.exists(text):
+        return None
+    with open(text, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _path_item(path: Any, label: str = "") -> dict[str, str]:
+    text = str(path or "").strip()
+    if not text:
+        return {}
+    return {"label": label or Path(text).name, "path": text}
+
+
+def _existing_path_item(path: Any, label: str = "") -> dict[str, str]:
+    item = _path_item(path, label)
+    if item and os.path.exists(item["path"]):
+        return item
+    return {}
+
+
 def _is_frontend_workspace(workspace: dict[str, Any]) -> bool:
     """Return True only for workspaces that look like an ecc-fe workspace."""
     params_path = workspace.get("parameters_path", "")
@@ -645,6 +667,8 @@ class FrontendService:
     def _build_step_info(self, step, info_id: str) -> dict:
         if info_id == InfoEnum.subflow.value:
             return {"path": step.subflow.get("path", "")}
+        if info_id == InfoEnum.frontend_detail.value:
+            return self._build_frontend_step_detail(step)
         if info_id == InfoEnum.config.value:
             config_path = step.config.get("flow", "")
             return {"config": config_path} if config_path and os.path.exists(config_path) else {}
@@ -670,6 +694,156 @@ class FrontendService:
                 info["json"] = json_path
             return info
         return {}
+
+    def _build_frontend_step_detail(self, step) -> dict:
+        flow_step = self.engine_flow.get_step(step.name, step.tool) if self.engine_flow else None
+        state = str((flow_step or {}).get("state", "Unstart"))
+        runtime = str((flow_step or {}).get("runtime", ""))
+        peak_memory = (flow_step or {}).get("peak memory (mb)", 0)
+        report_path = step.report.get("step", "")
+        step_log_path = step.log.get("file", "")
+        report_log_path = str(Path(step.report.get("dir", "")) / "log.txt")
+
+        detail: dict[str, Any] = {
+            "step": step.name,
+            "tool": step.tool,
+            "state": state,
+            "runtime": runtime,
+            "peak_memory_mb": peak_memory,
+            "summary": self._build_frontend_step_summary(step, state, runtime),
+            "logs": self._build_frontend_step_logs(step_log_path, report_log_path),
+            "reports": self._build_frontend_step_reports(step),
+            "artifacts": self._build_frontend_step_artifacts(step),
+        }
+
+        if step.name == "sim":
+            cases = self._build_frontend_sim_cases(step)
+            detail["cases"] = cases
+            total = len(cases)
+            passed = len([case for case in cases if case.get("ok") is True])
+            failed = len([case for case in cases if case.get("ok") is False])
+            detail["summary"].update(
+                {
+                    "total_cases": total,
+                    "passed_cases": passed,
+                    "failed_cases": failed,
+                    "run_id": self._sim_run_id(step),
+                    "test_suite": self._sim_suite_label(cases),
+                    "cpu_test_mode": self._sim_cpu_test_mode(cases),
+                }
+            )
+        return detail
+
+    def _build_frontend_step_summary(self, step, state: str, runtime: str) -> dict[str, Any]:
+        report = _json_read(step.report.get("step", ""))
+        summary: dict[str, Any] = {
+            "status": state,
+            "runtime": runtime,
+        }
+        if isinstance(report, dict):
+            summary["report"] = report
+        return summary
+
+    def _build_frontend_step_logs(self, step_log_path: str, report_log_path: str) -> list[dict[str, str]]:
+        logs: list[dict[str, str]] = []
+        for item in (
+            _existing_path_item(step_log_path, "Step log"),
+            _existing_path_item(report_log_path, "Tool log"),
+        ):
+            if item and item["path"] not in {log["path"] for log in logs}:
+                logs.append(item)
+        return logs
+
+    def _build_frontend_step_reports(self, step) -> list[dict[str, str]]:
+        reports: list[dict[str, str]] = []
+        report_dir = Path(step.report.get("dir", ""))
+        for item in (
+            _existing_path_item(step.report.get("step", ""), "Step report"),
+            _existing_path_item(report_dir / "cases.json", "Simulation cases"),
+            _existing_path_item(report_dir / "build_programs.log.txt", "Build programs log"),
+        ):
+            if item:
+                reports.append(item)
+        return reports
+
+    def _build_frontend_step_artifacts(self, step) -> list[dict[str, str]]:
+        artifacts: list[dict[str, str]] = []
+        for label, path in (
+            ("Output JSON", step.output.get("json", "")),
+            ("Prepared inputs", Path(step.output.get("dir", "")) / "prepared_inputs.json"),
+            ("Merged filelist", Path(step.output.get("dir", "")) / "merged_rtl.f"),
+            ("Simulation binary", Path(step.output.get("dir", "")) / f"{self.workspace.get('design', '')}_sim" if self.workspace else ""),
+        ):
+            item = _existing_path_item(path, label)
+            if item:
+                artifacts.append(item)
+        return artifacts
+
+    def _build_frontend_sim_cases(self, step) -> list[dict[str, Any]]:
+        cases_json = Path(step.report.get("dir", "")) / "cases.json"
+        data = _json_read(cases_json)
+        raw_cases = data.get("cases", []) if isinstance(data, dict) else []
+        if not isinstance(raw_cases, list):
+            return []
+
+        cases: list[dict[str, Any]] = []
+        for raw_case in raw_cases:
+            if not isinstance(raw_case, dict):
+                continue
+            cases.append(
+                {
+                    "name": str(raw_case.get("name", "")),
+                    "ok": bool(raw_case.get("ok", False)),
+                    "returncode": raw_case.get("returncode"),
+                    "image": str(raw_case.get("image", "")),
+                    "log": str(raw_case.get("log") or raw_case.get("latest_log") or ""),
+                    "report_log": str(raw_case.get("report_log", "")),
+                    "run_log": str(raw_case.get("run_log", "")),
+                    "wave": str(raw_case.get("wave", "")),
+                    "run_id": str(raw_case.get("run_id", "")),
+                }
+            )
+        return cases
+
+    def _sim_run_id(self, step) -> str:
+        data = _json_read(Path(step.report.get("dir", "")) / "cases.json")
+        return str(data.get("run_id", "")) if isinstance(data, dict) else ""
+
+    def _sim_suite_label(self, cases: list[dict[str, Any]] | None = None) -> str:
+        case_names = [str(case.get("name", "")) for case in (cases or [])]
+        if case_names:
+            return "RT-Thread" if case_names == ["rtthread.soc"] else "CPU Tests"
+        if not self.workspace:
+            return ""
+        names = _normalize_str_list(self.workspace.get("sim_program_names", []))
+        if names == ["rtthread"]:
+            return "RT-Thread"
+        if self.workspace.get("sim_build_all_programs") or names:
+            return "CPU Tests"
+        return "Default"
+
+    def _sim_cpu_test_mode(self, cases: list[dict[str, Any]] | None = None) -> str:
+        case_names = [str(case.get("name", "")) for case in (cases or [])]
+        if case_names:
+            if case_names == ["rtthread.soc"]:
+                return ""
+            return "all" if len(case_names) >= self._cpu_test_program_count() else "selected"
+        if not self.workspace:
+            return ""
+        if self.workspace.get("sim_build_all_programs"):
+            return "all"
+        if _normalize_str_list(self.workspace.get("sim_program_names", [])):
+            return "selected"
+        return ""
+
+    def _cpu_test_program_count(self) -> int:
+        if not self.workspace:
+            return 0
+        programs_dir = _resolve_path(self.workspace.get("sim_programs_dir", ""))
+        if not programs_dir:
+            return 0
+        path = Path(programs_dir)
+        return len(list(path.glob("*.c"))) if path.is_dir() else 0
 
     def home_page(self, request: ECCRequest) -> ECCResponse:
         if not self.workspace:
