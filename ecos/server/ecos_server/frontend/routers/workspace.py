@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 
+from functools import lru_cache
 from pathlib import Path
+from urllib.request import urlopen
 
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from ecos_server.ecc.schemas import ECCRequest, ECCResponse
 
@@ -13,11 +15,67 @@ fe_serv = frontend_service()
 
 router = APIRouter(prefix="/api/frontend/workspace", tags=["frontend-workspace"])
 
+SURFER_APP_BASE = "https://app.surfer-project.org"
+SURFER_ASSET_TYPES = {
+    "integration.js": "application/javascript; charset=utf-8",
+    "surfer.js": "application/javascript; charset=utf-8",
+    "surfer_bg.wasm": "application/wasm",
+    "manifest.json": "application/json; charset=utf-8",
+    "sw.js": "application/javascript; charset=utf-8",
+}
+
+
+@lru_cache(maxsize=16)
+def _fetch_surfer_asset(asset: str) -> bytes:
+    url = f"{SURFER_APP_BASE}/{asset}"
+    with urlopen(url, timeout=20) as response:
+        return response.read()
+
+
+@lru_cache(maxsize=1)
+def _surfer_html() -> bytes:
+    text = _fetch_surfer_asset("").decode("utf-8")
+    text = text.replace(
+        "navigator.serviceWorker.register('sw.js');",
+        "console.debug('Surfer service worker disabled inside ECOS Studio');",
+    )
+    return text.encode("utf-8")
+
+
+def _surfer_response(body: bytes, media_type: str) -> Response:
+    return Response(
+        content=body,
+        media_type=media_type,
+        headers={
+            "Cross-Origin-Embedder-Policy": "require-corp",
+            "Cross-Origin-Opener-Policy": "same-origin",
+            "Cache-Control": "public, max-age=600",
+        },
+    )
+
 
 @router.get("/health")
 async def health_check():
     """Health check endpoint for frontend design workspace APIs."""
     return {"status": "ok"}
+
+
+@router.get("/waveform/surfer")
+@router.get("/waveform/surfer/")
+def waveform_surfer():
+    """Serve the Surfer web viewer through the local API origin."""
+    return _surfer_response(_surfer_html(), "text/html; charset=utf-8")
+
+
+@router.get("/waveform/surfer/{asset}")
+def waveform_surfer_asset(asset: str):
+    """Proxy Surfer web assets through the local API origin."""
+    if asset not in SURFER_ASSET_TYPES:
+        raise HTTPException(status_code=404, detail=f"unknown Surfer asset: {asset}")
+    try:
+        return _surfer_response(_fetch_surfer_asset(asset), SURFER_ASSET_TYPES[asset])
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"failed to fetch Surfer asset: {asset}") from exc
 
 
 @router.get("/waveform/file")
@@ -37,6 +95,10 @@ def waveform_file(filename: str = "", path: str = Query(...)):
         resolved,
         media_type="application/octet-stream",
         filename=Path(resolved).name,
+        headers={
+            "Cross-Origin-Embedder-Policy": "require-corp",
+            "Cross-Origin-Resource-Policy": "same-origin",
+        },
     )
 
 
