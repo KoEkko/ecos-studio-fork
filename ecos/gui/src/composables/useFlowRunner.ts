@@ -11,6 +11,7 @@ import { runStepApi, rtl2gdsApi, type RunStepResponse } from '@/api/flow'
 export const flowExecutionActive = ref(false)
 
 export interface RunFlowOptions {
+  rerun?: boolean
   simTestSuite?: string
   simCpuTestMode?: 'all' | 'selected'
   simCpuTestCases?: string[]
@@ -80,7 +81,7 @@ export function useFlowRunner() {
         cmd: CMDEnum.run_step,
         data: {
           step: step as StepEnum,
-          rerun: false,
+          rerun: options.rerun ?? false,
           sim_test_suite: options.simTestSuite,
           sim_cpu_test_mode: options.simCpuTestMode,
           sim_cpu_test_cases: options.simCpuTestCases
@@ -126,7 +127,7 @@ export function useFlowRunner() {
    * 执行过程中，后端通过 notify_service 发送 step_complete 等通知，
    * 前端通过 useWorkspace 中已建立的 SSE 连接实时接收。
    */
-  async function runAllFlow(): Promise<any | null> {
+  async function runAllFlow(options: { rerun?: boolean } = {}): Promise<any | null> {
     // 检查是否在 Tauri 环境中
     if (!isInTauri) {
       console.warn('Not running in Tauri environment, cannot execute Python script')
@@ -149,7 +150,7 @@ export function useFlowRunner() {
       const result = await rtl2gdsApi({
         cmd: CMDEnum.rtl2gds,
         data: {
-          rerun: false
+          rerun: options.rerun ?? false,
         }
       }, currentProject.value?.designTool)
       console.log('rtl2gds result:', result)

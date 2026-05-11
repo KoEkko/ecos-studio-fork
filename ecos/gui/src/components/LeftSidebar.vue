@@ -614,15 +614,18 @@ onUnmounted(() => document.removeEventListener('click', closeMenu))
 // ============ 事件处理 ============
 const handleRunFlow = async () => {
   closeMenu()
+  const requestedRerun = runMode.value === 'rerun'
   if (currentStage.value === 'home') {
     setFirstRunStepOngoing()
-    await runAllFlow()
+    await runAllFlow({ rerun: requestedRerun })
     await refreshFlowStages()
   } else {
     setRunStepOngoingByPath(currentStage.value)
     const isFrontendSimStep = showFrontendSimSuitePicker.value
     const isCpuTests = isFrontendSimStep && selectedFrontendSimSuite.value === 'cpu_tests'
+    const forceSimRerun = isFrontendSimStep && !!selectedFrontendSimSuite.value
     await runFlow({
+      rerun: requestedRerun || forceSimRerun,
       simTestSuite: isFrontendSimStep ? selectedFrontendSimSuite.value : undefined,
       simCpuTestMode: isCpuTests ? selectedCpuTestMode.value : undefined,
       simCpuTestCases: isCpuTests && selectedCpuTestMode.value === 'selected'

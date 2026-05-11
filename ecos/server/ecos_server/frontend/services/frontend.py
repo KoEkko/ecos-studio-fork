@@ -503,13 +503,18 @@ class FrontendService:
             )
 
         try:
+            force_rerun = False
             if step == "sim":
+                suite_name = str(data.get("sim_test_suite", "") or "").strip()
                 self._apply_sim_test_suite(
-                    data.get("sim_test_suite", ""),
+                    suite_name,
                     data.get("sim_cpu_test_mode", "all"),
                     data.get("sim_cpu_test_cases", []),
                 )
-            state = self.engine_flow.run_step(step, data.get("rerun", False))
+                # Selecting a simulation suite is an explicit "run tests now" action.
+                # Force rerun for SIM to avoid returning cached Success immediately.
+                force_rerun = bool(suite_name and suite_name.lower() != "default")
+            state = self.engine_flow.run_step(step, bool(data.get("rerun", False) or force_rerun))
         except Exception:
             state = StateEnum.Incomplete
             logger.exception("frontend run_step failed")
