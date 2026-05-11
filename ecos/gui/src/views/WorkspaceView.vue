@@ -13,6 +13,7 @@ import PropertiesPanel from '../components/PropertiesPanel.vue'
 import LayerPanel from '../components/LayerPanel.vue'
 import DrcViolationPanel from '../components/DrcViolationPanel.vue'
 import FrontendStepView from '../components/FrontendStepView.vue'
+import WaveformPanel from '../components/WaveformPanel.vue'
 
 const layoutState = useLayoutState()
 const { currentProject } = useWorkspace()
@@ -84,7 +85,14 @@ onUnmounted(() => {
   <div class="editor-view">
     <Splitter v-if="isFrontendProject" ref="mainSplitter" class="flex-1 h-full border-none min-w-0">
       <SplitterPanel :size="75" :minSize="45" class="flex flex-col min-w-0">
-        <FrontendStepView />
+        <Splitter layout="vertical" class="h-full border-none">
+          <SplitterPanel :size="55" :minSize="24" class="flex flex-col min-w-0 overflow-hidden">
+            <FrontendStepView />
+          </SplitterPanel>
+          <SplitterPanel :size="45" :minSize="24" class="flex flex-col min-w-0 overflow-hidden">
+            <WaveformPanel />
+          </SplitterPanel>
+        </Splitter>
       </SplitterPanel>
 
       <SplitterPanel :size="25" :minSize="25" class="chat-panel overflow-hidden min-w-0 max-w-full">

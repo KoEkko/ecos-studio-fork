@@ -12,10 +12,10 @@
         type="button"
         class="icon-button"
         title="Reload waveform"
-        :disabled="!currentWave"
+        :disabled="!currentWave || loading"
         @click="void loadCurrentWave()"
       >
-        <i class="ri-refresh-line"></i>
+        <i :class="loading ? 'ri-loader-4-line spin' : 'ri-refresh-line'"></i>
       </button>
     </header>
 
@@ -25,6 +25,10 @@
     </div>
 
     <div v-else class="waveform-body">
+      <div v-if="loading || errorMessage" class="waveform-status" :class="{ error: errorMessage }">
+        <i :class="loading ? 'ri-loader-4-line spin' : 'ri-error-warning-line'"></i>
+        <span>{{ errorMessage || 'Loading waveform...' }}</span>
+      </div>
       <iframe
         ref="surferFrame"
         class="surfer-frame"
@@ -46,6 +50,10 @@ const surferUrl = 'https://app.surfer-project.org/'
 const waveformStore = useWaveformViewerStore()
 const { currentWave, openRequestedAt } = storeToRefs(waveformStore)
 const surferFrame = ref<HTMLIFrameElement | null>(null)
+const frameReady = ref(false)
+const loading = ref(false)
+const errorMessage = ref('')
+let loadToken = 0
 
 const subtitle = computed(() => {
   if (!currentWave.value) return 'No waveform loaded'
@@ -56,25 +64,63 @@ const subtitle = computed(() => {
 watch(
   () => openRequestedAt.value,
   () => {
+    if (!frameReady.value) return
+    void loadCurrentWave()
+  },
+)
+
+watch(
+  () => currentWave.value?.path,
+  () => {
+    if (!frameReady.value) return
     void loadCurrentWave()
   },
 )
 
 async function handleFrameLoad(): Promise<void> {
+  frameReady.value = true
   await loadCurrentWave()
 }
 
 async function loadCurrentWave(): Promise<void> {
   const wave = currentWave.value
   if (!wave) return
-  await syncApiPort()
-  await nextTick()
+  const token = ++loadToken
+  loading.value = true
+  errorMessage.value = ''
 
-  const iframe = surferFrame.value
-  if (!iframe?.contentWindow) return
+  try {
+    await syncApiPort()
+    await nextTick()
 
-  const fileUrl = `${getApiBaseUrl()}/api/frontend/workspace/waveform/file?path=${encodeURIComponent(wave.path)}`
-  iframe.contentWindow.postMessage({ command: 'LoadUrl', url: fileUrl }, new URL(surferUrl).origin)
+    const iframe = surferFrame.value
+    if (!iframe?.contentWindow) return
+
+    const fileUrl = waveformFileUrl(wave.path)
+    const response = await fetch(fileUrl, { method: 'HEAD' })
+    if (!response.ok) {
+      throw new Error(`Cannot load waveform: ${response.status} ${response.statusText}`)
+    }
+
+    const message = { command: 'LoadUrl', url: fileUrl }
+    const targetOrigin = new URL(surferUrl).origin
+    iframe.contentWindow.postMessage(message, targetOrigin)
+    window.setTimeout(() => iframe.contentWindow?.postMessage(message, targetOrigin), 600)
+    window.setTimeout(() => iframe.contentWindow?.postMessage(message, targetOrigin), 1500)
+  } catch (err) {
+    if (token === loadToken) {
+      errorMessage.value = err instanceof Error ? err.message : String(err)
+    }
+  } finally {
+    if (token === loadToken) {
+      loading.value = false
+    }
+  }
+}
+
+function waveformFileUrl(path: string): string {
+  const name = encodeURIComponent(fileName(path))
+  return `${getApiBaseUrl()}/api/frontend/workspace/waveform/file/${name}?path=${encodeURIComponent(path)}`
 }
 
 function fileName(path: string): string {
@@ -98,8 +144,9 @@ function fileName(path: string): string {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  min-height: 50px;
-  padding: 9px 10px;
+  min-height: 42px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border-color);
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-secondary);
 }
@@ -123,7 +170,7 @@ function fileName(path: string): string {
 }
 
 .waveform-title p {
-  max-width: 270px;
+  max-width: 720px;
   margin: 2px 0 0;
   overflow: hidden;
   color: var(--text-secondary);
@@ -157,9 +204,32 @@ function fileName(path: string): string {
 }
 
 .waveform-body {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow: hidden;
+}
+
+.waveform-status {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: calc(100% - 24px);
+  padding: 7px 9px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-primary) 88%, transparent);
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.waveform-status.error {
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #ef4444;
 }
 
 .surfer-frame {
@@ -185,5 +255,15 @@ function fileName(path: string): string {
 .empty-waveform i {
   color: var(--accent-color);
   font-size: 28px;
+}
+
+.spin {
+  animation: spin 0.85s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>
