@@ -29,6 +29,7 @@
         <span>{{ errorMessage || loadingMessage }}</span>
       </div>
       <iframe
+        v-if="surferUrl"
         ref="surferFrame"
         class="surfer-frame"
         title="Surfer waveform viewer"
@@ -40,16 +41,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { getApiBaseUrl, syncApiPort } from '@/api'
 import { useWaveformViewerStore } from '@/stores/waveformViewerStore'
 
-const surferUrl = 'https://app.surfer-project.org/'
 const waveformStore = useWaveformViewerStore()
 const { currentWave, openRequestedAt } = storeToRefs(waveformStore)
 const surferFrame = ref<HTMLIFrameElement | null>(null)
 const frameReady = ref(false)
+const apiReady = ref(false)
 const loading = ref(false)
 const waitingForSurfer = ref(false)
 const errorMessage = ref('')
@@ -64,6 +65,15 @@ const subtitle = computed(() => {
 const loadingMessage = computed(() => (
   waitingForSurfer.value ? 'Loading Surfer viewer...' : 'Loading waveform...'
 ))
+
+const surferUrl = computed(() => (
+  apiReady.value ? `${getApiBaseUrl()}/api/frontend/workspace/waveform/surfer/` : ''
+))
+
+onMounted(async () => {
+  await syncApiPort()
+  apiReady.value = true
+})
 
 watch(
   () => openRequestedAt.value,
@@ -90,12 +100,12 @@ async function loadCurrentWave(): Promise<void> {
   if (!wave) return
   const token = ++loadToken
   loading.value = true
-  waitingForSurfer.value = !frameReady.value
+  waitingForSurfer.value = !apiReady.value || !frameReady.value
   errorMessage.value = ''
 
-  if (!frameReady.value) {
+  if (!apiReady.value || !frameReady.value) {
     window.setTimeout(() => {
-      if (token === loadToken && !frameReady.value) {
+      if (token === loadToken && (!apiReady.value || !frameReady.value)) {
         loading.value = false
         waitingForSurfer.value = false
         errorMessage.value = 'Surfer viewer did not finish loading'
@@ -119,7 +129,7 @@ async function loadCurrentWave(): Promise<void> {
     }
 
     const message = { command: 'LoadUrl', url: fileUrl }
-    const targetOrigin = new URL(surferUrl).origin
+    const targetOrigin = new URL(surferUrl.value).origin
     iframe.contentWindow.postMessage(message, targetOrigin)
     window.setTimeout(() => iframe.contentWindow?.postMessage(message, targetOrigin), 600)
     window.setTimeout(() => iframe.contentWindow?.postMessage(message, targetOrigin), 1500)
