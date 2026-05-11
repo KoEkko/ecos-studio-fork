@@ -260,6 +260,21 @@ class FrontendService:
         directory = self._workspace_dir()
         return bool(directory and os.path.exists(directory))
 
+    def resolve_waveform_file(self, path: Any) -> str:
+        """Resolve a waveform file inside the current frontend workspace."""
+        if not self._workspace_exists():
+            raise ValueError(f"frontend workspace not exist: {self._workspace_dir()}")
+
+        workspace_dir = Path(self._workspace_dir()).expanduser().resolve()
+        wave_path = Path(str(path or "")).expanduser().resolve()
+        if wave_path.suffix.lower() not in {".vcd", ".fst", ".ghw"}:
+            raise ValueError(f"unsupported waveform file type: {wave_path.suffix}")
+        if not wave_path.is_file():
+            raise FileNotFoundError(str(wave_path))
+        if not wave_path.is_relative_to(workspace_dir):
+            raise ValueError("waveform file is outside current frontend workspace")
+        return str(wave_path)
+
     def create_workspace(self, request: ECCRequest) -> ECCResponse:
         data = request.data
         try:

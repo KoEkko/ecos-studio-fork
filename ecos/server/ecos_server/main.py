@@ -68,6 +68,7 @@ app.add_middleware(
         "http://127.0.0.1:1420",
         "http://localhost:5173",  # Vite dev server
         "http://127.0.0.1:5173",
+        "https://app.surfer-project.org",
         "tauri://localhost",  # Tauri production (v1 style)
         "https://tauri.localhost",  # Tauri v2 production
         "http://tauri.localhost",  # Tauri v2 production (http)
