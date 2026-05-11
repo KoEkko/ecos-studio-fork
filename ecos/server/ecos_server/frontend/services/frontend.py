@@ -22,9 +22,11 @@ def _summarize_request(data: object) -> dict:
     if not isinstance(data, dict):
         return {}
     summary = {}
-    for key in ("directory", "step", "id", "rerun"):
+    for key in ("directory", "step", "id", "rerun", "sim_test_suite", "sim_cpu_test_mode"):
         if key in data:
             summary[key] = data[key]
+    if "sim_cpu_test_cases" in data:
+        summary["sim_cpu_test_cases_count"] = len(_normalize_str_list(data["sim_cpu_test_cases"]))
     if "parameters" in data:
         summary["parameters_keys"] = len(data["parameters"])
     if "rtl_list" in data:
@@ -465,7 +467,11 @@ class FrontendService:
 
         try:
             if step == "sim":
-                self._apply_sim_test_suite(data.get("sim_test_suite", ""))
+                self._apply_sim_test_suite(
+                    data.get("sim_test_suite", ""),
+                    data.get("sim_cpu_test_mode", "all"),
+                    data.get("sim_cpu_test_cases", []),
+                )
             state = self.engine_flow.run_step(step, data.get("rerun", False))
         except Exception:
             state = StateEnum.Incomplete
@@ -486,7 +492,12 @@ class FrontendService:
             message=[f"run frontend step {step} failed with state {state.value}: {self._workspace_dir()}"],
         )
 
-    def _apply_sim_test_suite(self, suite: Any) -> None:
+    def _apply_sim_test_suite(
+        self,
+        suite: Any,
+        cpu_test_mode: Any = "all",
+        cpu_test_cases: Any = None,
+    ) -> None:
         suite_name = str(suite or "").strip()
         if not suite_name or suite_name == "default":
             return
@@ -494,11 +505,20 @@ class FrontendService:
             return
 
         if suite_name == "cpu_tests":
+            mode = str(cpu_test_mode or "all").strip().lower()
+            cases = _normalize_str_list(cpu_test_cases)
+            if mode not in {"all", "selected"}:
+                raise ValueError(f"unknown CPU Tests mode: {mode}")
+            if mode == "selected" and not cases:
+                raise ValueError("select at least one CPU test case")
+            if mode == "selected":
+                self._validate_cpu_test_cases(cases)
+
             updates = {
                 "sim_all_tests": False,
                 "sim_images": [],
-                "sim_build_all_programs": True,
-                "sim_program_names": [],
+                "sim_build_all_programs": mode == "all",
+                "sim_program_names": [] if mode == "all" else cases,
                 "sim_run_args": self._default_cpu_tests_run_args(),
             }
         elif suite_name == "rtthread":
@@ -513,6 +533,25 @@ class FrontendService:
             raise ValueError(f"unknown frontend sim test suite: {suite_name}")
 
         self._update_workspace_parameters(updates)
+
+    def _validate_cpu_test_cases(self, cases: list[str]) -> None:
+        invalid_names = [
+            name for name in cases
+            if not name or any(char not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for char in name)
+        ]
+        if invalid_names:
+            raise ValueError(f"invalid CPU test case name: {', '.join(invalid_names)}")
+
+        programs_dir = _resolve_path(self.workspace.get("sim_programs_dir", "")) if self.workspace else ""
+        if not programs_dir:
+            return
+
+        missing = [
+            name for name in cases
+            if not (Path(programs_dir) / f"{name}.c").is_file()
+        ]
+        if missing:
+            raise ValueError(f"CPU test case not found: {', '.join(missing)}")
 
     def _default_cpu_tests_run_args(self) -> list[str]:
         soc_root = self._workspace_soc_root()
