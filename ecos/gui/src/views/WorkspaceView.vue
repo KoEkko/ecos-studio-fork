@@ -8,6 +8,7 @@ import { useLayoutState } from '@/composables/useLayoutState'
 import { useWorkspace } from '@/composables/useWorkspace'
 import DrawingArea from '../components/DrawingArea.vue'
 import ChatInspectorPanel from '../components/ChatInspectorPanel.vue'
+import FrontendInspectorPanel from '../components/FrontendInspectorPanel.vue'
 import ThumbnailGallery from '../components/ThumbnailGallery.vue'
 import PropertiesPanel from '../components/PropertiesPanel.vue'
 import LayerPanel from '../components/LayerPanel.vue'
@@ -111,7 +112,7 @@ onUnmounted(() => {
       </SplitterPanel>
 
       <SplitterPanel v-if="!rightPanelCollapsed" :size="25" :minSize="25" class="chat-panel overflow-hidden min-w-0 max-w-full">
-        <ChatInspectorPanel />
+        <FrontendInspectorPanel />
       </SplitterPanel>
     </Splitter>
 
