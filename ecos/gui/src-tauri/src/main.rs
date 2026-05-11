@@ -15,8 +15,9 @@ use std::sync::{Arc, Mutex};
 
 use log::{debug, error, info, warn};
 use project_scope::{
-    clear_project_root, is_project_directory, register_project_root, request_project_permission,
-    scan_pdk_directory, ProjectRootState,
+    clear_project_root, is_project_directory, register_project_root,
+    request_external_file_permission, request_project_permission, scan_pdk_directory,
+    ProjectRootState,
 };
 use tauri::Manager;
 use tauri_plugin_fs::FsExt;
@@ -135,6 +136,7 @@ fn main() {
             register_project_root,
             clear_project_root,
             request_project_permission,
+            request_external_file_permission,
             is_project_directory,
             scan_pdk_directory,
             prepare_layout_tile_cache,

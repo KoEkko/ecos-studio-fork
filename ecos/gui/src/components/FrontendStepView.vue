@@ -229,6 +229,7 @@ import { useTauri } from '@/composables/useTauri'
 import { requestProjectPathAccess } from '@/utils/projectFs'
 import { useMessageStore } from '@/stores/messageStore'
 import { useWaveformViewerStore } from '@/stores/waveformViewerStore'
+import { useFrontendSourceViewerStore } from '@/stores/frontendSourceViewerStore'
 
 interface PathItem {
   label: string
@@ -265,6 +266,7 @@ const { currentProject, sseMessages, stepRefreshCounter } = useWorkspace()
 const { isInTauri } = useTauri()
 const messageStore = useMessageStore()
 const waveformStore = useWaveformViewerStore()
+const sourceViewerStore = useFrontendSourceViewerStore()
 
 const stepEnumValues = Object.values(StepEnum)
 const currentStep = computed(() => {
@@ -410,6 +412,14 @@ function handleArtifactClick(item: PathItem): void {
     openWaveform(item.path, caseNameFromArtifactLabel(item.label))
     return
   }
+  if (isSourcePreviewPath(item.path)) {
+    sourceViewerStore.openSource({
+      path: item.path,
+      label: item.label || fileName(item.path),
+      step: currentStep.value || 'frontend',
+    })
+    return
+  }
   void sendFileToInspector(item)
 }
 
@@ -468,6 +478,10 @@ function fileFormat(path: string): 'json' | 'csv' | 'text' | 'html' {
 
 function isWaveformPath(path: string): boolean {
   return /\.(vcd|fst|ghw)$/i.test(path)
+}
+
+function isSourcePreviewPath(path: string): boolean {
+  return /\.(v|sv|vh|svh|c|cc|cpp|h|hpp|f|fl|filelist|txt|log|json|yaml|yml|py|sh|tcl|md)$/i.test(path)
 }
 
 function caseNameFromArtifactLabel(label: string): string | undefined {

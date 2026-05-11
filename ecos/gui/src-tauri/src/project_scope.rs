@@ -192,6 +192,38 @@ pub async fn request_project_permission(
 }
 
 #[tauri::command]
+pub async fn request_external_file_permission(
+    app: tauri::AppHandle,
+    project_root_state: tauri::State<'_, ProjectRootState>,
+    path: String,
+) -> Result<String, String> {
+    info!("cmd=request_external_file_permission path={}", path);
+    let project_root = project_root_state
+        .lock()
+        .map_err(|e| format!("project root lock error: {}", e))?;
+    if project_root.is_none() {
+        return Err("Project root is not registered".to_string());
+    }
+    let canonical = canonicalize_existing_path(&path)?;
+    if canonical.is_dir() {
+        return Err(format!(
+            "Refusing to grant directory access via external-file API: {}",
+            canonical.display()
+        ));
+    }
+
+    let scope = app.fs_scope();
+    scope.allow_file(&canonical).map_err(|e| {
+        format!(
+            "Unable to grant external file access permission {}: {}",
+            canonical.display(),
+            e
+        )
+    })?;
+    Ok(canonical.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
 pub fn is_project_directory(path: String) -> bool {
     canonicalize_existing_directory(&path)
         .map(|canonical| is_project_directory_candidate(&canonical))
