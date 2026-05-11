@@ -19,7 +19,8 @@ export enum InfoEnum {
   maps = "maps",
   checklist = "checklist",
   sta = "sta",
-  config = "config"
+  config = "config",
+  frontend_detail = "frontend_detail"
 }
 
 export enum StepEnum {

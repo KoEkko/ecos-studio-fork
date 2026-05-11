@@ -5,15 +5,20 @@ import Splitter from 'primevue/splitter'
 import SplitterPanel from 'primevue/splitterpanel'
 import { StepEnum } from '@/api/type'
 import { useLayoutState } from '@/composables/useLayoutState'
+import { useWorkspace } from '@/composables/useWorkspace'
 import DrawingArea from '../components/DrawingArea.vue'
 import ChatInspectorPanel from '../components/ChatInspectorPanel.vue'
 import ThumbnailGallery from '../components/ThumbnailGallery.vue'
 import PropertiesPanel from '../components/PropertiesPanel.vue'
 import LayerPanel from '../components/LayerPanel.vue'
 import DrcViolationPanel from '../components/DrcViolationPanel.vue'
+import FrontendStepView from '../components/FrontendStepView.vue'
 
 const layoutState = useLayoutState()
+const { currentProject } = useWorkspace()
 const route = useRoute()
+
+const isFrontendProject = computed(() => currentProject.value?.designTool === 'frontend')
 
 /** Image preview mode hides layer/property columns; avoid :key on the whole tree or DrawingArea remounts and resets the layout view */
 const showLayoutSidePanels = computed(() => layoutState.renderMode.value === 'layout')
@@ -77,7 +82,17 @@ onUnmounted(() => {
 </script>
 <template>
   <div class="editor-view">
-    <Splitter ref="mainSplitter" class="flex-1 h-full border-none min-w-0">
+    <Splitter v-if="isFrontendProject" ref="mainSplitter" class="flex-1 h-full border-none min-w-0">
+      <SplitterPanel :size="75" :minSize="45" class="flex flex-col min-w-0">
+        <FrontendStepView />
+      </SplitterPanel>
+
+      <SplitterPanel :size="25" :minSize="25" class="chat-panel overflow-hidden min-w-0 max-w-full">
+        <ChatInspectorPanel />
+      </SplitterPanel>
+    </Splitter>
+
+    <Splitter v-else ref="mainSplitter" class="flex-1 h-full border-none min-w-0">
       <!-- Left: Drawing + thumbnails (60+15 merged to 75 when middle column hidden) -->
       <SplitterPanel :size="showLayoutSidePanels ? 60 : 75" :minSize="35" class="flex flex-col min-w-0">
         <Splitter layout="vertical" class="h-full border-none">
