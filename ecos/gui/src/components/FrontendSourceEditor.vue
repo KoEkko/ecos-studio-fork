@@ -267,10 +267,14 @@ function createEditor(): void {
   editor = monaco.editor.create(editorHost.value, {
     automaticLayout: true,
     bracketPairColorization: { enabled: true },
+    colorDecorators: true,
+    contextmenu: true,
     cursorBlinking: 'blink',
     cursorSmoothCaretAnimation: 'on',
     cursorStyle: 'line',
     cursorWidth: 2,
+    disableLayerHinting: true,
+    experimentalGpuAcceleration: 'off',
     fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
     fontSize: 12,
     glyphMargin: true,
@@ -279,6 +283,7 @@ function createEditor(): void {
       indentation: true,
     },
     lineHeight: 19,
+    lineDecorationsWidth: 12,
     lineNumbers: 'on',
     minimap: { enabled: false },
     overviewRulerBorder: false,
@@ -350,6 +355,7 @@ function setEditorContent(path: string, text: string): void {
   model?.dispose()
   model = monaco.editor.createModel(text, language, monaco.Uri.file(path))
   monaco.editor.setModelLanguage(model, language)
+  monaco.editor.tokenize(text.slice(0, 12000), language)
   editor.setModel(model)
   diagnosticDecorations?.clear()
   savedContent = text
@@ -744,11 +750,11 @@ function diagnosticLocation(diagnostic: VerilatorDiagnostic): string {
 }
 
 .editor-pane.theme-dark {
-  background: #0b1020;
+  background: #1e1e1e;
 }
 
 .editor-pane.theme-light {
-  background: #fbfcff;
+  background: #ffffff;
 }
 
 .monaco-host {
@@ -758,23 +764,11 @@ function diagnosticLocation(diagnostic: VerilatorDiagnostic): string {
 }
 
 .theme-dark .monaco-host {
-  background: #0b1020;
+  background: #1e1e1e;
 }
 
 .theme-light .monaco-host {
-  background: #fbfcff;
-}
-
-.editor-pane.theme-dark :global(.monaco-editor),
-.editor-pane.theme-dark :global(.monaco-editor-background),
-.editor-pane.theme-dark :global(.monaco-editor .margin) {
-  background-color: #0b1020 !important;
-}
-
-.editor-pane.theme-light :global(.monaco-editor),
-.editor-pane.theme-light :global(.monaco-editor-background),
-.editor-pane.theme-light :global(.monaco-editor .margin) {
-  background-color: #fbfcff !important;
+  background: #ffffff;
 }
 
 :global(.frontend-source-editor .monaco-editor),
@@ -782,14 +776,6 @@ function diagnosticLocation(diagnostic: VerilatorDiagnostic): string {
 :global(.frontend-source-editor .monaco-editor textarea) {
   -webkit-user-select: text;
   user-select: text;
-}
-
-.editor-pane.theme-dark :global(.monaco-editor .view-line .mtk1) {
-  color: #e6edf3 !important;
-}
-
-.editor-pane.theme-light :global(.monaco-editor .view-line .mtk1) {
-  color: #111827 !important;
 }
 
 :global(.frontend-source-editor .monaco-editor .cursor) {

@@ -142,12 +142,13 @@ const RTL_TYPE_KEYWORDS = [
 export type FrontendEditorTheme = 'dark' | 'light'
 
 export function configureFrontendMonaco(): typeof monaco {
-  if (configured) return monaco
-
-  ;(globalThis as unknown as { MonacoEnvironment?: { getWorker: () => Worker } }).MonacoEnvironment = {
-    getWorker() {
-      return new EditorWorker()
-    },
+  if (!configured) {
+    ;(globalThis as unknown as { MonacoEnvironment?: { getWorker: () => Worker } }).MonacoEnvironment = {
+      getWorker() {
+        return new EditorWorker()
+      },
+    }
+    configured = true
   }
 
   registerRtlLanguages()
@@ -185,12 +186,12 @@ export function configureFrontendMonaco(): typeof monaco {
       { token: 'filelist.variable', foreground: 'f2cc60' },
     ],
     colors: {
-      'editor.background': '#0b1020',
-      'editor.foreground': '#e6edf3',
+      'editor.background': '#1e1e1e',
+      'editor.foreground': '#d4d4d4',
       'editorLineNumber.foreground': '#718096',
       'editorLineNumber.activeForeground': '#e2e8f0',
       'editorCursor.foreground': '#38bdf8',
-      'editor.lineHighlightBackground': '#16213a',
+      'editor.lineHighlightBackground': '#2a2d2e',
       'editor.selectionBackground': '#2563eb88',
       'editor.inactiveSelectionBackground': '#33415566',
       'editor.selectionHighlightBackground': '#1d4ed84d',
@@ -200,7 +201,7 @@ export function configureFrontendMonaco(): typeof monaco {
       'editor.findMatchHighlightBackground': '#fbbf2440',
       'editorBracketMatch.background': '#22d3ee22',
       'editorBracketMatch.border': '#22d3ee',
-      'editorGutter.background': '#0b1020',
+      'editorGutter.background': '#252526',
       'editorIndentGuide.background1': '#25324a',
       'editorIndentGuide.activeBackground1': '#64748b',
       'editorWhitespace.foreground': '#334155',
@@ -263,7 +264,6 @@ export function configureFrontendMonaco(): typeof monaco {
     },
   })
 
-  configured = true
   return monaco
 }
 
