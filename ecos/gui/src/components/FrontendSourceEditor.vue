@@ -14,10 +14,22 @@
         <div class="source-actions">
           <span class="source-state" :class="{ dirty: isDirty, saving }">{{ sourceStateText }}</span>
           <div class="theme-segment" title="Editor theme">
-            <button type="button" :class="{ active: sourceTheme === 'dark' }" @click="setTheme('dark')">
+            <button
+              type="button"
+              :aria-pressed="sourceTheme === 'dark'"
+              :class="{ active: sourceTheme === 'dark' }"
+              @mousedown.prevent
+              @click="setTheme('dark')"
+            >
               <i class="ri-moon-line"></i>
             </button>
-            <button type="button" :class="{ active: sourceTheme === 'light' }" @click="setTheme('light')">
+            <button
+              type="button"
+              :aria-pressed="sourceTheme === 'light'"
+              :class="{ active: sourceTheme === 'light' }"
+              @mousedown.prevent
+              @click="setTheme('light')"
+            >
               <i class="ri-sun-line"></i>
             </button>
           </div>
@@ -703,6 +715,14 @@ function diagnosticLocation(diagnostic: VerilatorDiagnostic): string {
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.theme-segment button:focus,
+.theme-segment button:focus-visible,
+.theme-segment button:active {
+  outline: none;
+  box-shadow: none;
 }
 
 .theme-segment button.active {
@@ -745,11 +765,31 @@ function diagnosticLocation(diagnostic: VerilatorDiagnostic): string {
   background: #fbfcff;
 }
 
+.editor-pane.theme-dark :global(.monaco-editor),
+.editor-pane.theme-dark :global(.monaco-editor-background),
+.editor-pane.theme-dark :global(.monaco-editor .margin) {
+  background-color: #0b1020 !important;
+}
+
+.editor-pane.theme-light :global(.monaco-editor),
+.editor-pane.theme-light :global(.monaco-editor-background),
+.editor-pane.theme-light :global(.monaco-editor .margin) {
+  background-color: #fbfcff !important;
+}
+
 :global(.frontend-source-editor .monaco-editor),
 :global(.frontend-source-editor .monaco-editor *),
 :global(.frontend-source-editor .monaco-editor textarea) {
   -webkit-user-select: text;
   user-select: text;
+}
+
+.editor-pane.theme-dark :global(.monaco-editor .view-line .mtk1) {
+  color: #e6edf3 !important;
+}
+
+.editor-pane.theme-light :global(.monaco-editor .view-line .mtk1) {
+  color: #111827 !important;
 }
 
 :global(.frontend-source-editor .monaco-editor .cursor) {
