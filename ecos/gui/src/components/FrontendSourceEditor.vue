@@ -254,10 +254,28 @@ function createEditor(): void {
   if (!editorHost.value || editor) return
   editor = monaco.editor.create(editorHost.value, {
     automaticLayout: true,
+    bracketPairColorization: { enabled: true },
+    cursorBlinking: 'blink',
+    cursorSmoothCaretAnimation: 'on',
+    cursorStyle: 'line',
+    cursorWidth: 2,
     fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
     fontSize: 12,
+    glyphMargin: true,
+    guides: {
+      bracketPairs: true,
+      indentation: true,
+    },
     lineHeight: 19,
+    lineNumbers: 'on',
     minimap: { enabled: false },
+    overviewRulerBorder: false,
+    padding: {
+      top: 8,
+      bottom: 8,
+    },
+    renderControlCharacters: true,
+    renderLineHighlight: 'all',
     renderWhitespace: 'selection',
     scrollBeyondLastLine: false,
     scrollbar: {
@@ -315,9 +333,11 @@ function setEditorContent(path: string, text: string): void {
   createEditor()
   if (!editor) return
 
+  const language = monacoLanguageForPath(path)
   changeDisposable?.dispose()
   model?.dispose()
-  model = monaco.editor.createModel(text, monacoLanguageForPath(path), monaco.Uri.file(path))
+  model = monaco.editor.createModel(text, language, monaco.Uri.file(path))
+  monaco.editor.setModelLanguage(model, language)
   editor.setModel(model)
   diagnosticDecorations?.clear()
   savedContent = text
@@ -325,7 +345,12 @@ function setEditorContent(path: string, text: string): void {
   changeDisposable = model.onDidChangeContent(() => {
     sourceStore.setDirty((editor?.getValue() || '') !== savedContent)
   })
+  applyEditorTheme()
   applyDiagnosticsToEditor()
+  requestAnimationFrame(() => {
+    editor?.layout()
+    editor?.render(true)
+  })
 }
 
 async function saveSource(): Promise<void> {
@@ -699,7 +724,7 @@ function diagnosticLocation(diagnostic: VerilatorDiagnostic): string {
 }
 
 .editor-pane.theme-dark {
-  background: #0f1117;
+  background: #0b1020;
 }
 
 .editor-pane.theme-light {
@@ -713,11 +738,30 @@ function diagnosticLocation(diagnostic: VerilatorDiagnostic): string {
 }
 
 .theme-dark .monaco-host {
-  background: #0f1117;
+  background: #0b1020;
 }
 
 .theme-light .monaco-host {
   background: #fbfcff;
+}
+
+:global(.frontend-source-editor .monaco-editor),
+:global(.frontend-source-editor .monaco-editor *),
+:global(.frontend-source-editor .monaco-editor textarea) {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+:global(.frontend-source-editor .monaco-editor .cursor) {
+  background-color: #38bdf8;
+  border-color: #38bdf8;
+  color: #38bdf8;
+}
+
+:global(.frontend-source-editor .monaco-editor.vs .cursor) {
+  background-color: #2563eb;
+  border-color: #2563eb;
+  color: #2563eb;
 }
 
 :global(.frontend-lint-line-error) {
