@@ -61,6 +61,30 @@ fn is_project_directory_candidate(path: &Path) -> bool {
         .any(|name| home.join(name).is_file())
 }
 
+fn is_editable_frontend_source_file(path: &Path) -> bool {
+    let ext = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    matches!(
+        ext.as_str(),
+        "v" | "sv"
+            | "vh"
+            | "svh"
+            | "f"
+            | "fl"
+            | "c"
+            | "cc"
+            | "cpp"
+            | "h"
+            | "hpp"
+            | "tcl"
+            | "s"
+            | "asm"
+    )
+}
+
 fn scan_top_level_entries(path: &Path) -> Result<PdkDetectedFiles, String> {
     let entries = fs::read_dir(path).map_err(|e| format!("read_dir {}: {}", path.display(), e))?;
     let mut directories = Vec::new();
@@ -220,6 +244,38 @@ pub async fn request_external_file_permission(
             e
         )
     })?;
+    Ok(canonical.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub async fn write_frontend_source_file(
+    project_root_state: tauri::State<'_, ProjectRootState>,
+    path: String,
+    content: String,
+) -> Result<String, String> {
+    info!("cmd=write_frontend_source_file path={}", path);
+    {
+        let project_root = project_root_state
+            .lock()
+            .map_err(|e| format!("project root lock error: {}", e))?;
+        if project_root.is_none() {
+            return Err("Project root is not registered".to_string());
+        }
+    }
+
+    let canonical = canonicalize_existing_path(&path)?;
+    if !canonical.is_file() {
+        return Err(format!("{} is not a file", canonical.display()));
+    }
+    if !is_editable_frontend_source_file(&canonical) {
+        return Err(format!(
+            "Refusing to edit non-source file: {}",
+            canonical.display()
+        ));
+    }
+
+    fs::write(&canonical, content)
+        .map_err(|e| format!("write source file {}: {}", canonical.display(), e))?;
     Ok(canonical.to_string_lossy().into_owned())
 }
 

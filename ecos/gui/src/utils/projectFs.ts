@@ -35,3 +35,14 @@ export async function resolveProjectOrExternalFileAccess(path: string): Promise<
     return null
   }
 }
+
+export async function writeFrontendSourceFile(path: string, content: string): Promise<string | null> {
+  if (!path) return null
+
+  try {
+    return await invoke<string>('write_frontend_source_file', { path, content })
+  } catch (error) {
+    console.warn(`Failed to write frontend source file ${path}:`, error)
+    return null
+  }
+}
