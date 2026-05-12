@@ -13,9 +13,14 @@
         </div>
         <div class="source-actions">
           <span class="source-state" :class="{ dirty: isDirty, saving }">{{ sourceStateText }}</span>
-          <button type="button" class="icon-action" :title="themeTitle" @click="toggleTheme">
-            <i :class="sourceTheme === 'dark' ? 'ri-sun-line' : 'ri-moon-line'"></i>
-          </button>
+          <div class="theme-segment" title="Editor theme">
+            <button type="button" :class="{ active: sourceTheme === 'dark' }" @click="setTheme('dark')">
+              <i class="ri-moon-line"></i>
+            </button>
+            <button type="button" :class="{ active: sourceTheme === 'light' }" @click="setTheme('light')">
+              <i class="ri-sun-line"></i>
+            </button>
+          </div>
           <button
             type="button"
             class="icon-action"
@@ -51,7 +56,7 @@
         <span>{{ sourceError }}</span>
       </div>
 
-      <div v-show="!sourceError" class="editor-pane">
+      <div v-show="!sourceError" class="editor-pane" :class="editorPaneClass">
         <div ref="editorHost" class="monaco-host"></div>
         <div v-if="sourceLoading" class="editor-overlay">
           <i class="ri-loader-4-line spin"></i>
@@ -59,48 +64,61 @@
         </div>
       </div>
 
-      <section class="lint-panel">
+      <section class="lint-panel" :class="{ collapsed: !showLintDetails }">
         <div class="lint-header">
           <div>
             <strong :class="lintStatusClass">{{ lintTitle }}</strong>
             <span>{{ lintSubtitle }}</span>
           </div>
-          <button
-            type="button"
-            class="icon-action compact"
-            :disabled="!lintLog"
-            :title="showLintLog ? 'Hide log' : 'Show log'"
-            @click="showLintLog = !showLintLog"
-          >
-            <i :class="showLintLog ? 'ri-list-check' : 'ri-terminal-box-line'"></i>
-          </button>
+          <div class="lint-actions">
+            <button
+              type="button"
+              class="icon-action compact"
+              :disabled="!diagnostics.length"
+              :title="showLintDetails ? 'Collapse diagnostics' : 'Show diagnostics'"
+              @click="showLintDetails = !showLintDetails"
+            >
+              <i :class="showLintDetails ? 'ri-arrow-down-s-line' : 'ri-arrow-up-s-line'"></i>
+            </button>
+            <button
+              type="button"
+              class="icon-action compact"
+              :disabled="!lintLog || !showLintDetails"
+              :title="showLintLog ? 'Hide log' : 'Show log'"
+              @click="showLintLog = !showLintLog"
+            >
+              <i :class="showLintLog ? 'ri-list-check' : 'ri-terminal-box-line'"></i>
+            </button>
+          </div>
         </div>
 
-        <div v-if="lintError" class="lint-error">{{ lintError }}</div>
+        <template v-if="showLintDetails">
+          <div v-if="lintError" class="lint-error">{{ lintError }}</div>
 
-        <div v-else-if="diagnostics.length" class="diagnostic-list">
-          <button
-            v-for="diagnostic in diagnostics"
-            :key="diagnosticKey(diagnostic)"
-            type="button"
-            class="diagnostic-row"
-            :class="[diagnostic.severity, { jumpable: diagnosticMatchesCurrent(diagnostic) }]"
-            @click="jumpToDiagnostic(diagnostic)"
-          >
-            <i :class="diagnostic.severity === 'error' ? 'ri-close-circle-line' : 'ri-alert-line'"></i>
-            <span class="diagnostic-main">
-              <strong>{{ diagnostic.code }}</strong>
-              <small>{{ diagnosticLocation(diagnostic) }}</small>
-              <em>{{ diagnostic.message || diagnostic.raw }}</em>
-            </span>
-          </button>
-        </div>
+          <div v-else-if="diagnostics.length" class="diagnostic-list">
+            <button
+              v-for="diagnostic in diagnostics"
+              :key="diagnosticKey(diagnostic)"
+              type="button"
+              class="diagnostic-row"
+              :class="[diagnostic.severity, { jumpable: diagnosticMatchesCurrent(diagnostic) }]"
+              @click="jumpToDiagnostic(diagnostic)"
+            >
+              <i :class="diagnostic.severity === 'error' ? 'ri-close-circle-line' : 'ri-alert-line'"></i>
+              <span class="diagnostic-main">
+                <strong>{{ diagnostic.code }}</strong>
+                <small>{{ diagnosticLocation(diagnostic) }}</small>
+                <em>{{ diagnostic.message || diagnostic.raw }}</em>
+              </span>
+            </button>
+          </div>
 
-        <div v-else class="lint-empty">
-          {{ lintRunning ? 'Lint is running...' : 'No lint diagnostics yet' }}
-        </div>
+          <div v-else class="lint-empty">
+            {{ lintRunning ? 'Lint is running...' : 'No lint diagnostics yet' }}
+          </div>
 
-        <pre v-if="showLintLog && lintLog" class="lint-log">{{ lintLog }}</pre>
+          <pre v-if="showLintLog && lintLog" class="lint-log">{{ lintLog }}</pre>
+        </template>
       </section>
     </template>
   </div>
@@ -166,16 +184,22 @@ const lintStatus = ref<'idle' | 'running' | 'success' | 'failed' | 'error'>('idl
 const lintError = ref('')
 const lintLog = ref('')
 const showLintLog = ref(false)
+const showLintDetails = ref(false)
 const diagnostics = ref<VerilatorDiagnostic[]>([])
 
 let editor: ReturnType<typeof monaco.editor.create> | null = null
 let model: monaco.editor.ITextModel | null = null
 let changeDisposable: { dispose: () => void } | null = null
+let diagnosticDecorations: monaco.editor.IEditorDecorationsCollection | null = null
 let savedContent = ''
 let sourceLoadToken = 0
 
 const isDirty = computed(() => sourceStore.isDirty)
 const sourceTitle = computed(() => activeLabel.value || props.source?.label || fileName(props.source?.path || '') || 'Source')
+const editorPaneClass = computed(() => ({
+  'theme-dark': sourceTheme.value === 'dark',
+  'theme-light': sourceTheme.value === 'light',
+}))
 const sourceStateText = computed(() => {
   if (saving.value) return 'Saving'
   if (sourceLoading.value) return 'Loading'
@@ -183,7 +207,6 @@ const sourceStateText = computed(() => {
 })
 const canSave = computed(() => isInTauri && !!activePath.value && !!editor && isDirty.value && !sourceLoading.value && !saving.value)
 const canRunLint = computed(() => isInTauri && !!activePath.value && !sourceLoading.value && !saving.value && !lintRunning.value)
-const themeTitle = computed(() => sourceTheme.value === 'dark' ? 'Use light editor theme' : 'Use dark editor theme')
 const lintCounts = computed(() => countVerilatorDiagnostics(diagnostics.value))
 const lintTitle = computed(() => {
   if (lintStatus.value === 'running') return 'Lint running'
@@ -215,6 +238,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   changeDisposable?.dispose()
+  diagnosticDecorations?.clear()
   model?.dispose()
   editor?.dispose()
 })
@@ -236,11 +260,17 @@ function createEditor(): void {
     minimap: { enabled: false },
     renderWhitespace: 'selection',
     scrollBeyondLastLine: false,
+    scrollbar: {
+      alwaysConsumeMouseWheel: false,
+    },
+    stablePeek: true,
     tabSize: 2,
     theme: monacoThemeName(sourceTheme.value),
     value: '',
     wordWrap: 'off',
   })
+  diagnosticDecorations = editor.createDecorationsCollection()
+  applyEditorTheme()
 }
 
 async function loadSourceContent(): Promise<void> {
@@ -289,6 +319,7 @@ function setEditorContent(path: string, text: string): void {
   model?.dispose()
   model = monaco.editor.createModel(text, monacoLanguageForPath(path), monaco.Uri.file(path))
   editor.setModel(model)
+  diagnosticDecorations?.clear()
   savedContent = text
   sourceStore.setDirty(false)
   changeDisposable = model.onDidChangeContent(() => {
@@ -356,6 +387,7 @@ async function runLint(): Promise<void> {
 
     const ok = response.response === ResponseEnum.success && response.data?.state === StateEnum.Success
     lintStatus.value = ok ? 'success' : 'failed'
+    showLintDetails.value = diagnostics.value.length > 0 || !ok
     showToast({
       severity: ok ? 'success' : 'error',
       summary: ok ? 'Lint Completed' : 'Lint Failed',
@@ -382,8 +414,8 @@ async function loadLintResult(): Promise<void> {
   const detail = response.data?.info as FrontendStepDetail | undefined
   const lintText = await readLintText(detail)
   lintLog.value = lintText
-  showLintLog.value = !lintText
   diagnostics.value = parseVerilatorDiagnostics(lintText)
+  showLintLog.value = lintText ? diagnostics.value.length === 0 : false
   applyDiagnosticsToEditor()
 }
 
@@ -435,6 +467,22 @@ function applyDiagnosticsToEditor(): void {
       endColumn: diagnostic.column + 1,
     }))
   monaco.editor.setModelMarkers(model, 'verilator', markers)
+  diagnosticDecorations?.set(
+    diagnostics.value
+      .filter((diagnostic) => diagnosticMatchesCurrent(diagnostic))
+      .map((diagnostic) => ({
+        range: new monaco.Range(diagnostic.line, 1, diagnostic.line, 1),
+        options: {
+          isWholeLine: true,
+          className: diagnostic.severity === 'error' ? 'frontend-lint-line-error' : 'frontend-lint-line-warning',
+          linesDecorationsClassName:
+            diagnostic.severity === 'error' ? 'frontend-lint-gutter-error' : 'frontend-lint-gutter-warning',
+          hoverMessage: {
+            value: `**${diagnostic.code}** ${diagnostic.message || diagnostic.raw}`,
+          },
+        },
+      })),
+  )
 }
 
 function resetLintResult(): void {
@@ -442,14 +490,27 @@ function resetLintResult(): void {
   lintError.value = ''
   lintLog.value = ''
   showLintLog.value = false
+  showLintDetails.value = false
   diagnostics.value = []
   applyDiagnosticsToEditor()
 }
 
-function toggleTheme(): void {
-  sourceTheme.value = sourceTheme.value === 'dark' ? 'light' : 'dark'
+function setTheme(theme: FrontendEditorTheme): void {
+  if (sourceTheme.value === theme) {
+    applyEditorTheme()
+    return
+  }
+  sourceTheme.value = theme
   localStorage.setItem(SOURCE_THEME_KEY, sourceTheme.value)
+  applyEditorTheme()
+}
+
+function applyEditorTheme(): void {
   monaco.editor.setTheme(monacoThemeName(sourceTheme.value))
+  requestAnimationFrame(() => {
+    editor?.layout()
+    editor?.render(true)
+  })
 }
 
 function initialTheme(): FrontendEditorTheme {
@@ -595,6 +656,40 @@ function diagnosticLocation(diagnostic: VerilatorDiagnostic): string {
   cursor: not-allowed;
 }
 
+.theme-segment {
+  display: inline-grid;
+  grid-template-columns: 1fr 1fr;
+  width: 58px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-primary);
+}
+
+.theme-segment button {
+  min-width: 0;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.theme-segment button.active {
+  background: var(--accent-color);
+  color: white;
+}
+
+.theme-segment button:hover:not(.active) {
+  color: var(--accent-color);
+  background: var(--bg-hover);
+}
+
 .editor-pane {
   position: relative;
   flex: 1;
@@ -603,10 +698,42 @@ function diagnosticLocation(diagnostic: VerilatorDiagnostic): string {
   overflow: hidden;
 }
 
+.editor-pane.theme-dark {
+  background: #0f1117;
+}
+
+.editor-pane.theme-light {
+  background: #fbfcff;
+}
+
 .monaco-host {
   width: 100%;
   height: 100%;
   min-height: 0;
+}
+
+.theme-dark .monaco-host {
+  background: #0f1117;
+}
+
+.theme-light .monaco-host {
+  background: #fbfcff;
+}
+
+:global(.frontend-lint-line-error) {
+  background: rgba(239, 68, 68, 0.13);
+}
+
+:global(.frontend-lint-line-warning) {
+  background: rgba(245, 158, 11, 0.14);
+}
+
+:global(.frontend-lint-gutter-error) {
+  border-left: 3px solid #ef4444;
+}
+
+:global(.frontend-lint-gutter-warning) {
+  border-left: 3px solid #f59e0b;
 }
 
 .editor-overlay {
@@ -631,6 +758,11 @@ function diagnosticLocation(diagnostic: VerilatorDiagnostic): string {
   overflow: hidden;
 }
 
+.lint-panel.collapsed {
+  flex-basis: 40px;
+  min-height: 40px;
+}
+
 .lint-header {
   min-height: 40px;
   display: flex;
@@ -639,6 +771,12 @@ function diagnosticLocation(diagnostic: VerilatorDiagnostic): string {
   gap: 8px;
   padding: 7px 10px;
   border-bottom: 1px solid var(--border-color);
+}
+
+.lint-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .lint-header > div {
