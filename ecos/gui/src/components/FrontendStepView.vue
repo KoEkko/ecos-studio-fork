@@ -212,6 +212,44 @@
               </button>
             </div>
           </section>
+
+          <section v-else-if="activeTab === 'src'" class="files-panel source-panel">
+            <div class="panel-header">
+              <div>
+                <h3>Source Files</h3>
+                <p>RTL and filelist paths parsed from frontend inputs</p>
+              </div>
+              <span class="panel-meta">{{ sourceArtifacts.length }} files</span>
+            </div>
+            <div v-if="sourceArtifacts.length === 0" class="empty-panel">
+              <i class="ri-code-s-slash-line"></i>
+              <span>No source files discovered yet</span>
+            </div>
+            <div v-else class="source-file-list">
+              <button
+                v-for="item in sourceArtifacts"
+                :key="item.path"
+                type="button"
+                class="source-file-row"
+                :title="item.path"
+                @click="openSourceArtifact(item)"
+              >
+                <span class="source-file-icon">
+                  <i :class="fileIcon(item.path)"></i>
+                </span>
+                <span class="source-file-main">
+                  <span class="source-file-title">
+                    <strong>{{ sourceDisplayName(item) }}</strong>
+                    <em>{{ sourceLanguageLabel(item.path) }}</em>
+                  </span>
+                  <small>{{ sourcePathHint(item.path) }}</small>
+                </span>
+                <span class="source-file-open">
+                  <i class="ri-edit-2-line"></i>
+                </span>
+              </button>
+            </div>
+          </section>
         </main>
       </template>
     </div>
@@ -277,7 +315,7 @@ const currentStep = computed(() => {
 const detail = ref<FrontendStepDetail | null>(null)
 const loading = ref(false)
 const error = ref('')
-const activeTab = ref<'summary' | 'cases' | 'log' | 'reports' | 'artifacts'>('summary')
+const activeTab = ref<'summary' | 'cases' | 'log' | 'reports' | 'artifacts' | 'src'>('summary')
 const selectedCase = ref<SimCase | null>(null)
 const selectedLogPath = ref('')
 const logContent = ref('')
@@ -286,14 +324,16 @@ const logLoading = ref(false)
 const isSimStep = computed(() => currentStep.value?.toLowerCase() === StepEnum.SIM.toLowerCase())
 const cases = computed(() => detail.value?.cases || [])
 const reports = computed(() => detail.value?.reports || [])
-const artifacts = computed(() => {
+const allArtifacts = computed(() => {
   const base = detail.value?.artifacts || []
   const fromCases = cases.value.flatMap((testCase) => [
     testCase.wave ? { label: `${testCase.name} wave`, path: testCase.wave } : null,
     testCase.image ? { label: `${testCase.name} image`, path: testCase.image } : null,
   ]).filter(Boolean) as PathItem[]
-  return [...base, ...fromCases]
+  return uniquePathItems([...base, ...fromCases])
 })
+const sourceArtifacts = computed(() => allArtifacts.value.filter((item) => isSourceArtifactPath(item.path)))
+const artifacts = computed(() => allArtifacts.value.filter((item) => !isSourceArtifactPath(item.path)))
 const totalCases = computed(() => cases.value.length)
 const passedCases = computed(() => cases.value.filter((testCase) => testCase.ok).length)
 const failedCases = computed(() => cases.value.filter((testCase) => !testCase.ok).length)
@@ -304,6 +344,7 @@ const visibleTabs = computed(() => [
   { id: 'log' as const, label: 'Log', icon: 'ri-terminal-box-line' },
   { id: 'reports' as const, label: 'Reports', icon: 'ri-file-chart-line' },
   { id: 'artifacts' as const, label: 'Artifacts', icon: 'ri-folder-3-line' },
+  { id: 'src' as const, label: 'Src', icon: 'ri-code-s-slash-line' },
 ])
 
 const stepTitle = computed(() => getStepMetadata(currentStep.value || '')?.label || currentStep.value || 'Frontend Step')
@@ -412,15 +453,19 @@ function handleArtifactClick(item: PathItem): void {
     openWaveform(item.path, caseNameFromArtifactLabel(item.label))
     return
   }
-  if (isSourcePreviewPath(item.path)) {
-    sourceViewerStore.openSource({
-      path: item.path,
-      label: item.label || fileName(item.path),
-      step: currentStep.value || 'frontend',
-    })
+  if (isSourceArtifactPath(item.path)) {
+    openSourceArtifact(item)
     return
   }
   void sendFileToInspector(item)
+}
+
+function openSourceArtifact(item: PathItem): void {
+  sourceViewerStore.openSource({
+    path: item.path,
+    label: item.label || fileName(item.path),
+    step: currentStep.value || 'frontend',
+  })
 }
 
 function openWaveform(path: string, caseName?: string): void {
@@ -468,6 +513,28 @@ function shortPath(path: string): string {
   return path.split('/').filter(Boolean).slice(-4).join('/')
 }
 
+function sourcePathHint(path: string): string {
+  return path.split('/').filter(Boolean).slice(-5, -1).join('/') || path
+}
+
+function sourceDisplayName(item: PathItem): string {
+  const label = item.label || fileName(item.path)
+  return label.startsWith('CPU RTL · ') ? label.slice('CPU RTL · '.length) : label
+}
+
+function sourceLanguageLabel(path: string): string {
+  const ext = path.split('.').pop()?.toLowerCase()
+  if (ext === 'sv' || ext === 'svh') return 'SystemVerilog'
+  if (ext === 'v' || ext === 'vh') return 'Verilog'
+  if (ext === 'f' || ext === 'fl' || ext === 'filelist') return 'Filelist'
+  if (ext === 'c' || ext === 'cc' || ext === 'cpp' || ext === 'h' || ext === 'hpp') return 'C/C++'
+  if (ext === 'py') return 'Python'
+  if (ext === 'sh') return 'Shell'
+  if (ext === 'tcl') return 'Tcl'
+  if (ext === 's' || ext === 'asm') return 'ASM'
+  return 'Source'
+}
+
 function fileFormat(path: string): 'json' | 'csv' | 'text' | 'html' {
   const ext = path.split('.').pop()?.toLowerCase()
   if (ext === 'json') return 'json'
@@ -480,8 +547,8 @@ function isWaveformPath(path: string): boolean {
   return /\.(vcd|fst|ghw)$/i.test(path)
 }
 
-function isSourcePreviewPath(path: string): boolean {
-  return /\.(v|sv|vh|svh|c|cc|cpp|h|hpp|f|fl|filelist|txt|log|json|yaml|yml|py|sh|tcl|md)$/i.test(path)
+function isSourceArtifactPath(path: string): boolean {
+  return /\.(v|sv|vh|svh|c|cc|cpp|h|hpp|f|fl|filelist|py|sh|tcl|s|asm)$/i.test(path)
 }
 
 function caseNameFromArtifactLabel(label: string): string | undefined {
@@ -493,8 +560,22 @@ function fileIcon(path: string): string {
   if (ext === 'json') return 'ri-braces-line'
   if (ext === 'vcd' || ext === 'fst' || ext === 'ghw') return 'ri-pulse-line'
   if (ext === 'bin' || ext === 'elf') return 'ri-cpu-line'
+  if (ext === 'v' || ext === 'sv' || ext === 'vh' || ext === 'svh') return 'ri-code-s-slash-line'
+  if (ext === 'f' || ext === 'fl' || ext === 'filelist') return 'ri-file-list-3-line'
   if (ext === 'rpt') return 'ri-file-chart-line'
   return 'ri-file-text-line'
+}
+
+function uniquePathItems(items: PathItem[]): PathItem[] {
+  const seen = new Set<string>()
+  const result: PathItem[] = []
+  for (const item of items) {
+    const path = String(item.path || '').trim()
+    if (!path || seen.has(path)) continue
+    seen.add(path)
+    result.push({ ...item, path })
+  }
+  return result
 }
 </script>
 
@@ -910,6 +991,118 @@ function fileIcon(path: string): string {
 .file-row-main small {
   color: var(--text-secondary);
   font-size: 10px;
+}
+
+.source-panel .panel-header {
+  align-items: flex-start;
+}
+
+.source-file-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+  padding: 10px;
+  overflow: auto;
+}
+
+.source-file-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--accent-color) 7%, transparent), transparent 52%),
+    var(--bg-primary);
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
+}
+
+.source-file-row:hover {
+  border-color: var(--accent-color);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--accent-color) 12%, transparent), transparent 58%),
+    var(--bg-secondary);
+  transform: translateY(-1px);
+}
+
+.source-file-icon,
+.source-file-open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--accent-color);
+}
+
+.source-file-open {
+  width: 24px;
+  height: 24px;
+  color: var(--text-secondary);
+}
+
+.source-file-row:hover .source-file-open {
+  border-color: color-mix(in srgb, var(--accent-color) 55%, var(--border-color));
+  color: var(--accent-color);
+}
+
+.source-file-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  gap: 4px;
+}
+
+.source-file-title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 7px;
+}
+
+.source-file-title strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.source-file-title em {
+  flex: 0 0 auto;
+  max-width: 94px;
+  overflow: hidden;
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, var(--accent-color) 35%, var(--border-color));
+  border-radius: 999px;
+  color: var(--accent-color);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.source-file-main small {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .empty-panel,
