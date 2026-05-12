@@ -31,6 +31,7 @@
     "alova": "^3.4.1",
     "echarts": "^6.0.0",
     "markdown-it": "^14.1.0",
+    "monaco-editor": "^0.55.1",
     "pinia": "^3.0.4",
     "pixi-viewport": "^6.0.3",
     "pixi.js": "^8.15.0",
