@@ -174,6 +174,8 @@ interface FrontendStepDetail {
 
 const LINT_LOG_CHAR_LIMIT = 300000
 const SOURCE_THEME_KEY = 'ecos.frontend.source.theme'
+const SYNTAX_DECORATION_LINE_LIMIT = 8000
+const SYNTAX_DECORATION_CHAR_LIMIT = 700000
 
 const props = defineProps<{
   source: FrontendSourceSelection | null
@@ -203,8 +205,10 @@ let editor: ReturnType<typeof monaco.editor.create> | null = null
 let model: monaco.editor.ITextModel | null = null
 let changeDisposable: { dispose: () => void } | null = null
 let diagnosticDecorations: monaco.editor.IEditorDecorationsCollection | null = null
+let syntaxDecorations: monaco.editor.IEditorDecorationsCollection | null = null
 let savedContent = ''
 let sourceLoadToken = 0
+let syntaxDecorationTimer: number | null = null
 
 const isDirty = computed(() => sourceStore.isDirty)
 const sourceTitle = computed(() => activeLabel.value || props.source?.label || fileName(props.source?.path || '') || 'Source')
@@ -249,8 +253,13 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  if (syntaxDecorationTimer !== null) {
+    window.clearTimeout(syntaxDecorationTimer)
+    syntaxDecorationTimer = null
+  }
   changeDisposable?.dispose()
   diagnosticDecorations?.clear()
+  syntaxDecorations?.clear()
   model?.dispose()
   editor?.dispose()
 })
@@ -305,6 +314,7 @@ function createEditor(): void {
     wordWrap: 'off',
   })
   diagnosticDecorations = editor.createDecorationsCollection()
+  syntaxDecorations = editor.createDecorationsCollection()
   applyEditorTheme()
 }
 
@@ -362,7 +372,9 @@ function setEditorContent(path: string, text: string): void {
   sourceStore.setDirty(false)
   changeDisposable = model.onDidChangeContent(() => {
     sourceStore.setDirty((editor?.getValue() || '') !== savedContent)
+    scheduleSyntaxDecorations()
   })
+  applySyntaxDecorations()
   applyEditorTheme()
   applyDiagnosticsToEditor()
   requestAnimationFrame(() => {
@@ -526,6 +538,133 @@ function applyDiagnosticsToEditor(): void {
         },
       })),
   )
+}
+
+function scheduleSyntaxDecorations(): void {
+  if (syntaxDecorationTimer !== null) {
+    window.clearTimeout(syntaxDecorationTimer)
+  }
+  syntaxDecorationTimer = window.setTimeout(() => {
+    syntaxDecorationTimer = null
+    applySyntaxDecorations()
+  }, 180)
+}
+
+function applySyntaxDecorations(): void {
+  if (!model || !syntaxDecorations) return
+  const textLength = model.getValueLength()
+  const lineCount = model.getLineCount()
+  if (textLength > SYNTAX_DECORATION_CHAR_LIMIT || lineCount > SYNTAX_DECORATION_LINE_LIMIT) {
+    syntaxDecorations.clear()
+    return
+  }
+
+  const decorations: monaco.editor.IModelDeltaDecoration[] = []
+  let inBlockComment = false
+
+  for (let lineNumber = 1; lineNumber <= lineCount; lineNumber += 1) {
+    const line = model.getLineContent(lineNumber)
+    const occupied: Array<[number, number]> = []
+
+    if (inBlockComment) {
+      const end = line.indexOf('*/')
+      const endColumn = end >= 0 ? end + 3 : line.length + 1
+      addDecoration(decorations, occupied, lineNumber, 1, endColumn, 'frontend-syntax-comment', true)
+      if (end < 0) continue
+      inBlockComment = false
+    }
+
+    let blockStart = line.indexOf('/*')
+    while (blockStart >= 0) {
+      const blockEnd = line.indexOf('*/', blockStart + 2)
+      const startColumn = blockStart + 1
+      const endColumn = blockEnd >= 0 ? blockEnd + 3 : line.length + 1
+      addDecoration(decorations, occupied, lineNumber, startColumn, endColumn, 'frontend-syntax-comment', true)
+      if (blockEnd < 0) {
+        inBlockComment = true
+        break
+      }
+      blockStart = line.indexOf('/*', blockEnd + 2)
+    }
+
+    const lineComment = line.indexOf('//')
+    if (lineComment >= 0) {
+      addDecoration(decorations, occupied, lineNumber, lineComment + 1, line.length + 1, 'frontend-syntax-comment', true)
+    }
+    const filelistComment = line.search(/^\s*#/)
+    if (filelistComment >= 0) {
+      addDecoration(decorations, occupied, lineNumber, filelistComment + 1, line.length + 1, 'frontend-syntax-comment', true)
+    }
+
+    addRegexDecorations(decorations, occupied, lineNumber, line, /"([^"\\]|\\.)*"|'([^'\\]|\\.)*'/g, 'frontend-syntax-string')
+    addRegexDecorations(decorations, occupied, lineNumber, line, /`[A-Za-z_]\w*/g, 'frontend-syntax-directive')
+    addRegexDecorations(decorations, occupied, lineNumber, line, /\+(?:incdir|define)\+|-[fFyIv]\b|\+[A-Za-z_][\w-]*(?=\+|\s|$)/g, 'frontend-syntax-directive')
+    addRegexDecorations(decorations, occupied, lineNumber, line, /\$\([A-Za-z_][\w-]*\)|\$\{[A-Za-z_][\w-]*\}/g, 'frontend-syntax-system')
+    addRegexDecorations(decorations, occupied, lineNumber, line, /[^\s#'"]+\.(?:svh?|vh?|v|h|hpp|c|cc|cpp|f|fl)\b/g, 'frontend-syntax-string')
+    addRegexDecorations(decorations, occupied, lineNumber, line, /\$[A-Za-z_]\w*/g, 'frontend-syntax-system')
+    addRegexDecorations(
+      decorations,
+      occupied,
+      lineNumber,
+      line,
+      /\b(?:module|endmodule|interface|endinterface|package|endpackage|program|endprogram|class|endclass|function|endfunction|task|endtask|begin|end|case|endcase|casex|casez|if|else|for|foreach|while|repeat|forever|generate|endgenerate|assign|always|always_comb|always_ff|always_latch|initial|posedge|negedge|parameter|localparam|typedef|return|import|export)\b/g,
+      'frontend-syntax-keyword',
+    )
+    addRegexDecorations(
+      decorations,
+      occupied,
+      lineNumber,
+      line,
+      /\b(?:logic|wire|reg|bit|byte|shortint|int|integer|longint|time|real|realtime|string|struct|enum|union|signed|unsigned|input|output|inout|tri|uwire|var)\b/g,
+      'frontend-syntax-type',
+    )
+    addRegexDecorations(
+      decorations,
+      occupied,
+      lineNumber,
+      line,
+      /\b(?:\d+'[sS]?[bBoOdDhH][0-9a-fA-FxXzZ?_]+|\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\b/g,
+      'frontend-syntax-number',
+    )
+  }
+
+  syntaxDecorations.set(decorations)
+}
+
+function addRegexDecorations(
+  decorations: monaco.editor.IModelDeltaDecoration[],
+  occupied: Array<[number, number]>,
+  lineNumber: number,
+  line: string,
+  regex: RegExp,
+  className: string,
+): void {
+  regex.lastIndex = 0
+  for (const match of line.matchAll(regex)) {
+    const start = (match.index ?? 0) + 1
+    const end = start + match[0].length
+    addDecoration(decorations, occupied, lineNumber, start, end, className)
+  }
+}
+
+function addDecoration(
+  decorations: monaco.editor.IModelDeltaDecoration[],
+  occupied: Array<[number, number]>,
+  lineNumber: number,
+  startColumn: number,
+  endColumn: number,
+  className: string,
+  _reserve = true,
+): void {
+  if (endColumn <= startColumn || occupied.some(([start, end]) => startColumn < end && endColumn > start)) return
+  decorations.push({
+    range: new monaco.Range(lineNumber, startColumn, lineNumber, endColumn),
+    options: {
+      inlineClassName: className,
+      inlineClassNameAffectsLetterSpacing: false,
+    },
+  })
+  occupied.push([startColumn, endColumn])
 }
 
 function resetLintResult(): void {
@@ -788,6 +927,60 @@ function diagnosticLocation(diagnostic: VerilatorDiagnostic): string {
   background-color: #2563eb;
   border-color: #2563eb;
   color: #2563eb;
+}
+
+.editor-pane.theme-dark :global(.frontend-syntax-keyword),
+.editor-pane.theme-dark :global(.frontend-syntax-directive) {
+  color: #569cd6 !important;
+  font-weight: 700;
+}
+
+.editor-pane.theme-dark :global(.frontend-syntax-type) {
+  color: #4ec9b0 !important;
+}
+
+.editor-pane.theme-dark :global(.frontend-syntax-string) {
+  color: #ce9178 !important;
+}
+
+.editor-pane.theme-dark :global(.frontend-syntax-comment) {
+  color: #6a9955 !important;
+  font-style: italic;
+}
+
+.editor-pane.theme-dark :global(.frontend-syntax-number) {
+  color: #b5cea8 !important;
+}
+
+.editor-pane.theme-dark :global(.frontend-syntax-system) {
+  color: #dcdcaa !important;
+}
+
+.editor-pane.theme-light :global(.frontend-syntax-keyword),
+.editor-pane.theme-light :global(.frontend-syntax-directive) {
+  color: #0000ff !important;
+  font-weight: 700;
+}
+
+.editor-pane.theme-light :global(.frontend-syntax-type) {
+  color: #267f99 !important;
+}
+
+.editor-pane.theme-light :global(.frontend-syntax-string) {
+  color: #a31515 !important;
+}
+
+.editor-pane.theme-light :global(.frontend-syntax-comment) {
+  color: #008000 !important;
+  font-style: italic;
+}
+
+.editor-pane.theme-light :global(.frontend-syntax-number) {
+  color: #098658 !important;
+}
+
+.editor-pane.theme-light :global(.frontend-syntax-system) {
+  color: #795e26 !important;
 }
 
 :global(.frontend-lint-line-error) {
