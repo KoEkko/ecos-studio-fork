@@ -1,5 +1,5 @@
 import { waitForDesktopApi } from '@/platform/desktop'
-import { listRemoteContentFiles, readRemoteJsonFile } from '@/services/remoteContentClient'
+import { readRemoteJsonFile } from '@/services/remoteContentClient'
 import { buildSocPreviewRects } from './socTemplatePreviewRenderer'
 import {
   normalizeSocTemplateDetail,
@@ -10,7 +10,7 @@ import {
 } from './socTemplateMapper'
 
 const SOC_TEMPLATE_SOURCE = 'socTemplateCatalog' as const
-const SOC_TEMPLATE_PATTERN = '**/*.json'
+const SOC_TEMPLATE_MANIFEST_PATH = 'manifest.json'
 const SELECTED_CORE_SETTING_PREFIX = 'ecos.socTemplate.selectedCore.'
 
 type RemoteSocTemplateIndexEntry = {
@@ -18,6 +18,20 @@ type RemoteSocTemplateIndexEntry = {
   path: string
   sourceLabel: string
   detail: SocTemplateDetail
+}
+
+type SocTemplateManifest = {
+  templates?: SocTemplateManifestTemplate[]
+}
+
+type SocTemplateManifestTemplate = {
+  variants?: SocTemplateManifestVariant[]
+}
+
+type SocTemplateManifestVariant = {
+  id?: unknown
+  display_name?: unknown
+  metadata?: unknown
 }
 
 function thumbnailLayoutFromDetail(detail: SocTemplateDetail): SocTemplateThumbnailLayout | undefined {
@@ -67,25 +81,41 @@ function applySelectedCoreOverride(
 }
 
 async function loadRemoteSocTemplateIndex(): Promise<RemoteSocTemplateIndexEntry[]> {
-  const files = await listRemoteContentFiles({
+  const manifest = await readRemoteJsonFile<SocTemplateManifest>({
     source: SOC_TEMPLATE_SOURCE,
-    pattern: SOC_TEMPLATE_PATTERN,
-    maxFiles: 200,
+    path: SOC_TEMPLATE_MANIFEST_PATH,
   })
 
-  const entries = await Promise.all(files.map(async (file) => {
-    const sourceLabel = `remote:${file.source}/${file.path}`
+  const variants = (manifest.templates ?? [])
+    .flatMap(template => template.variants ?? [])
+    .filter((variant): variant is SocTemplateManifestVariant & { id: string; metadata: string } =>
+      typeof variant.id === 'string'
+      && variant.id.length > 0
+      && typeof variant.metadata === 'string'
+      && variant.metadata.length > 0,
+    )
+
+  const entries = await Promise.all(variants.map(async (variant) => {
+    const metadataPath = variant.metadata
+    const sourceLabel = `remote:${SOC_TEMPLATE_SOURCE}/${metadataPath}`
     const raw = await readRemoteJsonFile<Record<string, unknown>>({
-      source: file.source,
-      path: file.path,
+      source: SOC_TEMPLATE_SOURCE,
+      path: metadataPath,
     })
     const detail = normalizeSocTemplateDetail(raw, sourceLabel)
+    const displayName = typeof variant.display_name === 'string' && variant.display_name.length > 0
+      ? variant.display_name
+      : detail.name
 
     return {
-      id: detail.id,
-      path: file.path,
+      id: variant.id,
+      path: metadataPath,
       sourceLabel,
-      detail,
+      detail: {
+        ...detail,
+        id: variant.id,
+        name: displayName,
+      },
     }
   }))
 

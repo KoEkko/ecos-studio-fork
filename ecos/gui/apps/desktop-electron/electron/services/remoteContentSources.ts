@@ -12,8 +12,8 @@ export const remoteContentSources: Record<RemoteContentSourceId, RemoteContentSo
   socTemplateCatalog: {
     provider: 'github',
     owner: 'openecos-projects',
-    repo: 'ecos-studio',
+    repo: 'soc-templates',
     ref: 'main',
-    rootPath: 'ecos/gui/apps/renderer/public',
+    rootPath: '',
   },
 }

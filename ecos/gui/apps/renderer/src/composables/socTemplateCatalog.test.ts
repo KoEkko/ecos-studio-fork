@@ -33,6 +33,40 @@ const remoteJson = {
   },
 }
 
+const manifestJson = {
+  schema_version: 1,
+  catalog_id: 'ecos-soc-templates',
+  catalog_name: 'ECOS Studio SoC Templates',
+  templates: [
+    {
+      id: 'ysyxSoC',
+      display_name: 'ysyxSoC',
+      description: 'YSYX SoC template',
+      status: 'experimental',
+      tags: ['riscv', 'asic', 'backend'],
+      root: 'templates/ysyxSoC',
+      source: {
+        type: 'local',
+        path: 'templates/ysyxSoC/src',
+      },
+      variants: [
+        {
+          id: 'ysyxSoCASIC',
+          display_name: 'ysyxSoCASIC',
+          design_name: 'ysyxSoCASIC',
+          top_module: 'ysyxSoCASIC',
+          flows: ['backend'],
+          metadata: 'templates/ysyxSoC/metadata/ysyxSoCASIC.json',
+          artifacts: {
+            netlist: 'templates/ysyxSoC/backend/ysyxSoCASIC.v',
+            def: 'templates/ysyxSoC/backend/ysyxSoCASIC.def.gz',
+          },
+        },
+      ],
+    },
+  ],
+}
+
 describe('socTemplateCatalog remote source', () => {
   const settings = new Map<string, unknown>()
 
@@ -53,33 +87,35 @@ describe('socTemplateCatalog remote source', () => {
     } as never)
   })
 
-  it('loads SoC summaries from the built-in remote content source', async () => {
-    vi.mocked(listRemoteContentFiles).mockResolvedValue([
-      { source: 'socTemplateCatalog', path: 'ysyxSoCASIC.json', name: 'ysyxSoCASIC.json' },
-    ])
-    vi.mocked(readRemoteJsonFile).mockResolvedValue(remoteJson)
+  it('loads SoC summaries from manifest variants in the built-in remote content source', async () => {
+    vi.mocked(readRemoteJsonFile)
+      .mockResolvedValueOnce(manifestJson)
+      .mockResolvedValueOnce(remoteJson)
 
     const items = await loadSocTemplateCatalog()
 
-    expect(listRemoteContentFiles).toHaveBeenCalledWith({
+    expect(listRemoteContentFiles).not.toHaveBeenCalled()
+    expect(readRemoteJsonFile).toHaveBeenNthCalledWith(1, {
       source: 'socTemplateCatalog',
-      pattern: '**/*.json',
-      maxFiles: 200,
+      path: 'manifest.json',
+    })
+    expect(readRemoteJsonFile).toHaveBeenNthCalledWith(2, {
+      source: 'socTemplateCatalog',
+      path: 'templates/ysyxSoC/metadata/ysyxSoCASIC.json',
     })
     expect(items[0]).toMatchObject({
       id: 'ysyxSoCASIC',
       name: 'ysyxSoCASIC',
-      sourceLabel: 'remote:socTemplateCatalog/ysyxSoCASIC.json',
+      sourceLabel: 'remote:socTemplateCatalog/templates/ysyxSoC/metadata/ysyxSoCASIC.json',
     })
     expect(items[0]?.thumbnail).toBeDefined()
   })
 
   it('loads detail by template id and applies locally persisted selected core', async () => {
-    vi.mocked(listRemoteContentFiles).mockResolvedValue([
-      { source: 'socTemplateCatalog', path: 'ysyxSoCASIC.json', name: 'ysyxSoCASIC.json' },
-    ])
-    vi.mocked(readRemoteJsonFile).mockResolvedValue(remoteJson)
-    settings.set('ecos.socTemplate.selectedCore.remote:socTemplateCatalog/ysyxSoCASIC.json', 3)
+    vi.mocked(readRemoteJsonFile)
+      .mockResolvedValueOnce(manifestJson)
+      .mockResolvedValueOnce(remoteJson)
+    settings.set('ecos.socTemplate.selectedCore.remote:socTemplateCatalog/templates/ysyxSoC/metadata/ysyxSoCASIC.json', 3)
 
     const detail = await loadSocTemplateDetail('ysyxSoCASIC')
 
@@ -90,22 +126,20 @@ describe('socTemplateCatalog remote source', () => {
   })
 
   it('persists selected core locally instead of writing remote JSON', async () => {
-    vi.mocked(listRemoteContentFiles).mockResolvedValue([
-      { source: 'socTemplateCatalog', path: 'ysyxSoCASIC.json', name: 'ysyxSoCASIC.json' },
-    ])
-    vi.mocked(readRemoteJsonFile).mockResolvedValue(remoteJson)
+    vi.mocked(readRemoteJsonFile)
+      .mockResolvedValueOnce(manifestJson)
+      .mockResolvedValueOnce(remoteJson)
 
     const detail = await selectSocTemplateCore('ysyxSoCASIC', 3)
 
-    expect(settings.get('ecos.socTemplate.selectedCore.remote:socTemplateCatalog/ysyxSoCASIC.json')).toBe(3)
+    expect(settings.get('ecos.socTemplate.selectedCore.remote:socTemplateCatalog/templates/ysyxSoC/metadata/ysyxSoCASIC.json')).toBe(3)
     expect(detail.cores.find(core => core.id === 3)?.selected).toBe(1)
   })
 
   it('rejects unknown template ids from the remote index', async () => {
-    vi.mocked(listRemoteContentFiles).mockResolvedValue([
-      { source: 'socTemplateCatalog', path: 'ysyxSoCASIC.json', name: 'ysyxSoCASIC.json' },
-    ])
-    vi.mocked(readRemoteJsonFile).mockResolvedValue(remoteJson)
+    vi.mocked(readRemoteJsonFile)
+      .mockResolvedValueOnce(manifestJson)
+      .mockResolvedValueOnce(remoteJson)
 
     await expect(loadSocTemplateDetail('missing-id')).rejects.toThrow('Unknown SoC template: missing-id')
   })

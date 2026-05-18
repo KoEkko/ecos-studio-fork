@@ -71,6 +71,31 @@ describe('RemoteContentService', () => {
       .toBe('{"design_name":"ysyxSoCASIC"}')
   })
 
+  it('reads files from repository root sources without prefixing an empty path segment', async () => {
+    const fetchImpl = vi.fn(async (...args: Parameters<typeof fetch>) => {
+      const [url] = args
+      expect(String(url)).toBe('https://api.github.com/repos/openecos-projects/soc-templates/contents/manifest.json?ref=main')
+      return new Response('{"schema_version":1}', { status: 200 })
+    })
+
+    const service = new RemoteContentService({
+      fetchImpl,
+      sources: {
+        socTemplateCatalog: {
+          provider: 'github',
+          owner: 'openecos-projects',
+          repo: 'soc-templates',
+          ref: 'main',
+          rootPath: '',
+        },
+      },
+    })
+
+    await expect(service.readTextFile({ source: 'socTemplateCatalog', path: 'manifest.json' }))
+      .resolves
+      .toBe('{"schema_version":1}')
+  })
+
   it('parses JSON files and reports invalid JSON with the source path', async () => {
     const service = new RemoteContentService({
       fetchImpl: vi.fn(async () => new Response('not-json', { status: 200 })),
