@@ -1,4 +1,5 @@
 import type { TileGenerationRequest, TileGenerationResult } from '../types/tile.ts'
+import type { RemoteContentApi } from './remoteContent.ts'
 import type {
   DesktopEventUnsubscribe,
   DesktopMenuEventId,
@@ -99,6 +100,7 @@ export interface DesktopApi {
     set(key: string, value: DesktopSettingsValue): Promise<void>
     delete(key: string): Promise<void>
   }
+  remoteContent: RemoteContentApi
   dialog: {
     pickDirectory(options?: DesktopDirectoryDialogOptions): Promise<string | null>
     pickFiles(options?: DesktopFileDialogOptions): Promise<string[] | null>

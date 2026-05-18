@@ -1,15 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ref, type Ref } from 'vue'
 
-const {
-  currentProject,
-  fetchSharedHomeData,
-  readProjectTextFile,
-  writeProjectTextFile,
-  resolveProjectPathAccess,
-} = vi.hoisted(() => ({
+const testState = vi.hoisted(() => ({
   currentProject: {
     value: { path: '/workspace/demo' } as { path: string } | null,
   },
+  sseMessages: null as Ref<unknown[]> | null,
+  stepRefreshCounter: null as Ref<number> | null,
   fetchSharedHomeData: vi.fn(),
   readProjectTextFile: vi.fn(),
   writeProjectTextFile: vi.fn(),
@@ -18,7 +15,9 @@ const {
 
 vi.mock('./useWorkspace', () => ({
   useWorkspace: () => ({
-    currentProject,
+    currentProject: testState.currentProject,
+    sseMessages: testState.sseMessages,
+    stepRefreshCounter: testState.stepRefreshCounter,
   }),
 }))
 
@@ -29,35 +28,37 @@ vi.mock('./useTauri', () => ({
 }))
 
 vi.mock('./useHomeData', () => ({
-  fetchSharedHomeData,
+  fetchSharedHomeData: testState.fetchSharedHomeData,
   convertRemoteToLocalPath: (path: string) => path,
 }))
 
 vi.mock('@/utils/projectFiles', () => ({
-  readProjectTextFile,
-  writeProjectTextFile,
+  readProjectTextFile: testState.readProjectTextFile,
+  writeProjectTextFile: testState.writeProjectTextFile,
 }))
 
 vi.mock('@/utils/projectFs', () => ({
-  resolveProjectPathAccess,
+  resolveProjectPathAccess: testState.resolveProjectPathAccess,
 }))
 
 import { useParameters } from './useParameters'
 
 describe('useParameters desktop bridge integration', () => {
   beforeEach(() => {
-    currentProject.value = { path: '/workspace/demo' }
-    fetchSharedHomeData.mockReset()
-    readProjectTextFile.mockReset()
-    writeProjectTextFile.mockReset()
-    resolveProjectPathAccess.mockClear()
+    testState.currentProject.value = { path: '/workspace/demo' }
+    testState.sseMessages = ref([])
+    testState.stepRefreshCounter = ref(0)
+    testState.fetchSharedHomeData.mockReset()
+    testState.readProjectTextFile.mockReset()
+    testState.writeProjectTextFile.mockReset()
+    testState.resolveProjectPathAccess.mockClear()
   })
 
   it('loads and saves parameters through the bridge-backed file helpers', async () => {
-    fetchSharedHomeData.mockResolvedValue({
+    testState.fetchSharedHomeData.mockResolvedValue({
       parameters: '/workspace/demo/home/parameters.json',
     })
-    readProjectTextFile.mockResolvedValue(JSON.stringify({
+    testState.readProjectTextFile.mockResolvedValue(JSON.stringify({
       PDK: 'ics55',
       Design: 'demo',
       'Top module': 'chip_top',
@@ -86,7 +87,7 @@ describe('useParameters desktop bridge integration', () => {
     const parameters = useParameters()
 
     await vi.waitFor(() => {
-      expect(readProjectTextFile).toHaveBeenCalledWith('/workspace/demo/home/parameters.json')
+      expect(testState.readProjectTextFile).toHaveBeenCalledWith('/workspace/demo/home/parameters.json')
     })
 
     expect(parameters.config.design).toBe('demo')
@@ -96,8 +97,8 @@ describe('useParameters desktop bridge integration', () => {
 
     await expect(parameters.saveParameters()).resolves.toBe(true)
 
-    expect(resolveProjectPathAccess).toHaveBeenCalledWith('/workspace/demo/home/parameters.json')
-    expect(writeProjectTextFile).toHaveBeenCalledWith(
+    expect(testState.resolveProjectPathAccess).toHaveBeenCalledWith('/workspace/demo/home/parameters.json')
+    expect(testState.writeProjectTextFile).toHaveBeenCalledWith(
       '/workspace/demo/home/parameters.json',
       expect.stringContaining('"Design": "updated_demo"'),
     )

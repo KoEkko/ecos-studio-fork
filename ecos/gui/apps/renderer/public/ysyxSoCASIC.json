@@ -1,0 +1,1220 @@
+{
+    "file_path": "/nfs/share/home/huangzengrong/ecc_benchamrks/ics55_tcl/ysyxSoCASIC/soc_ecc/output/soc.json",
+    "design_name": "ysyxSoCASIC",
+    "dbu": 1000,
+    "die": {
+        "llx": 0,
+        "lly": 0,
+        "urx": 2000000,
+        "ury": 2000000,
+        "width": 2000000,
+        "height": 2000000,
+        "area": 4000000000000
+    },
+    "core": {
+        "llx": 160000,
+        "lly": 160000,
+        "urx": 1840000,
+        "ury": 1840000,
+        "width": 1680000,
+        "height": 1680000,
+        "area": 2822400000000
+    },
+    "io_pins": {
+        "number": 58,
+        "list": [
+            {
+                "name": "clock",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "reset",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "dip[3]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "dip[2]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "dip[1]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "dip[0]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "spi_sck",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "spi_ss[7]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "spi_ss[6]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "spi_ss[5]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "spi_ss[4]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "spi_ss[3]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "spi_ss[2]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "spi_ss[1]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "spi_ss[0]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "spi_mosi",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "spi_miso",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "uart_rx",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "uart_tx",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_clk",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_cke",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_cs",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_ras",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_cas",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_we",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_a[12]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_a[11]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_a[10]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_a[9]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_a[8]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_a[7]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_a[6]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_a[5]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_a[4]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_a[3]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_a[2]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_a[1]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_a[0]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_ba[1]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_ba[0]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_dqm[1]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_dqm[0]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_dq[15]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_dq[14]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_dq[13]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_dq[12]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_dq[11]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_dq[10]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_dq[9]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_dq[8]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_dq[7]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_dq[6]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_dq[5]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_dq[4]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_dq[3]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_dq[2]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_dq[1]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            },
+            {
+                "name": "sdram_dq[0]",
+                "info": "",
+                "bounding_box": {
+                    "llx": 0,
+                    "lly": 0,
+                    "urx": 0,
+                    "ury": 0,
+                    "width": 0,
+                    "height": 0,
+                    "area": 0
+                }
+            }
+        ]
+    },
+    "cores": {
+        "selected_core_id": 0,
+        "number": 16,
+        "list": [
+            {
+                "core_id": 0,
+                "info": "",
+                "name": "u_GEN/u_GEN_1/core0",
+                "io_align": "right",
+                "coordinate": {
+                    "x": 260000,
+                    "y": 1540000
+                },
+                "orient": "N",
+                "bounding_box": {
+                    "llx": 260000,
+                    "lly": 1540000,
+                    "urx": 460000,
+                    "ury": 1740000,
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 40000000000
+                },
+                "cell_master": {
+                    "name": "NPC",
+                    "info": "",
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 1345294336
+                }
+            },
+            {
+                "core_id": 1,
+                "info": "",
+                "name": "u_GEN/u_GEN_1/core15",
+                "io_align": "right",
+                "coordinate": {
+                    "x": 260000,
+                    "y": 1240000
+                },
+                "orient": "N",
+                "bounding_box": {
+                    "llx": 260000,
+                    "lly": 1240000,
+                    "urx": 460000,
+                    "ury": 1440000,
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 40000000000
+                },
+                "cell_master": {
+                    "name": "NPC",
+                    "info": "",
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 1345294336
+                }
+            },
+            {
+                "core_id": 2,
+                "info": "",
+                "name": "u_GEN/u_GEN_1/core14",
+                "io_align": "right",
+                "coordinate": {
+                    "x": 260000,
+                    "y": 940000
+                },
+                "orient": "N",
+                "bounding_box": {
+                    "llx": 260000,
+                    "lly": 940000,
+                    "urx": 460000,
+                    "ury": 1140000,
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 40000000000
+                },
+                "cell_master": {
+                    "name": "NPC",
+                    "info": "",
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 1345294336
+                }
+            },
+            {
+                "core_id": 3,
+                "info": "",
+                "name": "u_GEN/u_GEN_1/core13",
+                "io_align": "right",
+                "coordinate": {
+                    "x": 260000,
+                    "y": 640000
+                },
+                "orient": "N",
+                "bounding_box": {
+                    "llx": 260000,
+                    "lly": 640000,
+                    "urx": 460000,
+                    "ury": 840000,
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 40000000000
+                },
+                "cell_master": {
+                    "name": "NPC",
+                    "info": "",
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 1345294336
+                }
+            },
+            {
+                "core_id": 4,
+                "info": "",
+                "name": "u_GEN/u_GEN_1/core12",
+                "io_align": "right",
+                "coordinate": {
+                    "x": 260000,
+                    "y": 340000
+                },
+                "orient": "N",
+                "bounding_box": {
+                    "llx": 260000,
+                    "lly": 340000,
+                    "urx": 460000,
+                    "ury": 540000,
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 40000000000
+                },
+                "cell_master": {
+                    "name": "NPC",
+                    "info": "",
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 1345294336
+                }
+            },
+            {
+                "core_id": 5,
+                "info": "",
+                "name": "u_GEN/u_GEN_1/core1",
+                "io_align": "right",
+                "coordinate": {
+                    "x": 560000,
+                    "y": 1540000
+                },
+                "orient": "N",
+                "bounding_box": {
+                    "llx": 560000,
+                    "lly": 1540000,
+                    "urx": 760000,
+                    "ury": 1740000,
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 40000000000
+                },
+                "cell_master": {
+                    "name": "NPC",
+                    "info": "",
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 1345294336
+                }
+            },
+            {
+                "core_id": 6,
+                "info": "",
+                "name": "u_GEN/u_GEN_1/core11",
+                "io_align": "right",
+                "coordinate": {
+                    "x": 560000,
+                    "y": 340000
+                },
+                "orient": "N",
+                "bounding_box": {
+                    "llx": 560000,
+                    "lly": 340000,
+                    "urx": 760000,
+                    "ury": 540000,
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 40000000000
+                },
+                "cell_master": {
+                    "name": "NPC",
+                    "info": "",
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 1345294336
+                }
+            },
+            {
+                "core_id": 7,
+                "info": "",
+                "name": "u_GEN/u_GEN_1/core2",
+                "io_align": "right",
+                "coordinate": {
+                    "x": 860000,
+                    "y": 1540000
+                },
+                "orient": "N",
+                "bounding_box": {
+                    "llx": 860000,
+                    "lly": 1540000,
+                    "urx": 1060000,
+                    "ury": 1740000,
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 40000000000
+                },
+                "cell_master": {
+                    "name": "NPC",
+                    "info": "",
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 1345294336
+                }
+            },
+            {
+                "core_id": 8,
+                "info": "",
+                "name": "u_GEN/u_GEN_1/core10",
+                "io_align": "right",
+                "coordinate": {
+                    "x": 860000,
+                    "y": 340000
+                },
+                "orient": "N",
+                "bounding_box": {
+                    "llx": 860000,
+                    "lly": 340000,
+                    "urx": 1060000,
+                    "ury": 540000,
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 40000000000
+                },
+                "cell_master": {
+                    "name": "NPC",
+                    "info": "",
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 1345294336
+                }
+            },
+            {
+                "core_id": 9,
+                "info": "",
+                "name": "u_GEN/u_GEN_1/core3",
+                "io_align": "left",
+                "coordinate": {
+                    "x": 1160000,
+                    "y": 1540000
+                },
+                "orient": "FN",
+                "bounding_box": {
+                    "llx": 1160000,
+                    "lly": 1540000,
+                    "urx": 1360000,
+                    "ury": 1740000,
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 40000000000
+                },
+                "cell_master": {
+                    "name": "NPC",
+                    "info": "",
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 1345294336
+                }
+            },
+            {
+                "core_id": 10,
+                "info": "",
+                "name": "u_GEN/u_GEN_1/core9",
+                "io_align": "left",
+                "coordinate": {
+                    "x": 1160000,
+                    "y": 340000
+                },
+                "orient": "FN",
+                "bounding_box": {
+                    "llx": 1160000,
+                    "lly": 340000,
+                    "urx": 1360000,
+                    "ury": 540000,
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 40000000000
+                },
+                "cell_master": {
+                    "name": "NPC",
+                    "info": "",
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 1345294336
+                }
+            },
+            {
+                "core_id": 11,
+                "info": "",
+                "name": "u_GEN/u_GEN_1/core4",
+                "io_align": "left",
+                "coordinate": {
+                    "x": 1460000,
+                    "y": 1540000
+                },
+                "orient": "FN",
+                "bounding_box": {
+                    "llx": 1460000,
+                    "lly": 1540000,
+                    "urx": 1660000,
+                    "ury": 1740000,
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 40000000000
+                },
+                "cell_master": {
+                    "name": "NPC",
+                    "info": "",
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 1345294336
+                }
+            },
+            {
+                "core_id": 12,
+                "info": "",
+                "name": "u_GEN/u_GEN_1/core5",
+                "io_align": "left",
+                "coordinate": {
+                    "x": 1460000,
+                    "y": 1240000
+                },
+                "orient": "FN",
+                "bounding_box": {
+                    "llx": 1460000,
+                    "lly": 1240000,
+                    "urx": 1660000,
+                    "ury": 1440000,
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 40000000000
+                },
+                "cell_master": {
+                    "name": "NPC",
+                    "info": "",
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 1345294336
+                }
+            },
+            {
+                "core_id": 13,
+                "info": "",
+                "name": "u_GEN/u_GEN_1/core6",
+                "io_align": "left",
+                "coordinate": {
+                    "x": 1460000,
+                    "y": 940000
+                },
+                "orient": "FN",
+                "bounding_box": {
+                    "llx": 1460000,
+                    "lly": 940000,
+                    "urx": 1660000,
+                    "ury": 1140000,
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 40000000000
+                },
+                "cell_master": {
+                    "name": "NPC",
+                    "info": "",
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 1345294336
+                }
+            },
+            {
+                "core_id": 14,
+                "info": "",
+                "name": "u_GEN/u_GEN_1/core7",
+                "io_align": "left",
+                "coordinate": {
+                    "x": 1460000,
+                    "y": 640000
+                },
+                "orient": "FN",
+                "bounding_box": {
+                    "llx": 1460000,
+                    "lly": 640000,
+                    "urx": 1660000,
+                    "ury": 840000,
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 40000000000
+                },
+                "cell_master": {
+                    "name": "NPC",
+                    "info": "",
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 1345294336
+                }
+            },
+            {
+                "core_id": 15,
+                "info": "",
+                "name": "u_GEN/u_GEN_1/core8",
+                "io_align": "left",
+                "coordinate": {
+                    "x": 1460000,
+                    "y": 340000
+                },
+                "orient": "FN",
+                "bounding_box": {
+                    "llx": 1460000,
+                    "lly": 340000,
+                    "urx": 1660000,
+                    "ury": 540000,
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 40000000000
+                },
+                "cell_master": {
+                    "name": "NPC",
+                    "info": "",
+                    "width": 200000,
+                    "height": 200000,
+                    "area": 1345294336
+                }
+            }
+        ]
+    }
+}

@@ -43,6 +43,11 @@ function registerHandlers() {
       get: vi.fn(),
       set: vi.fn(),
     },
+    remoteContentService: {
+      listFiles: vi.fn(),
+      readJsonFile: vi.fn(),
+      readTextFile: vi.fn(),
+    },
     workspaceService: {
       clearProjectRoot: vi.fn(),
       getApiPort: vi.fn(),
@@ -115,6 +120,9 @@ describe('registerIpc', () => {
       desktopApiIpcChannels.settingsGet,
       desktopApiIpcChannels.settingsSet,
       desktopApiIpcChannels.settingsDelete,
+      desktopApiIpcChannels.remoteContentListFiles,
+      desktopApiIpcChannels.remoteContentReadTextFile,
+      desktopApiIpcChannels.remoteContentReadJsonFile,
       desktopApiIpcChannels.dialogPickDirectory,
       desktopApiIpcChannels.dialogPickFiles,
       desktopApiIpcChannels.workspaceGetApiPort,
@@ -443,6 +451,50 @@ describe('registerIpc', () => {
       '{"PDK":"ics55"}',
     )
     expect(services.workspaceService.clearProjectRoot).toHaveBeenCalledTimes(1)
+  })
+
+  it('delegates remote content calls to the provided service', async () => {
+    const { handlers, services } = registerHandlers()
+    const event = { sender: { id: 'web-contents' } }
+    const listRequest = {
+      source: 'socTemplateCatalog',
+      pattern: '**/*.json',
+      maxFiles: 200,
+    }
+    const readRequest = {
+      source: 'socTemplateCatalog',
+      path: 'ysyxSoCASIC.json',
+    }
+
+    services.remoteContentService.listFiles.mockResolvedValue([
+      {
+        source: 'socTemplateCatalog',
+        path: 'ysyxSoCASIC.json',
+        name: 'ysyxSoCASIC.json',
+      },
+    ])
+    services.remoteContentService.readTextFile.mockResolvedValue('{"design_name":"ysyxSoCASIC"}')
+    services.remoteContentService.readJsonFile.mockResolvedValue({ design_name: 'ysyxSoCASIC' })
+
+    await expect(
+      handlers.get(desktopApiIpcChannels.remoteContentListFiles)?.(event, listRequest),
+    ).resolves.toEqual([
+      {
+        source: 'socTemplateCatalog',
+        path: 'ysyxSoCASIC.json',
+        name: 'ysyxSoCASIC.json',
+      },
+    ])
+    await expect(
+      handlers.get(desktopApiIpcChannels.remoteContentReadTextFile)?.(event, readRequest),
+    ).resolves.toBe('{"design_name":"ysyxSoCASIC"}')
+    await expect(
+      handlers.get(desktopApiIpcChannels.remoteContentReadJsonFile)?.(event, readRequest),
+    ).resolves.toEqual({ design_name: 'ysyxSoCASIC' })
+
+    expect(services.remoteContentService.listFiles).toHaveBeenCalledWith(listRequest)
+    expect(services.remoteContentService.readTextFile).toHaveBeenCalledWith(readRequest)
+    expect(services.remoteContentService.readJsonFile).toHaveBeenCalledWith(readRequest)
   })
 
   it('delegates tile generation to the provided tile service', async () => {

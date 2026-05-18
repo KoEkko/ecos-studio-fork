@@ -325,12 +325,6 @@ function loadGalleryComponent(vue: VueRuntime) {
   const moduleExports: { default?: unknown } = {}
   const customRequire = (id: string) => {
     if (id === 'vue') return vue
-    if (id === '@/composables/socTemplateCatalog') {
-      return {
-        importSocTemplateFromJsonText: vi.fn(),
-        removeImportedSocTemplate: vi.fn(),
-      }
-    }
     return require(id)
   }
 
@@ -413,7 +407,9 @@ describe('SoCTemplateGallery', () => {
       error: null,
     })
 
-    expect(container.textContent).toContain('No templates in this workspace yet')
+    expect(container.textContent).toContain('No remote templates available')
+    expect(container.textContent).toContain('remote SoC catalog')
+    expect(container.textContent).not.toContain('import a')
 
     app.unmount()
   })
@@ -450,6 +446,9 @@ describe('SoCTemplateGallery', () => {
 
     expect(container.textContent).toContain('Demo SoC')
     expect(container.textContent).toContain('Reference template')
+    expect(container.textContent).toContain('Remote catalog')
+    expect(container.textContent).not.toContain('Import JSON')
+    expect(container.textContent).not.toContain('Remove')
     expect(container.textContent?.toLowerCase()).toContain('cores')
     expect(container.textContent).toContain('2')
     expect(container.querySelectorAll('.soc-gallery__thumb-core')).toHaveLength(2)

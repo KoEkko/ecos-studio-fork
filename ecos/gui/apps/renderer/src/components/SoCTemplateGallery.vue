@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { importSocTemplateFromJsonText, removeImportedSocTemplate } from '@/composables/socTemplateCatalog'
 import type { SocTemplateSummary } from '@/composables/socTemplateMapper'
 
 defineProps<{
@@ -9,52 +7,17 @@ defineProps<{
   error: string | null
 }>()
 
-const emit = defineEmits<{
+defineEmits<{
   back: []
   open: [templateId: string]
   retry: []
-  'catalog-changed': []
 }>()
-
-const fileInputRef = ref<HTMLInputElement | null>(null)
-const importError = ref<string | null>(null)
-const importBusy = ref(false)
 
 function coreDots(count: number): number[] {
   const n = Math.max(1, Math.min(count, 9))
   return Array.from({ length: n }, (_, i) => i)
 }
 
-function triggerImportPicker(): void {
-  importError.value = null
-  fileInputRef.value?.click()
-}
-
-async function onImportFileChange(event: Event): Promise<void> {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file) return
-
-  importBusy.value = true
-  importError.value = null
-
-  try {
-    const text = await file.text()
-    const label = file.name.replace(/\.json$/i, '') || file.name
-    importSocTemplateFromJsonText(text, label)
-    emit('catalog-changed')
-  } catch (err) {
-    importError.value = err instanceof Error ? err.message : 'Import failed.'
-  } finally {
-    importBusy.value = false
-  }
-}
-
-function onRemoveImported(templateId: string): void {
-  removeImportedSocTemplate(templateId)
-  emit('catalog-changed')
-}
 </script>
 
 <template>
@@ -78,47 +41,20 @@ function onRemoveImported(templateId: string): void {
               <span class="soc-gallery__mono text-[10px] font-semibold uppercase tracking-[0.22em] text-(--text-secondary)">RetroSoC</span>
               <span class="h-3 w-px bg-(--border-color)" aria-hidden="true" />
               <span class="rounded-md bg-(--accent-color)/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-(--accent-color)">
-                Floorplan catalog
+                Remote catalog
               </span>
             </div>
             <h1 class="mt-3 font-bold tracking-tight text-(--text-primary) sm:text-4xl sm:leading-[1.08]" style="font-size: clamp(1.65rem, 4vw, 2.35rem)">
               Templates
             </h1>
             <p class="mt-3 max-w-lg text-sm leading-relaxed text-(--text-secondary) sm:text-[15px]">
-              Inspect floorplans and core bounding boxes from workspace templates (soc-style JSON). Server-backed listings will arrive later — for now use
-              <strong class="font-semibold text-(--text-primary)"> Import JSON </strong>
-              below.
-            </p>
-            <p
-              class="mt-4 max-w-2xl rounded-xl border border-(--accent-color)/22 bg-(--accent-color)/[0.06] px-4 py-3 text-xs leading-relaxed text-(--text-secondary)"
-              role="note"
-            >
-              <span class="font-semibold text-(--text-primary)">Coming soon:</span>
-              templates loaded from the ECOS API instead of only this browser. Imported files stay on this device until sync exists.
+              Inspect floorplans and core bounding boxes from the ECOS remote SoC catalog.
             </p>
           </div>
         </div>
 
         <div class="flex w-full flex-col gap-3 sm:max-w-md sm:self-end lg:w-auto lg:max-w-none">
-          <input
-            ref="fileInputRef"
-            type="file"
-            accept=".json,application/json"
-            class="sr-only"
-            aria-hidden="true"
-            tabindex="-1"
-            @change="onImportFileChange"
-          />
           <div class="flex flex-wrap items-center gap-3 sm:justify-end">
-            <button
-              type="button"
-              class="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-(--accent-color) px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_28px_-14px_color-mix(in_srgb,var(--accent-color)_75%,transparent)] transition-[transform,box-shadow,opacity] duration-200 hover:-translate-y-px hover:shadow-[0_16px_36px_-16px_color-mix(in_srgb,var(--accent-color)_55%,transparent)] disabled:cursor-not-allowed disabled:opacity-45 sm:flex-none"
-              :disabled="importBusy"
-              @click="triggerImportPicker"
-            >
-              <i class="ri-upload-cloud-2-line text-lg" aria-hidden="true"></i>
-              Import JSON
-            </button>
             <div
               class="inline-flex items-center gap-3 rounded-2xl border border-(--border-color) bg-(--bg-primary) px-4 py-2.5 text-xs font-medium text-(--text-secondary) shadow-inner"
               aria-label="catalog summary"
@@ -130,12 +66,6 @@ function onRemoveImported(templateId: string): void {
         </div>
       </div>
     </header>
-
-    <Transition name="soc-gallery-fade">
-      <p v-if="importError" class="rounded-xl border border-red-500/25 bg-red-500/[0.06] px-4 py-3 text-sm text-red-600 dark:text-red-400" role="alert">
-        {{ importError }}
-      </p>
-    </Transition>
 
     <!-- Loading -->
     <div
@@ -190,9 +120,9 @@ function onRemoveImported(templateId: string): void {
       >
         ∅
       </div>
-      <h2 class="text-lg font-semibold tracking-tight text-(--text-primary)">No templates in this workspace yet</h2>
+      <h2 class="text-lg font-semibold tracking-tight text-(--text-primary)">No remote templates available</h2>
       <p class="mx-auto mt-2 max-w-md text-sm leading-relaxed text-(--text-secondary)">
-        The catalog will be filled from the server when that integration ships. Until then, import a <span class="soc-gallery__mono text-(--text-primary)/90">soc.json</span>-style file — it will appear here for inspection on this machine.
+        The remote SoC catalog did not return any templates. Retry the catalog load or check the desktop network connection.
       </p>
     </div>
 
@@ -201,7 +131,7 @@ function onRemoveImported(templateId: string): void {
       <div class="flex flex-wrap items-end justify-between gap-4 border-b border-(--border-color) pb-4">
         <div>
           <p class="soc-gallery__mono text-[10px] font-semibold uppercase tracking-[0.2em] text-(--text-secondary)">Registry</p>
-          <p class="mt-1 text-sm text-(--text-secondary)">Selectable templates in this workspace.</p>
+          <p class="mt-1 text-sm text-(--text-secondary)">Selectable templates from the remote SoC catalog.</p>
         </div>
         <span class="soc-gallery__mono rounded-lg border border-(--border-color) bg-(--bg-primary) px-3 py-1.5 text-[11px] font-medium tabular-nums text-(--text-secondary)">
           {{ items.length }} entries
@@ -267,9 +197,9 @@ function onRemoveImported(templateId: string): void {
                 <div class="flex flex-wrap items-center gap-x-2 gap-y-1.5">
                   <span
                     class="rounded-md bg-(--text-secondary)/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-(--text-secondary)"
-                    title="Stored from an imported file on this browser"
+                    title="Loaded from the ECOS remote SoC catalog"
                   >
-                    Local
+                    Remote
                   </span>
                   <span
                     class="inline-flex items-baseline gap-1 rounded-lg border border-(--border-color)/85 bg-(--bg-primary) px-2 py-0.5 shadow-[inset_0_1px_0_0_color-mix(in_srgb,var(--border-color)_35%,transparent)]"
@@ -285,14 +215,6 @@ function onRemoveImported(templateId: string): void {
             </div>
 
             <div class="mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-(--border-color)/80 pt-4">
-              <button
-                type="button"
-                class="inline-flex items-center gap-1.5 rounded-xl border border-(--border-color) px-3.5 py-2 text-sm font-medium text-(--text-secondary) transition-colors hover:border-red-500/45 hover:bg-red-500/[0.07] hover:text-red-600"
-                @click="onRemoveImported(item.id)"
-              >
-                <i class="ri-delete-bin-line text-base" aria-hidden="true"></i>
-                Remove
-              </button>
               <button
                 type="button"
                 class="inline-flex items-center gap-2 rounded-xl bg-(--accent-color) px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_24px_-14px_color-mix(in_srgb,var(--accent-color)_70%,transparent)] transition-[transform,opacity] duration-200 hover:-translate-y-px hover:opacity-95"

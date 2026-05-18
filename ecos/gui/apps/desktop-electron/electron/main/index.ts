@@ -14,6 +14,7 @@ import {
 import { configureElectronLoggerFile, electronLogger } from '../services/logger'
 import { registerApplicationMenu } from '../services/menuService'
 import { ProjectScopeService } from '../services/projectScopeService'
+import { RemoteContentService } from '../services/remoteContentService'
 import { SettingsStore } from '../services/settingsStore'
 import { TileService } from '../services/tileService'
 import { bindWindowEvents } from '../services/windowService'
@@ -24,6 +25,7 @@ let isShuttingDown = false
 let services:
   | {
       apiServerService: ApiServerService
+      remoteContentService: RemoteContentService
       settingsStore: SettingsStore
       tileService: TileService
       workspaceService: WorkspaceService
@@ -73,6 +75,7 @@ function getDesktopServices() {
   })
   const projectScopeService = new ProjectScopeService()
   const apiServerService = new ApiServerService()
+  const remoteContentService = new RemoteContentService()
   const workspaceService = new WorkspaceService({
     apiPortProvider: apiServerService,
     projectScopeProvider: projectScopeService,
@@ -83,6 +86,7 @@ function getDesktopServices() {
 
   services = {
     apiServerService,
+    remoteContentService,
     settingsStore,
     tileService,
     workspaceService,
@@ -97,6 +101,7 @@ async function launchMainWindow(): Promise<void> {
   if (!ipcRegistered) {
     registerIpc(undefined, {
       appInfoService: desktopServices.apiServerService,
+      remoteContentService: desktopServices.remoteContentService,
       settingsStore: desktopServices.settingsStore,
       tileService: desktopServices.tileService,
       workspaceService: desktopServices.workspaceService,

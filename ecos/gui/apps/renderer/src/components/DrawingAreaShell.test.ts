@@ -1,7 +1,7 @@
 /// <reference types="node" />
 
 import { createRequire } from 'node:module'
-import { parse, compileTemplate } from 'vue/compiler-sfc'
+import { parse, compileScript } from 'vue/compiler-sfc'
 import * as ts from 'typescript'
 import { afterEach, describe, expect, it } from 'vitest'
 import source from './DrawingAreaShell.vue?raw'
@@ -326,13 +326,12 @@ function loadDrawingAreaShellComponent(vue: VueRuntime) {
     filename: 'DrawingAreaShell.vue',
   })
 
-  const template = compileTemplate({
+  const script = compileScript(descriptor, {
     id: 'drawing-area-shell',
-    filename: 'DrawingAreaShell.vue',
-    source: descriptor.template?.content ?? '',
+    inlineTemplate: true,
   })
 
-  const transpiled = ts.transpileModule(`${template.code}\nmodule.exports.default = { render }`, {
+  const transpiled = ts.transpileModule(script.content, {
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
       target: ts.ScriptTarget.ES2019,
@@ -393,5 +392,13 @@ describe('DrawingAreaShell', () => {
 
     app.unmount()
     mountedApps.pop()
+  })
+
+  it('supports a frameless variant for embedded previews', () => {
+    expect(source).toContain('frameless?: boolean')
+    expect(source).toContain("'drawing-area-shell--frameless': frameless")
+    expect(source).toContain('.drawing-area-shell--frameless')
+    expect(source).toContain('padding: 0')
+    expect(source).toContain('border: 0')
   })
 })

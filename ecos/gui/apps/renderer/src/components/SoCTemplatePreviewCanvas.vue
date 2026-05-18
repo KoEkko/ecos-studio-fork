@@ -426,7 +426,6 @@ function selectCore(coreId: number): void {
   box-shadow:
     0 1px 0 color-mix(in srgb, var(--border-color) 64%, transparent),
     inset 0 1px 0 color-mix(in srgb, var(--bg-primary) 70%, transparent),
-    inset 0 0 0 10px color-mix(in srgb, var(--bg-primary) 30%, transparent),
     0 30px 54px -40px color-mix(in srgb, var(--text-primary) 36%, transparent);
   overflow: hidden;
   box-sizing: border-box;

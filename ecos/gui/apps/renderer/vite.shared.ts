@@ -24,6 +24,16 @@ type RendererUserConfig = UserConfig & {
   test?: RendererVitestConfig
 }
 
+function resolveRendererDevPort(): number {
+  const rawPort = process.env.ECOS_RENDERER_DEV_PORT
+  if (!rawPort) return 1420
+
+  const parsedPort = Number(rawPort)
+  return Number.isInteger(parsedPort) && parsedPort > 0 && parsedPort <= 65535
+    ? parsedPort
+    : 1420
+}
+
 export function createRendererViteConfig({
   aliasTarget,
   build,
@@ -84,7 +94,7 @@ export function createRendererViteConfig({
     ],
     clearScreen: false,
     server: {
-      port: 1420,
+      port: resolveRendererDevPort(),
       strictPort: true,
       fs: {
         allow: fsAllow,

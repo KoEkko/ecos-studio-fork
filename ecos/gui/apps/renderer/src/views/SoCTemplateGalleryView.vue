@@ -46,7 +46,6 @@ onMounted(loadCatalog)
         @back="router.push('/')"
         @open="handleOpen"
         @retry="loadCatalog"
-        @catalog-changed="loadCatalog"
       />
     </div>
   </div>

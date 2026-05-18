@@ -1,5 +1,14 @@
+<script setup lang="ts">
+defineProps<{
+  frameless?: boolean
+}>()
+</script>
+
 <template>
-  <section class="drawing-area-shell">
+  <section
+    class="drawing-area-shell"
+    :class="{ 'drawing-area-shell--frameless': frameless }"
+  >
     <div class="drawing-area-shell__body">
       <slot />
     </div>
@@ -49,5 +58,23 @@
 .drawing-area-shell__body > * {
   position: relative;
   z-index: 1;
+}
+
+.drawing-area-shell--frameless {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.drawing-area-shell--frameless .drawing-area-shell__body {
+  padding: 0;
+  background: transparent;
+}
+
+.drawing-area-shell--frameless .drawing-area-shell__body::before {
+  inset: 0;
+  border-radius: 0;
+  border: 0;
+  box-shadow: none;
 }
 </style>

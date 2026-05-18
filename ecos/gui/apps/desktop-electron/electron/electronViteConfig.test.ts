@@ -42,4 +42,28 @@ describe('desktop electron build config', () => {
 
     expect(packageJson.scripts?.package).toContain('rm -rf release')
   })
+
+  it('allows overriding the renderer dev port for local smoke tests', () => {
+    const originalPort = process.env.ECOS_RENDERER_DEV_PORT
+    process.env.ECOS_RENDERER_DEV_PORT = '1421'
+
+    try {
+      const resolvedConfig = typeof electronViteConfig === 'function'
+        ? electronViteConfig({
+            command: 'serve',
+            isPreview: false,
+            mode: 'development',
+          })
+        : electronViteConfig
+
+      expect(resolvedConfig.renderer?.server?.port).toBe(1421)
+      expect(resolvedConfig.renderer?.server?.strictPort).toBe(true)
+    } finally {
+      if (originalPort == null) {
+        delete process.env.ECOS_RENDERER_DEV_PORT
+      } else {
+        process.env.ECOS_RENDERER_DEV_PORT = originalPort
+      }
+    }
+  })
 })

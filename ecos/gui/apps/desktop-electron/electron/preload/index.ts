@@ -110,6 +110,14 @@ const desktopApi: DesktopApi = {
     set: (key, value) => invokeDesktop(desktopApiIpcChannels.settingsSet, key, value),
     delete: (key) => invokeDesktop(desktopApiIpcChannels.settingsDelete, key),
   },
+  remoteContent: {
+    listFiles: (request) =>
+      invokeDesktop(desktopApiIpcChannels.remoteContentListFiles, request),
+    readTextFile: (request) =>
+      invokeDesktop(desktopApiIpcChannels.remoteContentReadTextFile, request),
+    readJsonFile: (request) =>
+      invokeDesktop(desktopApiIpcChannels.remoteContentReadJsonFile, request),
+  },
   dialog: {
     pickDirectory: (options?: DesktopDirectoryDialogOptions) =>
       invokeDesktop(desktopApiIpcChannels.dialogPickDirectory, options),

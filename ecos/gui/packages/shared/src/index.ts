@@ -19,6 +19,14 @@ export type {
   ScannedPdkDirectory,
   VersionInfo,
 } from './contracts/desktopApi.ts';
+export type {
+  RemoteContentApi,
+  RemoteContentFile,
+  RemoteContentListFilesRequest,
+  RemoteContentReadJsonFileRequest,
+  RemoteContentReadTextFileRequest,
+  RemoteContentSourceId,
+} from './contracts/remoteContent.ts';
 export {
   appMenuActionIds,
   desktopMenuEventIds,

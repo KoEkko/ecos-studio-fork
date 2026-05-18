@@ -336,8 +336,6 @@ async function mountView() {
   const vue = await loadVueRuntime()
   const socCatalogModule = {
     loadSocTemplateCatalog,
-    importSocTemplateFromJsonText: vi.fn(),
-    removeImportedSocTemplate: vi.fn(),
   }
   const SoCTemplateGallery = compileComponent(
     gallerySource,
