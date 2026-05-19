@@ -18,9 +18,10 @@ type GlobalKey =
   | 'SVGElement'
   | 'DocumentFragment'
 
-const { push, loadSocTemplateCatalog } = vi.hoisted(() => ({
+const { push, loadSocTemplateCatalog, reloadSocTemplateCatalog } = vi.hoisted(() => ({
   push: vi.fn(),
   loadSocTemplateCatalog: vi.fn(),
+  reloadSocTemplateCatalog: vi.fn(),
 }))
 
 const originalGlobals = {
@@ -336,6 +337,7 @@ async function mountView() {
   const vue = await loadVueRuntime()
   const socCatalogModule = {
     loadSocTemplateCatalog,
+    reloadSocTemplateCatalog,
   }
   const SoCTemplateGallery = compileComponent(
     gallerySource,
@@ -396,6 +398,7 @@ describe('SoCTemplateGalleryView', () => {
     document.body.innerHTML = ''
     push.mockReset()
     loadSocTemplateCatalog.mockReset()
+    reloadSocTemplateCatalog.mockReset()
   })
 
   afterEach(() => {
@@ -463,9 +466,8 @@ describe('SoCTemplateGalleryView', () => {
   })
 
   it('retries catalog loading after a failure', async () => {
-    loadSocTemplateCatalog
-      .mockRejectedValueOnce(new Error('Unable to reach catalog'))
-      .mockResolvedValueOnce([
+    loadSocTemplateCatalog.mockRejectedValueOnce(new Error('Unable to reach catalog'))
+    reloadSocTemplateCatalog.mockResolvedValueOnce([
         {
           id: 'demoSoC001',
           name: 'Demo SoC',
@@ -486,7 +488,8 @@ describe('SoCTemplateGalleryView', () => {
     retryButton?.click()
     await flush(vue)
 
-    expect(loadSocTemplateCatalog).toHaveBeenCalledTimes(2)
+    expect(loadSocTemplateCatalog).toHaveBeenCalledTimes(1)
+    expect(reloadSocTemplateCatalog).toHaveBeenCalledTimes(1)
     expect(container.textContent).toContain('Demo SoC')
 
     app.unmount()

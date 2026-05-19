@@ -12,6 +12,7 @@ import {
 const SOC_TEMPLATE_SOURCE = 'socTemplateCatalog' as const
 const SOC_TEMPLATE_MANIFEST_PATH = 'manifest.json'
 const SELECTED_CORE_SETTING_PREFIX = 'ecos.socTemplate.selectedCore.'
+const SOC_TEMPLATE_CATALOG_LOAD_FAILED_MESSAGE = 'SoC template catalog load failed. Check the network connection or retry.'
 
 type RemoteSocTemplateIndexEntry = {
   id: string
@@ -33,6 +34,9 @@ type SocTemplateManifestVariant = {
   display_name?: unknown
   metadata?: unknown
 }
+
+let cachedIndex: RemoteSocTemplateIndexEntry[] | null = null
+let cachedIndexPromise: Promise<RemoteSocTemplateIndexEntry[]> | null = null
 
 function thumbnailLayoutFromDetail(detail: SocTemplateDetail): SocTemplateThumbnailLayout | undefined {
   const { die, coreArea: c } = detail
@@ -80,7 +84,17 @@ function applySelectedCoreOverride(
   }
 }
 
-async function loadRemoteSocTemplateIndex(): Promise<RemoteSocTemplateIndexEntry[]> {
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message
+  if (typeof error === 'string' && error.length > 0) return error
+  return String(error)
+}
+
+function createCatalogLoadError(error: unknown): Error {
+  return new Error(`${SOC_TEMPLATE_CATALOG_LOAD_FAILED_MESSAGE} ${getErrorMessage(error)}`)
+}
+
+async function loadRemoteSocTemplateIndexRaw(): Promise<RemoteSocTemplateIndexEntry[]> {
   const manifest = await readRemoteJsonFile<SocTemplateManifest>({
     source: SOC_TEMPLATE_SOURCE,
     path: SOC_TEMPLATE_MANIFEST_PATH,
@@ -128,6 +142,33 @@ async function loadRemoteSocTemplateIndex(): Promise<RemoteSocTemplateIndexEntry
   }
 
   return entries
+}
+
+async function loadRemoteSocTemplateIndex(): Promise<RemoteSocTemplateIndexEntry[]> {
+  if (cachedIndex) return cachedIndex
+  cachedIndexPromise ??= loadRemoteSocTemplateIndexRaw()
+    .then((entries) => {
+      cachedIndex = entries
+      return entries
+    })
+    .catch((error) => {
+      throw createCatalogLoadError(error)
+    })
+    .finally(() => {
+      cachedIndexPromise = null
+    })
+
+  return await cachedIndexPromise
+}
+
+export function clearSocTemplateCatalogCache(): void {
+  cachedIndex = null
+  cachedIndexPromise = null
+}
+
+export async function reloadSocTemplateCatalog(): Promise<SocTemplateSummary[]> {
+  clearSocTemplateCatalogCache()
+  return await loadSocTemplateCatalog()
 }
 
 export async function loadSocTemplateCatalog(): Promise<SocTemplateSummary[]> {

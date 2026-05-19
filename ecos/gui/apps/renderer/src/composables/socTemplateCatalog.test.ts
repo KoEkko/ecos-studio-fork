@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  clearSocTemplateCatalogCache,
   loadSocTemplateCatalog,
   loadSocTemplateDetail,
+  reloadSocTemplateCatalog,
   selectSocTemplateCore,
 } from './socTemplateCatalog'
 
@@ -72,6 +74,7 @@ describe('socTemplateCatalog remote source', () => {
 
   beforeEach(() => {
     settings.clear()
+    clearSocTemplateCatalogCache()
     vi.mocked(listRemoteContentFiles).mockReset()
     vi.mocked(readRemoteJsonFile).mockReset()
     vi.mocked(waitForDesktopApi).mockResolvedValue({
@@ -142,5 +145,41 @@ describe('socTemplateCatalog remote source', () => {
       .mockResolvedValueOnce(remoteJson)
 
     await expect(loadSocTemplateDetail('missing-id')).rejects.toThrow('Unknown SoC template: missing-id')
+  })
+
+  it('reports catalog load failures with a user-facing prompt', async () => {
+    vi.mocked(readRemoteJsonFile).mockRejectedValueOnce(new Error('GitHub request failed with 404'))
+
+    await expect(loadSocTemplateCatalog()).rejects.toThrow(
+      'SoC template catalog load failed. Check the network connection or retry. GitHub request failed with 404',
+    )
+  })
+
+  it('reuses the loaded catalog index across catalog and detail reads', async () => {
+    vi.mocked(readRemoteJsonFile)
+      .mockResolvedValueOnce(manifestJson)
+      .mockResolvedValueOnce(remoteJson)
+
+    await loadSocTemplateCatalog()
+    await loadSocTemplateDetail('ysyxSoCASIC')
+
+    expect(readRemoteJsonFile).toHaveBeenCalledTimes(2)
+  })
+
+  it('reloads the catalog index on demand', async () => {
+    vi.mocked(readRemoteJsonFile)
+      .mockResolvedValueOnce(manifestJson)
+      .mockResolvedValueOnce(remoteJson)
+      .mockResolvedValueOnce(manifestJson)
+      .mockResolvedValueOnce({
+        ...remoteJson,
+        design_name: 'ysyxSoCASIC-v2',
+      })
+
+    await loadSocTemplateCatalog()
+    const items = await reloadSocTemplateCatalog()
+
+    expect(readRemoteJsonFile).toHaveBeenCalledTimes(4)
+    expect(items[0]?.sourceLabel).toBe('remote:socTemplateCatalog/templates/ysyxSoC/metadata/ysyxSoCASIC.json')
   })
 })

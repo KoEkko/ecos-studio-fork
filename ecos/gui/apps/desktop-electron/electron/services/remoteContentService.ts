@@ -1,3 +1,6 @@
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
+import { homedir } from 'node:os'
 import type {
   RemoteContentFile,
   RemoteContentListFilesRequest,
@@ -8,6 +11,7 @@ import type {
 import { remoteContentSources, type RemoteContentSourceConfig } from './remoteContentSources'
 
 type FetchLike = typeof fetch
+const SOC_TEMPLATE_CACHE_ENV = 'ECOS_STUDIO_SOC_TEMPLATE_CACHE_DIR'
 
 interface GitHubTreeEntry {
   path?: string
@@ -75,14 +79,27 @@ export class RemoteContentService {
     const source = this.getSource(request.source)
     const repositoryPath = this.resolveRepositoryPath(source, request.path)
     const url = `https://api.github.com/repos/${source.owner}/${source.repo}/contents/${encodePath(repositoryPath)}?ref=${encodeURIComponent(source.ref)}`
-    const response = await this.fetchGitHub(url, {
-      headers: {
-        Accept: 'application/vnd.github.raw+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    })
+    let text: string
+    try {
+      const response = await this.fetchGitHub(url, {
+        headers: {
+          Accept: 'application/vnd.github.raw+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+      })
+      text = await response.text()
+    } catch (error) {
+      const cached = await this.readTextCache(request)
+      if (cached !== null) return cached
+      throw error
+    }
 
-    return await response.text()
+    try {
+      await this.writeTextCache(request, text)
+    } catch {
+      // Cache persistence is best-effort; a fresh remote response should still win.
+    }
+    return text
   }
 
   async readJsonFile<T = unknown>(request: RemoteContentReadJsonFileRequest): Promise<T> {
@@ -125,6 +142,35 @@ export class RemoteContentService {
     const normalizedRelativePath = normalizeRelativeRemotePath(relativePath)
     return `${normalizeRemotePath(source.rootPath)}/${normalizedRelativePath}`
   }
+
+  private getTextCachePath(request: RemoteContentReadTextFileRequest): string | null {
+    if (request.source !== 'socTemplateCatalog') return null
+    const normalizedRelativePath = normalizeRelativeRemotePath(request.path)
+    return join(getSocTemplateCacheDir(), ...normalizedRelativePath.split('/'))
+  }
+
+  private async readTextCache(request: RemoteContentReadTextFileRequest): Promise<string | null> {
+    const cachePath = this.getTextCachePath(request)
+    if (!cachePath) return null
+
+    try {
+      return await readFile(cachePath, 'utf8')
+    } catch (error) {
+      const nodeError = error as NodeJS.ErrnoException
+      if (nodeError.code === 'ENOENT') return null
+      throw error
+    }
+  }
+
+  private async writeTextCache(request: RemoteContentReadTextFileRequest, text: string): Promise<void> {
+    const cachePath = this.getTextCachePath(request)
+    if (!cachePath) return
+
+    await mkdir(dirname(cachePath), { recursive: true })
+    const tempFilePath = `${cachePath}.tmp`
+    await writeFile(tempFilePath, text, 'utf8')
+    await rename(tempFilePath, cachePath)
+  }
 }
 
 function normalizeRemotePath(path: string): string {
@@ -141,6 +187,14 @@ function normalizeRelativeRemotePath(path: string): string {
 
 function encodePath(path: string): string {
   return normalizeRemotePath(path).split('/').map(encodeURIComponent).join('%2F')
+}
+
+function getSocTemplateCacheDir(): string {
+  const override = process.env[SOC_TEMPLATE_CACHE_ENV]
+  if (override) return override
+
+  const xdgCacheHome = process.env.XDG_CACHE_HOME || join(homedir(), '.cache')
+  return join(xdgCacheHome, 'ecos-studio', 'soc-templates')
 }
 
 export function matchesRemotePattern(path: string, pattern: string): boolean {

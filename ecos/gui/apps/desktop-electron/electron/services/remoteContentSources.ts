@@ -11,8 +11,8 @@ export interface RemoteContentSourceConfig {
 export const remoteContentSources: Record<RemoteContentSourceId, RemoteContentSourceConfig> = {
   socTemplateCatalog: {
     provider: 'github',
-    owner: 'openecos-projects',
-    repo: 'soc-templates',
+    owner: 'KoEkko',
+    repo: 'ecos-registry',
     ref: 'main',
     rootPath: '',
   },
