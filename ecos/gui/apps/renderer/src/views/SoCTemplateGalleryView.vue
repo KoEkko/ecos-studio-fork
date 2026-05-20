@@ -2,7 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import SoCTemplateGallery from '@/components/SoCTemplateGallery.vue'
-import { loadSocTemplateCatalog, reloadSocTemplateCatalog } from '@/composables/socTemplateCatalog'
+import { loadSocTemplateCatalog } from '@/composables/socTemplateCatalog'
 import type { SocTemplateSummary } from '@/composables/socTemplateMapper'
 
 const router = useRouter()
@@ -10,12 +10,12 @@ const items = ref<SocTemplateSummary[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
 
-async function loadCatalog(forceReload = false): Promise<void> {
+async function loadCatalog(): Promise<void> {
   loading.value = true
   error.value = null
 
   try {
-    items.value = forceReload ? await reloadSocTemplateCatalog() : await loadSocTemplateCatalog()
+    items.value = await loadSocTemplateCatalog()
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Unable to load SoC template data'
   } finally {
@@ -38,14 +38,15 @@ onMounted(loadCatalog)
     <div class="soc-view__orb soc-view__orb--bl" aria-hidden="true" />
     <div class="soc-view__edge" aria-hidden="true" />
 
-    <div class="relative z-10 mx-auto max-w-6xl px-5 py-10 sm:px-7 lg:px-10 lg:py-14">
+    <div class="relative z-10 mx-auto max-w-5xl px-5 py-8 sm:px-7 lg:px-8 lg:py-10">
       <SoCTemplateGallery
         :items="items"
         :loading="loading"
         :error="error"
         @back="router.push('/')"
         @open="handleOpen"
-        @retry="loadCatalog(true)"
+        @retry="loadCatalog"
+        @catalog-changed="loadCatalog"
       />
     </div>
   </div>

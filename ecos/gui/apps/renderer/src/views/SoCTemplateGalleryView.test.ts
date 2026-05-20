@@ -18,10 +18,11 @@ type GlobalKey =
   | 'SVGElement'
   | 'DocumentFragment'
 
-const { push, loadSocTemplateCatalog, reloadSocTemplateCatalog } = vi.hoisted(() => ({
+const { push, loadSocTemplateCatalog, importSocTemplateFromJsonText, removeImportedSocTemplate } = vi.hoisted(() => ({
   push: vi.fn(),
   loadSocTemplateCatalog: vi.fn(),
-  reloadSocTemplateCatalog: vi.fn(),
+  importSocTemplateFromJsonText: vi.fn(),
+  removeImportedSocTemplate: vi.fn(),
 }))
 
 const originalGlobals = {
@@ -337,7 +338,8 @@ async function mountView() {
   const vue = await loadVueRuntime()
   const socCatalogModule = {
     loadSocTemplateCatalog,
-    reloadSocTemplateCatalog,
+    importSocTemplateFromJsonText,
+    removeImportedSocTemplate,
   }
   const SoCTemplateGallery = compileComponent(
     gallerySource,
@@ -398,7 +400,8 @@ describe('SoCTemplateGalleryView', () => {
     document.body.innerHTML = ''
     push.mockReset()
     loadSocTemplateCatalog.mockReset()
-    reloadSocTemplateCatalog.mockReset()
+    importSocTemplateFromJsonText.mockReset()
+    removeImportedSocTemplate.mockReset()
   })
 
   afterEach(() => {
@@ -421,7 +424,9 @@ describe('SoCTemplateGalleryView', () => {
 
     expect(loadSocTemplateCatalog).toHaveBeenCalledTimes(1)
     expect(container.textContent).toContain('Demo SoC')
-    expect(container.textContent).toContain('Reference template')
+    expect(container.textContent).toContain('2 cores')
+    expect(container.textContent).toContain('Templates')
+    expect(container.textContent).not.toContain('Reference template')
 
     app.unmount()
   })
@@ -467,7 +472,7 @@ describe('SoCTemplateGalleryView', () => {
 
   it('retries catalog loading after a failure', async () => {
     loadSocTemplateCatalog.mockRejectedValueOnce(new Error('Unable to reach catalog'))
-    reloadSocTemplateCatalog.mockResolvedValueOnce([
+    loadSocTemplateCatalog.mockResolvedValueOnce([
         {
           id: 'demoSoC001',
           name: 'Demo SoC',
@@ -488,9 +493,9 @@ describe('SoCTemplateGalleryView', () => {
     retryButton?.click()
     await flush(vue)
 
-    expect(loadSocTemplateCatalog).toHaveBeenCalledTimes(1)
-    expect(reloadSocTemplateCatalog).toHaveBeenCalledTimes(1)
+    expect(loadSocTemplateCatalog).toHaveBeenCalledTimes(2)
     expect(container.textContent).toContain('Demo SoC')
+    expect(container.textContent).toContain('2 cores')
 
     app.unmount()
   })

@@ -1,8 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   clearSocTemplateCatalogCache,
+  importSocTemplateFromJsonText,
   loadSocTemplateCatalog,
   loadSocTemplateDetail,
+  removeImportedSocTemplate,
   reloadSocTemplateCatalog,
   selectSocTemplateCore,
 } from './socTemplateCatalog'
@@ -18,6 +20,7 @@ vi.mock('@/platform/desktop', () => ({
 
 const { listRemoteContentFiles, readRemoteJsonFile } = await import('@/services/remoteContentClient')
 const { waitForDesktopApi } = await import('@/platform/desktop')
+const originalLocalStorage = globalThis.localStorage
 
 const remoteJson = {
   design_name: 'ysyxSoCASIC',
@@ -71,9 +74,11 @@ const manifestJson = {
 
 describe('socTemplateCatalog remote source', () => {
   const settings = new Map<string, unknown>()
+  const storage = new Map<string, string>()
 
   beforeEach(() => {
     settings.clear()
+    storage.clear()
     clearSocTemplateCatalogCache()
     vi.mocked(listRemoteContentFiles).mockReset()
     vi.mocked(readRemoteJsonFile).mockReset()
@@ -88,6 +93,33 @@ describe('socTemplateCatalog remote source', () => {
         }),
       },
     } as never)
+    Object.defineProperty(globalThis, 'localStorage', {
+      value: {
+        getItem: (key: string) => storage.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+          storage.set(key, value)
+        },
+        removeItem: (key: string) => {
+          storage.delete(key)
+        },
+        clear: () => {
+          storage.clear()
+        },
+      },
+      configurable: true,
+    })
+  })
+
+  afterEach(() => {
+    if (originalLocalStorage === undefined) {
+      Reflect.deleteProperty(globalThis, 'localStorage')
+      return
+    }
+
+    Object.defineProperty(globalThis, 'localStorage', {
+      value: originalLocalStorage,
+      configurable: true,
+    })
   })
 
   it('loads SoC summaries from manifest variants in the built-in remote content source', async () => {
@@ -181,5 +213,36 @@ describe('socTemplateCatalog remote source', () => {
 
     expect(readRemoteJsonFile).toHaveBeenCalledTimes(4)
     expect(items[0]?.sourceLabel).toBe('remote:socTemplateCatalog/templates/ysyxSoC/metadata/ysyxSoCASIC.json')
+  })
+
+  it('includes imported templates in the catalog and removes them when requested', async () => {
+    vi.mocked(readRemoteJsonFile)
+      .mockResolvedValueOnce(manifestJson)
+      .mockResolvedValueOnce(remoteJson)
+
+    await importSocTemplateFromJsonText(JSON.stringify({
+      ...remoteJson,
+      design_name: 'imported-demo',
+    }), 'imported-demo')
+
+    let items = await loadSocTemplateCatalog()
+    expect(items.map(item => item.id)).toContain('imported-demo')
+
+    removeImportedSocTemplate('imported-demo')
+    items = await loadSocTemplateCatalog()
+    expect(items.map(item => item.id)).not.toContain('imported-demo')
+  })
+
+  it('hides remote templates after removal', async () => {
+    vi.mocked(readRemoteJsonFile)
+      .mockResolvedValueOnce(manifestJson)
+      .mockResolvedValueOnce(remoteJson)
+
+    let items = await loadSocTemplateCatalog()
+    expect(items.map(item => item.id)).toContain('ysyxSoCASIC')
+
+    removeImportedSocTemplate('ysyxSoCASIC')
+    items = await loadSocTemplateCatalog()
+    expect(items.map(item => item.id)).not.toContain('ysyxSoCASIC')
   })
 })

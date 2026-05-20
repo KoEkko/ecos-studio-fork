@@ -292,6 +292,10 @@ function restoreDomGlobals() {
 
 const require = createRequire(import.meta.url)
 let vueRuntime: VueRuntime | null = null
+const catalogModule = {
+  importSocTemplateFromJsonText: vi.fn(),
+  removeImportedSocTemplate: vi.fn(),
+}
 
 async function loadVueRuntime() {
   vueRuntime ??= await import('vue')
@@ -325,6 +329,7 @@ function loadGalleryComponent(vue: VueRuntime) {
   const moduleExports: { default?: unknown } = {}
   const customRequire = (id: string) => {
     if (id === 'vue') return vue
+    if (id === '@/composables/socTemplateCatalog') return catalogModule
     return require(id)
   }
 
@@ -362,6 +367,8 @@ describe('SoCTemplateGallery', () => {
   beforeEach(() => {
     ensureDom()
     document.body.innerHTML = ''
+    catalogModule.importSocTemplateFromJsonText.mockReset()
+    catalogModule.removeImportedSocTemplate.mockReset()
   })
 
   afterEach(() => {
@@ -375,7 +382,7 @@ describe('SoCTemplateGallery', () => {
       error: null,
     })
 
-    expect(container.textContent).toContain('Loading template catalog…')
+    expect(container.textContent).toContain('Loading templates…')
 
     app.unmount()
   })
@@ -401,21 +408,29 @@ describe('SoCTemplateGallery', () => {
   })
 
   it('renders an empty-state message when no items are available', async () => {
+    const onBack = vi.fn()
     const { app, container } = await mountGallery({
       items: [],
       loading: false,
       error: null,
+      onBack,
     })
 
-    expect(container.textContent).toContain('No remote templates available')
-    expect(container.textContent).toContain('remote SoC catalog')
-    expect(container.textContent).not.toContain('import a')
+    expect(container.textContent).toContain('Back')
+    expect(container.textContent).toContain('No templates yet')
+    expect(container.textContent).toContain('Import Template')
+    expect(container.textContent).not.toContain('remote SoC catalog')
+
+    const backButton = findButton(container, 'Back')
+    expect(backButton).toBeTruthy()
+
+    backButton?.click()
+    expect(onBack).toHaveBeenCalledTimes(1)
 
     app.unmount()
   })
 
-  it('renders a populated item card and emits back and open events', async () => {
-    const onBack = vi.fn()
+  it('renders a populated item card and emits open', async () => {
     const onOpen = vi.fn()
     const { app, container } = await mountGallery({
       items: [
@@ -440,29 +455,25 @@ describe('SoCTemplateGallery', () => {
       ],
       loading: false,
       error: null,
-      onBack,
       onOpen,
     })
 
+    expect(container.textContent).toContain('Templates')
+    expect(container.textContent).toContain('Import Template')
     expect(container.textContent).toContain('Demo SoC')
-    expect(container.textContent).toContain('Reference template')
-    expect(container.textContent).toContain('Remote catalog')
-    expect(container.textContent).not.toContain('Import JSON')
+    expect(container.textContent).toContain('2 cores')
+    expect(container.textContent).not.toContain('Reference template')
+    expect(container.textContent).not.toContain('Remote catalog')
     expect(container.textContent).not.toContain('Remove')
-    expect(container.textContent?.toLowerCase()).toContain('cores')
-    expect(container.textContent).toContain('2')
     expect(container.querySelectorAll('.soc-gallery__thumb-core')).toHaveLength(2)
-    const backButton = findButton(container, 'Back')
     const openButton = findButton(container, 'Open Details')
 
-    expect(backButton).toBeTruthy()
     expect(openButton).toBeTruthy()
 
-    backButton?.click()
     openButton?.click()
 
-    expect(onBack).toHaveBeenCalledTimes(1)
     expect(onOpen).toHaveBeenCalledWith('demoSoC001')
+    expect(catalogModule.removeImportedSocTemplate).not.toHaveBeenCalled()
 
     app.unmount()
   })

@@ -22,7 +22,6 @@ const selectedCoreLabel = computed(() =>
   selectedCore.value ? getSocDisplayCoreLabel(selectedCore.value.id, selectedCore.value.name) : 'None',
 )
 
-const originBadge = computed(() => ({ label: 'Remote', accent: true }))
 </script>
 
 <template>
@@ -45,16 +44,6 @@ const originBadge = computed(() => ({ label: 'Remote', accent: true }))
             <div class="flex flex-wrap items-center gap-2">
               <span class="soc-detail__mono text-[10px] font-semibold uppercase tracking-[0.2em] text-(--text-secondary)">Inspection</span>
               <span class="h-3 w-px bg-(--border-color)" aria-hidden="true" />
-              <span
-                class="rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
-                :class="
-                  originBadge.accent
-                    ? 'bg-(--accent-color)/12 text-(--accent-color)'
-                    : 'bg-(--text-secondary)/12 text-(--text-secondary)'
-                "
-              >
-                {{ originBadge.label }}
-              </span>
               <span class="rounded-md bg-(--bg-primary) px-2 py-0.5 font-mono text-[10px] text-(--text-secondary)">{{ template.id }}</span>
             </div>
             <h1 class="soc-detail__title mt-4 font-bold tracking-tight text-(--text-primary)">
