@@ -536,14 +536,15 @@ const runModes = computed<Record<string, { label: string; icon: string; shortcut
 
 type FrontendSimSuite = 'cpu_tests' | 'rtthread'
 type CpuTestMode = 'all' | 'selected'
+const DEFAULT_FRONTEND_SMOKE_TEST_CASES = ['add', 'load-store']
 
 const frontendSimSuites: Array<{ id: FrontendSimSuite; label: string; icon: string }> = [
   { id: 'cpu_tests', label: 'CPU Tests', icon: 'ri-checkbox-multiple-line' },
   { id: 'rtthread', label: 'RT-Thread', icon: 'ri-terminal-box-line' },
 ]
 const selectedFrontendSimSuite = ref<FrontendSimSuite | ''>('')
-const selectedCpuTestMode = ref<CpuTestMode>('all')
-const selectedCpuTestCases = ref<string[]>([])
+const selectedCpuTestMode = ref<CpuTestMode>('selected')
+const selectedCpuTestCases = ref<string[]>([...DEFAULT_FRONTEND_SMOKE_TEST_CASES])
 
 const cpuTestCases = [
   'add-longlong',
@@ -602,7 +603,10 @@ const runDisabled = computed(() => {
 const selectFrontendSimSuite = (suite: FrontendSimSuite) => {
   selectedFrontendSimSuite.value = suite
   if (suite === 'cpu_tests' && !selectedCpuTestMode.value) {
-    selectedCpuTestMode.value = 'all'
+    selectedCpuTestMode.value = 'selected'
+  }
+  if (suite === 'cpu_tests' && selectedCpuTestMode.value === 'selected' && selectedCpuTestCases.value.length === 0) {
+    selectedCpuTestCases.value = [...DEFAULT_FRONTEND_SMOKE_TEST_CASES]
   }
 }
 

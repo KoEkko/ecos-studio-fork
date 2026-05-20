@@ -17,6 +17,8 @@ from ecos_server.ecc.sse.notify_service import NotifyService
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_FRONTEND_SMOKE_TEST_CASES = ["add", "load-store"]
+
 
 def _summarize_request(data: object) -> dict:
     if not isinstance(data, dict):
@@ -506,14 +508,17 @@ class FrontendService:
             force_rerun = False
             if step == "sim":
                 suite_name = str(data.get("sim_test_suite", "") or "").strip()
-                self._apply_sim_test_suite(
-                    suite_name,
-                    data.get("sim_cpu_test_mode", "all"),
-                    data.get("sim_cpu_test_cases", []),
-                )
-                # Selecting a simulation suite is an explicit "run tests now" action.
-                # Force rerun for SIM to avoid returning cached Success immediately.
-                force_rerun = bool(suite_name and suite_name.lower() != "default")
+                if suite_name and suite_name.lower() != "default":
+                    self._apply_sim_test_suite(
+                        suite_name,
+                        data.get("sim_cpu_test_mode", "all"),
+                        data.get("sim_cpu_test_cases", []),
+                    )
+                    # Selecting a simulation suite is an explicit "run tests now" action.
+                    # Force rerun for SIM to avoid returning cached Success immediately.
+                    force_rerun = True
+                else:
+                    self._apply_default_sim_smoke_suite()
             state = self.engine_flow.run_step(step, bool(data.get("rerun", False) or force_rerun))
         except Exception:
             state = StateEnum.Incomplete
@@ -575,6 +580,48 @@ class FrontendService:
             raise ValueError(f"unknown frontend sim test suite: {suite_name}")
 
         self._update_workspace_parameters(updates)
+
+    def _apply_default_sim_smoke_suite(self) -> None:
+        if not self.workspace:
+            return
+        cases = self._default_cpu_test_cases()
+        if not cases:
+            return
+        self._validate_cpu_test_cases(cases)
+        self._update_workspace_parameters(
+            {
+                "sim_all_tests": False,
+                "sim_images": [],
+                "sim_build_all_programs": False,
+                "sim_program_names": cases,
+                "sim_run_args": self._default_cpu_tests_run_args(),
+            }
+        )
+
+    def _default_cpu_test_cases(self) -> list[str]:
+        preferred = list(DEFAULT_FRONTEND_SMOKE_TEST_CASES)
+        if not self.workspace:
+            return preferred
+
+        programs_dir = _resolve_path(self.workspace.get("sim_programs_dir", ""))
+        if not programs_dir:
+            return preferred
+
+        path = Path(programs_dir)
+        if not path.is_dir():
+            return preferred
+
+        available = [source.stem for source in sorted(path.glob("*.c"))]
+        if not available:
+            return []
+
+        selected = [name for name in preferred if name in available]
+        for name in available:
+            if len(selected) >= len(DEFAULT_FRONTEND_SMOKE_TEST_CASES):
+                break
+            if name not in selected:
+                selected.append(name)
+        return selected[: len(DEFAULT_FRONTEND_SMOKE_TEST_CASES)]
 
     def _validate_cpu_test_cases(self, cases: list[str]) -> None:
         invalid_names = [
