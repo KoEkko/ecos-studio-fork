@@ -425,34 +425,34 @@ body.window-maximized .app-container {
   top: 0;
   left: 220px;
   right: 220px;
-  height: 6px;
+  height: 10px;
   cursor: ns-resize;
 }
 
 /* 下边缘 */
 .resize-bottom {
   bottom: 0;
-  left: 20px;
-  right: 20px;
-  height: 6px;
+  left: 24px;
+  right: 24px;
+  height: 12px;
   cursor: ns-resize;
 }
 
 /* 左边缘：从四角 resize 区之后开始，避免和对角 resize 打架 */
 .resize-left {
   left: 0;
-  top: 16px;
-  bottom: 16px;
-  width: 6px;
+  top: 18px;
+  bottom: 24px;
+  width: 10px;
   cursor: ew-resize;
 }
 
 /* 右边缘：同样让开四角 resize 区 */
 .resize-right {
   right: 0;
-  top: 16px;
-  bottom: 16px;
-  width: 6px;
+  top: 18px;
+  bottom: 24px;
+  width: 10px;
   cursor: ew-resize;
 }
 
@@ -463,8 +463,8 @@ body.window-maximized .app-container {
 .resize-top-left {
   top: 0;
   left: 0;
-  width: 10px;
-  height: 10px;
+  width: 14px;
+  height: 14px;
   cursor: nwse-resize;
   z-index: 10001;
 }
@@ -478,8 +478,8 @@ body.window-maximized .app-container {
 .resize-top-right {
   top: 0;
   right: 0;
-  width: 10px;
-  height: 10px;
+  width: 14px;
+  height: 14px;
   cursor: nesw-resize;
   z-index: 10001;
 }
@@ -488,8 +488,8 @@ body.window-maximized .app-container {
 .resize-bottom-left {
   bottom: 0;
   left: 0;
-  width: 16px;
-  height: 16px;
+  width: 24px;
+  height: 24px;
   cursor: nesw-resize;
   z-index: 10001;
 }
@@ -498,8 +498,8 @@ body.window-maximized .app-container {
 .resize-bottom-right {
   bottom: 0;
   right: 0;
-  width: 16px;
-  height: 16px;
+  width: 24px;
+  height: 24px;
   cursor: nwse-resize;
   z-index: 10001;
 }

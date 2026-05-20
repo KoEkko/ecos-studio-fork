@@ -254,7 +254,8 @@ onUnmounted(() => {
 }
 
 :deep(.p-splitter-gutter) {
-  background: var(--border-color);
+  position: relative;
+  background: transparent;
   transition: background-color 0.15s ease-out;
   display: flex;
   align-items: center;
@@ -263,9 +264,24 @@ onUnmounted(() => {
   will-change: background-color;
 }
 
-:deep(.p-splitter-gutter:hover) {
+:deep(.p-splitter-gutter::after) {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  background: var(--border-color);
+  border-radius: 2px;
+  transition: background-color 0.15s ease-out, box-shadow 0.15s ease-out;
+}
+
+:deep(.p-splitter-gutter:hover),
+:deep(.p-splitter-gutter[data-p-gutter-resizing="true"]) {
+  background: rgba(var(--accent-rgb, 59, 130, 246), 0.08);
+}
+
+:deep(.p-splitter-gutter:hover::after),
+:deep(.p-splitter-gutter[data-p-gutter-resizing="true"]::after) {
   background: var(--accent-color);
-  opacity: 0.5;
+  box-shadow: 0 0 8px rgba(var(--accent-rgb, 59, 130, 246), 0.4);
 }
 
 :deep(.p-splitter-gutter-handle) {
@@ -275,14 +291,30 @@ onUnmounted(() => {
 
 /* Horizontal splitter gutter */
 :deep(.p-splitter-horizontal > .p-splitter-gutter) {
-  width: 2px !important;
+  width: 10px !important;
   cursor: col-resize;
+}
+
+:deep(.p-splitter-horizontal > .p-splitter-gutter::after) {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
 }
 
 /* Vertical splitter gutter */
 :deep(.p-splitter-vertical > .p-splitter-gutter) {
-  height: 2px !important;
+  height: 10px !important;
   cursor: row-resize;
+}
+
+:deep(.p-splitter-vertical > .p-splitter-gutter::after) {
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 2px;
+  transform: translateY(-50%);
 }
 
 /*

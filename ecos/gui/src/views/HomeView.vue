@@ -7,14 +7,14 @@
     <Splitter
       class="dashboard-splitter"
       layout="vertical"
-      :gutterSize="6"
+      :gutterSize="10"
       @resizeend="onDashboardSplitterResizeEnd"
     >
       <!-- ================= Row 1: Chip Info | Runtime Monitoring ================= -->
       <SplitterPanel :size="26" :minSize="10" class="dashboard-row">
         <Splitter
           class="dashboard-row-splitter"
-          :gutterSize="6"
+          :gutterSize="10"
           @resizeend="onDashboardSplitterResizeEnd"
         >
           <SplitterPanel :size="45" :minSize="15" class="dashboard-cell">
@@ -97,7 +97,7 @@
       <SplitterPanel :size="44" :minSize="15" class="dashboard-row">
         <Splitter
           class="dashboard-row-splitter"
-          :gutterSize="6"
+          :gutterSize="10"
           @resizeend="onDashboardSplitterResizeEnd"
         >
           <SplitterPanel :size="45" :minSize="15" class="dashboard-cell">
@@ -173,7 +173,7 @@
       <SplitterPanel :size="30" :minSize="10" class="dashboard-row">
         <Splitter
           class="dashboard-row-splitter"
-          :gutterSize="6"
+          :gutterSize="10"
           @resizeend="onDashboardSplitterResizeEnd"
         >
           <SplitterPanel :size="45" :minSize="15" class="dashboard-cell">
@@ -1116,7 +1116,7 @@ function stateClass(state: string): string {
 
 /* 垂直布局的 gutter 水平条 */
 .dashboard-splitter > :deep(.p-splitter-gutter) {
-  height: 6px;
+  height: 10px;
 }
 .dashboard-splitter > :deep(.p-splitter-gutter::after) {
   left: 50%;
@@ -1128,7 +1128,7 @@ function stateClass(state: string): string {
 
 /* 横向行内的 gutter 竖直条 */
 .dashboard-row-splitter > :deep(.p-splitter-gutter) {
-  width: 6px;
+  width: 10px;
 }
 .dashboard-row-splitter > :deep(.p-splitter-gutter::after) {
   top: 50%;
