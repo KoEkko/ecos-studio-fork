@@ -3,14 +3,17 @@ mod raster_plane;
 mod render_surface;
 
 use std::{
-    collections::BTreeMap,
-    path::PathBuf,
+    collections::{BTreeMap, BTreeSet},
+    fs,
+    io::Read,
+    path::{Path, PathBuf},
     sync::mpsc::{self, Receiver, Sender},
 };
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
 use eframe::egui;
+use flate2::read::GzDecoder;
 use layout_display::{Color, DisplayModel, LayerStyle, Pattern, ResolvedDisplayLayer};
 use layout_render::{
     classify_lod, DrawItem, LodHysteresisState, LodLevel, LodStats, PickHit, PickHitTarget,
@@ -21,6 +24,7 @@ use layoutdb::{
     CellViewState, HierarchyPolicy, InstancePath, LayoutSession, PackageLayoutSource, Rect,
     ShapeKind, ViewportLoadBatch,
 };
+use serde_json::Value;
 
 const TARGET_REPAINT_INTERVAL: std::time::Duration = std::time::Duration::from_millis(16);
 const MAX_FPS_SAMPLE_INTERVAL: std::time::Duration = std::time::Duration::from_millis(250);
@@ -114,7 +118,521 @@ struct LoadedViewerState {
     session: LayoutSession,
     display: DisplayModel,
     cell_view: CellViewState,
+    selection_names: SelectionNameIndex,
     background_load: BackgroundLoadHandle,
+}
+
+#[derive(Debug, Default, Clone)]
+struct SelectionNameIndex {
+    io_pins: BTreeMap<u32, String>,
+    instances: BTreeMap<u32, String>,
+    regular_wires: BTreeMap<u32, String>,
+    special_wires: BTreeMap<u32, String>,
+    blockages: BTreeMap<u32, String>,
+    fills: BTreeMap<u32, String>,
+    regions: BTreeMap<u32, String>,
+    cell_master_pins: BTreeMap<(u32, usize), String>,
+    regular_nets: BTreeMap<u32, String>,
+    special_nets: BTreeMap<u32, String>,
+    io_pin_net_ids: BTreeMap<u32, NetRef>,
+    regular_wire_net_ids: BTreeMap<u32, NetRef>,
+    special_wire_net_ids: BTreeMap<u32, NetRef>,
+    via_net_ids: BTreeMap<ViaKey, NetRef>,
+}
+
+#[derive(Debug, Default, Clone)]
+struct ViaLayerResolver {
+    cut_layers: BTreeSet<u16>,
+    via_master_cut_layers: BTreeMap<u32, Vec<u16>>,
+}
+
+impl SelectionNameIndex {
+    fn load(package_root: &Path) -> Result<Self> {
+        let Some(source_root) = source_root_for_package(package_root)? else {
+            return Ok(Self::default());
+        };
+        let manifest = read_json_value(&source_root.join("manifest.json"))?;
+        let files = manifest
+            .get("files")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+        let mut index = Self::default();
+        index.io_pins = read_named_data_map(&source_root, &files, "io_pins")?;
+        index.instances = read_named_data_map(&source_root, &files, "instances")?;
+        index.regular_wires = read_named_data_map(&source_root, &files, "regular_wires")?;
+        index.special_wires = read_named_data_map(&source_root, &files, "special_wires")?;
+        index.blockages = read_named_data_map(&source_root, &files, "blockages")?;
+        index.fills = read_named_data_map(&source_root, &files, "fills")?;
+        index.regions = read_named_data_map(&source_root, &files, "regions")?;
+        index.cell_master_pins = read_cell_master_pin_names(&source_root, &files)?;
+        index.regular_nets = read_named_data_map(&source_root, &files, "regular_nets")?;
+        index.special_nets = read_named_data_map(&source_root, &files, "special_nets")?;
+        index.io_pin_net_ids = read_net_ref_data_map(&source_root, &files, "io_pins")?;
+        index.regular_wire_net_ids = read_net_ref_data_map(&source_root, &files, "regular_wires")?;
+        index.special_wire_net_ids = read_net_ref_data_map(&source_root, &files, "special_wires")?;
+        let via_layers = read_via_layer_resolver(&source_root, &files)?;
+        index.via_net_ids.extend(read_via_net_ref_data_map(
+            &source_root,
+            &files,
+            "regular_wires",
+            &via_layers,
+        )?);
+        index.via_net_ids.extend(read_via_net_ref_data_map(
+            &source_root,
+            &files,
+            "special_wires",
+            &via_layers,
+        )?);
+        index.via_net_ids.extend(read_via_net_ref_data_map(
+            &source_root,
+            &files,
+            "io_pins",
+            &via_layers,
+        )?);
+        Ok(index)
+    }
+
+    fn name_for_hit(&self, hit: &PickHit) -> Option<&str> {
+        if let ShapeKind::IoPin = hit.kind {
+            if is_hierarchy_cell_shape(hit) {
+                return hierarchy_pin_shape_index(hit).and_then(|shape_index| {
+                    self.cell_master_pins
+                        .get(&(hit.source_id, shape_index))
+                        .map(String::as_str)
+                });
+            }
+        }
+        let names = match hit.kind {
+            ShapeKind::Instance => &self.instances,
+            ShapeKind::RegularWire => &self.regular_wires,
+            ShapeKind::SpecialWire => &self.special_wires,
+            ShapeKind::IoPin | ShapeKind::Via => &self.io_pins,
+            ShapeKind::Blockage => &self.blockages,
+            ShapeKind::Fill => &self.fills,
+            ShapeKind::Region => &self.regions,
+            ShapeKind::Die
+            | ShapeKind::Core
+            | ShapeKind::Row
+            | ShapeKind::Track
+            | ShapeKind::GCellGrid => {
+                return None;
+            }
+        };
+        names.get(&hit.source_id).map(String::as_str)
+    }
+
+    fn net_name_for_hit(&self, hit: &PickHit) -> Option<&str> {
+        if matches!(hit.kind, ShapeKind::IoPin) && is_hierarchy_cell_shape(hit) {
+            return None;
+        }
+        let net_ref = match hit.kind {
+            ShapeKind::IoPin => self.io_pin_net_ids.get(&hit.source_id),
+            ShapeKind::RegularWire => self.regular_wire_net_ids.get(&hit.source_id),
+            ShapeKind::SpecialWire => self.special_wire_net_ids.get(&hit.source_id),
+            ShapeKind::Via => self.net_ref_for_via(hit),
+            _ => None,
+        }?;
+        match net_ref {
+            NetRef::Regular(id) => self.regular_nets.get(id).map(String::as_str),
+            NetRef::Special(id) => self.special_nets.get(id).map(String::as_str),
+        }
+    }
+
+    fn net_ref_for_via(&self, hit: &PickHit) -> Option<&NetRef> {
+        let key = ViaKey {
+            source_id: hit.source_id,
+            layer_id: hit.layer_id,
+            bbox: [hit.bbox.x1, hit.bbox.y1, hit.bbox.x2, hit.bbox.y2],
+        };
+        if let Some(net_ref) = self.via_net_ids.get(&key) {
+            return Some(net_ref);
+        }
+        let regular = self.regular_wire_net_ids.get(&hit.source_id);
+        let special = self.special_wire_net_ids.get(&hit.source_id);
+        match (regular, special) {
+            (Some(regular), None) => Some(regular),
+            (None, Some(special)) => Some(special),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NetRef {
+    Regular(u32),
+    Special(u32),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct ViaKey {
+    source_id: u32,
+    layer_id: u16,
+    bbox: [i32; 4],
+}
+
+fn source_root_for_package(package_root: &Path) -> Result<Option<PathBuf>> {
+    let package_manifest = if package_root.join("manifest.json").is_file() {
+        package_root.join("manifest.json")
+    } else {
+        package_root.join(".layoutpkg/manifest.json")
+    };
+    if !package_manifest.is_file() {
+        return Ok(None);
+    }
+    let manifest = read_json_value(&package_manifest)?;
+    let Some(root) = manifest
+        .get("source")
+        .and_then(|source| source.get("root"))
+        .and_then(Value::as_str)
+    else {
+        return Ok(None);
+    };
+    Ok(Some(PathBuf::from(root)))
+}
+
+fn read_named_data_map(
+    source_root: &Path,
+    files: &serde_json::Map<String, Value>,
+    key: &str,
+) -> Result<BTreeMap<u32, String>> {
+    let Some(path) = source_file_path(source_root, files, key) else {
+        return Ok(BTreeMap::new());
+    };
+    if !path.is_file() {
+        return Ok(BTreeMap::new());
+    }
+    let value = read_json_value(&path)?;
+    Ok(named_items_from_data(&value))
+}
+
+fn read_net_ref_data_map(
+    source_root: &Path,
+    files: &serde_json::Map<String, Value>,
+    key: &str,
+) -> Result<BTreeMap<u32, NetRef>> {
+    let Some(path) = source_file_path(source_root, files, key) else {
+        return Ok(BTreeMap::new());
+    };
+    if !path.is_file() {
+        return Ok(BTreeMap::new());
+    }
+    let value = read_json_value(&path)?;
+    Ok(net_ref_items_from_data(&value))
+}
+
+fn read_via_net_ref_data_map(
+    source_root: &Path,
+    files: &serde_json::Map<String, Value>,
+    key: &str,
+    via_layers: &ViaLayerResolver,
+) -> Result<BTreeMap<ViaKey, NetRef>> {
+    let Some(path) = source_file_path(source_root, files, key) else {
+        return Ok(BTreeMap::new());
+    };
+    if !path.is_file() {
+        return Ok(BTreeMap::new());
+    }
+    let value = read_json_value(&path)?;
+    Ok(via_net_ref_items_from_data(&value, via_layers))
+}
+
+fn read_via_layer_resolver(
+    source_root: &Path,
+    files: &serde_json::Map<String, Value>,
+) -> Result<ViaLayerResolver> {
+    let mut cut_layers = BTreeSet::new();
+    if let Some(path) = source_file_path(source_root, files, "layers").filter(|path| path.is_file())
+    {
+        let value = read_json_value(&path)?;
+        if let Some(layers) = value.get("data").and_then(Value::as_array) {
+            for layer in layers {
+                let Some(layer_id) = layer.get("id").and_then(Value::as_u64) else {
+                    continue;
+                };
+                if layer_id > u16::MAX as u64 {
+                    continue;
+                }
+                let is_cut = layer
+                    .get("type")
+                    .and_then(Value::as_str)
+                    .is_some_and(|layer_type| layer_type.eq_ignore_ascii_case("CUT"));
+                if is_cut {
+                    cut_layers.insert(layer_id as u16);
+                }
+            }
+        }
+    }
+    let mut via_master_cut_layers = BTreeMap::new();
+    if let Some(path) = source_file_path(source_root, files, "vias").filter(|path| path.is_file()) {
+        let value = read_json_value(&path)?;
+        if let Some(vias) = value.get("data").and_then(Value::as_array) {
+            for via in vias {
+                let Some(master_id) = source_id_value(via) else {
+                    continue;
+                };
+                let cut_shape_layers = via
+                    .get("shapes")
+                    .and_then(Value::as_array)
+                    .map(|shapes| {
+                        shapes
+                            .iter()
+                            .filter_map(|shape| shape.get("layer_id").and_then(Value::as_u64))
+                            .filter(|layer| *layer <= u16::MAX as u64)
+                            .map(|layer| layer as u16)
+                            .filter(|layer| cut_layers.contains(layer))
+                            .collect::<BTreeSet<_>>()
+                            .into_iter()
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                if !cut_shape_layers.is_empty() {
+                    via_master_cut_layers.insert(master_id, cut_shape_layers);
+                }
+            }
+        }
+    }
+    Ok(ViaLayerResolver {
+        cut_layers,
+        via_master_cut_layers,
+    })
+}
+
+fn read_cell_master_pin_names(
+    source_root: &Path,
+    files: &serde_json::Map<String, Value>,
+) -> Result<BTreeMap<(u32, usize), String>> {
+    let Some(path) = source_file_path(source_root, files, "cell_masters") else {
+        return Ok(BTreeMap::new());
+    };
+    if !path.is_file() {
+        return Ok(BTreeMap::new());
+    }
+    let value = read_json_value(&path)?;
+    let mut names = BTreeMap::new();
+    let Some(masters) = value.get("data").and_then(Value::as_array) else {
+        return Ok(names);
+    };
+    for master in masters {
+        let Some(master_id) = source_id_value(master) else {
+            continue;
+        };
+        let master_name = master.get("name").and_then(Value::as_str).unwrap_or("cell");
+        let Some(pins) = master.get("pins").and_then(Value::as_array) else {
+            continue;
+        };
+        let mut shape_index = 0usize;
+        for pin in pins {
+            let pin_name = pin.get("name").and_then(Value::as_str).unwrap_or("");
+            let display_name = if pin_name.is_empty() {
+                master_name.to_owned()
+            } else {
+                format!("{master_name}/{pin_name}")
+            };
+            if let Some(ports) = pin.get("ports").and_then(Value::as_array) {
+                for port in ports {
+                    if let Some(rects) = port.get("rects").and_then(Value::as_array) {
+                        for rect in rects {
+                            if is_valid_bbox_value(rect) {
+                                names.insert((master_id, shape_index), display_name.clone());
+                                shape_index += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(names)
+}
+
+fn source_file_path(
+    source_root: &Path,
+    files: &serde_json::Map<String, Value>,
+    key: &str,
+) -> Option<PathBuf> {
+    files
+        .get(key)
+        .and_then(Value::as_str)
+        .map(|relative| source_root.join(relative))
+        .or_else(|| {
+            let candidates = [
+                source_root.join(format!("design/{key}.json")),
+                source_root.join(format!("design/{key}.json.gz")),
+                source_root.join(format!("tech/{key}.json")),
+                source_root.join(format!("tech/{key}.json.gz")),
+            ];
+            candidates.into_iter().find(|path| path.is_file())
+        })
+}
+
+fn read_json_value(path: &Path) -> Result<Value> {
+    let bytes = fs::read(path).with_context(|| format!("failed to read {}", path.display()))?;
+    let text = if path.extension().and_then(|extension| extension.to_str()) == Some("gz") {
+        let mut decoder = GzDecoder::new(bytes.as_slice());
+        let mut decoded = String::new();
+        decoder
+            .read_to_string(&mut decoded)
+            .with_context(|| format!("failed to decompress {}", path.display()))?;
+        decoded
+    } else {
+        String::from_utf8(bytes)
+            .with_context(|| format!("{} is not valid UTF-8", path.display()))?
+    };
+    serde_json::from_str(&text).with_context(|| format!("failed to parse {}", path.display()))
+}
+
+fn named_items_from_data(value: &Value) -> BTreeMap<u32, String> {
+    let mut names = BTreeMap::new();
+    let Some(items) = value.get("data").and_then(Value::as_array) else {
+        return names;
+    };
+    for item in items {
+        let Some(id) = source_id_value(item) else {
+            continue;
+        };
+        let Some(name) = item.get("name").and_then(Value::as_str) else {
+            continue;
+        };
+        if !name.is_empty() {
+            names.insert(id, name.to_owned());
+        }
+    }
+    names
+}
+
+fn net_ref_items_from_data(value: &Value) -> BTreeMap<u32, NetRef> {
+    let mut nets = BTreeMap::new();
+    let Some(items) = value.get("data").and_then(Value::as_array) else {
+        return nets;
+    };
+    for item in items {
+        let Some(id) = source_id_value(item) else {
+            continue;
+        };
+        if let Some(net_ref) = net_ref_value(item) {
+            nets.insert(id, net_ref);
+        }
+    }
+    nets
+}
+
+fn via_net_ref_items_from_data(
+    value: &Value,
+    via_layers: &ViaLayerResolver,
+) -> BTreeMap<ViaKey, NetRef> {
+    let mut nets = BTreeMap::new();
+    let Some(items) = value.get("data").and_then(Value::as_array) else {
+        return nets;
+    };
+    for item in items {
+        if item.get("kind").and_then(Value::as_str) != Some("via") {
+            continue;
+        }
+        let Some(source_id) = source_id_value(item) else {
+            continue;
+        };
+        let Some(net_ref) = net_ref_value(item) else {
+            continue;
+        };
+        let Some(bbox) = bbox_value(item.get("bbox").unwrap_or(&Value::Null)) else {
+            continue;
+        };
+        for layer_id in via_layers.layers_for_item(item) {
+            nets.insert(
+                ViaKey {
+                    source_id,
+                    layer_id,
+                    bbox,
+                },
+                net_ref,
+            );
+        }
+    }
+    nets
+}
+
+fn source_id_value(item: &Value) -> Option<u32> {
+    item.get("id")
+        .and_then(Value::as_u64)
+        .map(|id| id.min(u32::MAX as u64) as u32)
+}
+
+fn net_ref_value(item: &Value) -> Option<NetRef> {
+    if let Some(net_id) = item.get("net_id").and_then(Value::as_u64) {
+        Some(NetRef::Regular(net_id.min(u32::MAX as u64) as u32))
+    } else {
+        item.get("special_net_id")
+            .and_then(Value::as_u64)
+            .map(|id| NetRef::Special(id.min(u32::MAX as u64) as u32))
+    }
+}
+
+impl ViaLayerResolver {
+    fn layers_for_item(&self, item: &Value) -> Vec<u16> {
+        if let Some(master_id) = source_id_for_key(item, "via_master_id") {
+            if let Some(layers) = self.via_master_cut_layers.get(&master_id) {
+                return layers.clone();
+            }
+        }
+        if let Some(layer_id) = item
+            .get("layer_id")
+            .and_then(Value::as_u64)
+            .map(|layer| layer.min(u16::MAX as u64) as u16)
+        {
+            return vec![layer_id];
+        }
+        let mut layers = item
+            .get("layers")
+            .or_else(|| item.get("layer_ids"))
+            .and_then(Value::as_array)
+            .map(|layers| {
+                layers
+                    .iter()
+                    .filter_map(Value::as_u64)
+                    .map(|layer| layer.min(u16::MAX as u64) as u16)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        if !self.cut_layers.is_empty() {
+            let cut_layers = layers
+                .iter()
+                .copied()
+                .filter(|layer| self.cut_layers.contains(layer))
+                .collect::<Vec<_>>();
+            if !cut_layers.is_empty() {
+                return cut_layers;
+            }
+        }
+        layers.sort_unstable();
+        layers.dedup();
+        layers
+    }
+}
+
+fn source_id_for_key(item: &Value, key: &str) -> Option<u32> {
+    item.get(key)
+        .and_then(Value::as_u64)
+        .map(|id| id.min(u32::MAX as u64) as u32)
+}
+
+fn bbox_value(value: &Value) -> Option<[i32; 4]> {
+    let items = value.as_array()?;
+    if items.len() < 4 {
+        return None;
+    }
+    let x1 = items[0].as_i64()?.clamp(i32::MIN as i64, i32::MAX as i64) as i32;
+    let y1 = items[1].as_i64()?.clamp(i32::MIN as i64, i32::MAX as i64) as i32;
+    let x2 = items[2].as_i64()?.clamp(i32::MIN as i64, i32::MAX as i64) as i32;
+    let y2 = items[3].as_i64()?.clamp(i32::MIN as i64, i32::MAX as i64) as i32;
+    if x1 == x2 || y1 == y2 {
+        return None;
+    }
+    Some([x1.min(x2), y1.min(y2), x1.max(x2), y1.max(y2)])
+}
+
+fn is_valid_bbox_value(value: &Value) -> bool {
+    bbox_value(value).is_some()
 }
 
 #[cfg(any(debug_assertions, test))]
@@ -278,11 +796,13 @@ fn load_viewer_state(package_root: PathBuf, cache_capacity: usize) -> Result<Loa
     let session = LayoutSession::from_source(source)?;
     let display = DisplayModel::from_layout_layers(session.db().layers());
     let cell_view = CellViewState::top(session.db());
+    let selection_names = SelectionNameIndex::load(&package_root).unwrap_or_default();
     let background_load = BackgroundLoadHandle::spawn(package_root, cache_capacity);
     Ok(LoadedViewerState {
         session,
         display,
         cell_view,
+        selection_names,
         background_load,
     })
 }
@@ -723,15 +1243,26 @@ fn enter_path_for_hit(hit: &PickHit) -> Option<InstancePath> {
 }
 
 #[cfg(test)]
-fn selection_summary_text(hit: &PickHit) -> String {
-    selection_inspector_rows(hit)
+fn selection_summary_text_with_layer(hit: &PickHit, layer: SelectionLayerMetadata<'_>) -> String {
+    selection_inspector_rows(hit, None, None, layer)
         .into_iter()
         .map(|(label, value)| format!("{}: {value}", label.to_ascii_lowercase()))
         .collect::<Vec<_>>()
         .join("\n")
 }
 
-fn selection_inspector_rows(hit: &PickHit) -> Vec<(&'static str, String)> {
+#[derive(Debug, Clone, Copy, Default)]
+struct SelectionLayerMetadata<'a> {
+    name: Option<&'a str>,
+    layer_type: Option<&'a str>,
+}
+
+fn selection_inspector_rows(
+    hit: &PickHit,
+    source_name: Option<&str>,
+    net_name: Option<&str>,
+    layer: SelectionLayerMetadata<'_>,
+) -> Vec<(&'static str, String)> {
     let target = match hit.target {
         PickHitTarget::Shape => "shape".to_owned(),
         PickHitTarget::Instance {
@@ -750,18 +1281,30 @@ fn selection_inspector_rows(hit: &PickHit) -> Vec<(&'static str, String)> {
         ),
     };
     let (source_kind, source_file) = source_trace_for_hit(hit);
-    vec![
+    let mut rows = vec![
         ("Target", target),
         ("Source Kind", source_kind.to_owned()),
         ("Source File", source_file.to_owned()),
         ("Source ID", hit.source_id.to_string()),
-        ("Display Layer", hit.display_layer_id.clone()),
-        ("Layer", hit.layer_id.to_string()),
+    ];
+    if let Some(source_name) = source_name.filter(|name| !name.is_empty()) {
+        rows.push(("Name", source_name.to_owned()));
+    }
+    if let Some(net_name) = net_name.filter(|name| !name.is_empty()) {
+        rows.push(("Net Name", net_name.to_owned()));
+    }
+    rows.extend([
+        ("Layer", layer.name.unwrap_or("Unknown").to_owned()),
+        ("Layer ID", hit.layer_id.to_string()),
+        (
+            "Layer Type",
+            layer.layer_type.unwrap_or("Unknown").to_owned(),
+        ),
         ("Shape Kind", shape_kind_label(hit.kind).to_owned()),
         ("Cell", hit.cell.raw().to_string()),
         ("Depth", hit.depth.to_string()),
         (
-            "BBox",
+            "Display BBox",
             format!(
                 "{}, {}, {}, {}",
                 hit.bbox.x1, hit.bbox.y1, hit.bbox.x2, hit.bbox.y2
@@ -769,7 +1312,22 @@ fn selection_inspector_rows(hit: &PickHit) -> Vec<(&'static str, String)> {
         ),
         ("Instance Path", instance_path_summary(&hit.instance_path)),
         ("Object Path", object_path_summary(&hit.object_path)),
-    ]
+    ]);
+    rows
+}
+
+fn selection_layer_metadata_for_id(
+    layers: &[layoutdb::LayerInfo],
+    layer_id: u16,
+) -> SelectionLayerMetadata<'_> {
+    layers
+        .iter()
+        .find(|layer| layer.id == layer_id)
+        .map(|layer| SelectionLayerMetadata {
+            name: Some(layer.name.as_str()),
+            layer_type: layer.layer_type.as_deref(),
+        })
+        .unwrap_or_default()
 }
 
 fn source_trace_for_hit(hit: &PickHit) -> (&'static str, &'static str) {
@@ -783,6 +1341,9 @@ fn source_trace_for_hit(hit: &PickHit) -> (&'static str, &'static str) {
             "via",
             "design/regular_wires.json | design/special_wires.json | design/io_pins.json",
         ),
+        ShapeKind::IoPin if is_hierarchy_cell_shape(hit) => {
+            ("cell_master_pin", "tech/cell_masters.json")
+        }
         ShapeKind::IoPin => ("io_pin", "design/io_pins.json"),
         ShapeKind::Blockage => ("blockage", "design/blockages.json"),
         ShapeKind::Fill => ("fill", "design/fills.json"),
@@ -791,6 +1352,29 @@ fn source_trace_for_hit(hit: &PickHit) -> (&'static str, &'static str) {
         ShapeKind::Track => ("track", "design/tracks.json"),
         ShapeKind::GCellGrid => ("gcell_grid", "design/gcell_grids.json"),
     }
+}
+
+fn is_hierarchy_cell_shape(hit: &PickHit) -> bool {
+    let layoutdb::ObjectPathTarget::Shape(shape) = &hit.object_path.target else {
+        return false;
+    };
+    let Some(root_cell) = hit
+        .object_path
+        .instance_path
+        .elements()
+        .first()
+        .map(|element| element.parent_cell)
+    else {
+        return false;
+    };
+    shape.cell != root_cell
+}
+
+fn hierarchy_pin_shape_index(hit: &PickHit) -> Option<usize> {
+    let layoutdb::ObjectPathTarget::Shape(shape) = &hit.object_path.target else {
+        return None;
+    };
+    Some(shape.shape_index)
 }
 
 fn shape_kind_label(kind: ShapeKind) -> &'static str {
@@ -1557,7 +2141,19 @@ impl LayoutViewerV2App {
                                     .num_columns(2)
                                     .striped(true)
                                     .show(ui, |ui| {
-                                        for (label, value) in selection_inspector_rows(&hit) {
+                                        let source_name = loaded.selection_names.name_for_hit(&hit);
+                                        let net_name =
+                                            loaded.selection_names.net_name_for_hit(&hit);
+                                        let layer = selection_layer_metadata_for_id(
+                                            loaded.session.db().layers(),
+                                            hit.layer_id,
+                                        );
+                                        for (label, value) in selection_inspector_rows(
+                                            &hit,
+                                            source_name,
+                                            net_name,
+                                            layer,
+                                        ) {
                                             ui.label(label);
                                             ui.monospace(value);
                                             ui.end_row();
@@ -2449,7 +3045,7 @@ mod tests {
         should_request_detail_tiles, should_request_smooth_repaint, should_reuse_render_plan,
         should_sample_layout_fps, use_plane_renderer, viewport_for_world_rect, Args,
         AsyncLoadState, CachedPlaneTextureAction, FillDrawMode, FrameRateState, LayoutViewerV2App,
-        LoadRequest, LodTuningState,
+        LoadRequest, LodTuningState, SelectionLayerMetadata,
     };
     use crate::plane_cache::PlaneKey;
     use layout_display::{Color, DisplayLayer, DisplayModel, LayerStyle, Pattern};
@@ -2568,7 +3164,15 @@ mod tests {
         let (_db, leaf_view) = hierarchy_test_db_and_leaf_view();
         let hit = sample_pick_hit(PickHitTarget::Shape, leaf_view.specific_path().clone());
 
-        let rows = selection_inspector_rows(&hit);
+        let rows = selection_inspector_rows(
+            &hit,
+            Some("wire_9"),
+            Some("req_msg_12_"),
+            SelectionLayerMetadata {
+                name: Some("M1"),
+                layer_type: Some("ROUTING"),
+            },
+        );
 
         assert!(rows
             .iter()
@@ -2581,10 +3185,23 @@ mod tests {
             .any(|(label, value)| *label == "Source ID" && value == "9"));
         assert!(rows
             .iter()
-            .any(|(label, value)| *label == "Layer" && value == "1"));
+            .any(|(label, value)| *label == "Name" && value == "wire_9"));
         assert!(rows
             .iter()
-            .any(|(label, value)| *label == "BBox" && value == "2, 2, 8, 8"));
+            .any(|(label, value)| *label == "Net Name" && value == "req_msg_12_"));
+        assert!(rows
+            .iter()
+            .any(|(label, value)| *label == "Layer" && value == "M1"));
+        assert!(rows
+            .iter()
+            .any(|(label, value)| *label == "Layer ID" && value == "1"));
+        assert!(rows
+            .iter()
+            .any(|(label, value)| *label == "Layer Type" && value == "ROUTING"));
+        assert!(!rows.iter().any(|(label, _value)| *label == "Display Layer"));
+        assert!(rows
+            .iter()
+            .any(|(label, value)| *label == "Display BBox" && value == "2, 2, 8, 8"));
         assert!(rows.iter().any(|(label, value)| {
             *label == "Instance Path" && value.contains("10") && value.contains("20")
         }));
@@ -2599,7 +3216,15 @@ mod tests {
         let mut hit = sample_pick_hit(PickHitTarget::Shape, leaf_view.specific_path().clone());
         hit.kind = ShapeKind::Via;
 
-        let rows = selection_inspector_rows(&hit);
+        let rows = selection_inspector_rows(
+            &hit,
+            None,
+            None,
+            SelectionLayerMetadata {
+                name: Some("VIA1"),
+                layer_type: Some("CUT"),
+            },
+        );
 
         let source_file = rows
             .iter()
@@ -2609,6 +3234,235 @@ mod tests {
         assert!(source_file.contains("design/regular_wires.json"));
         assert!(source_file.contains("design/special_wires.json"));
         assert!(source_file.contains("design/io_pins.json"));
+        assert!(rows
+            .iter()
+            .any(|(label, value)| *label == "Layer Type" && value == "CUT"));
+    }
+
+    #[test]
+    fn selection_inspector_traces_hierarchy_io_pin_shapes_to_cell_masters() {
+        let (_db, leaf_view) = hierarchy_test_db_and_leaf_view();
+        let mut hit = sample_pick_hit(PickHitTarget::Shape, leaf_view.specific_path().clone());
+        hit.kind = ShapeKind::IoPin;
+        hit.source_id = 564;
+        hit.cell = leaf_view.target_cell();
+
+        let rows = selection_inspector_rows(
+            &hit,
+            Some("OAI21X0P5H7R/Y"),
+            None,
+            SelectionLayerMetadata {
+                name: Some("MET1"),
+                layer_type: Some("ROUTING"),
+            },
+        );
+
+        assert!(rows
+            .iter()
+            .any(|(label, value)| *label == "Source Kind" && value == "cell_master_pin"));
+        assert!(rows.iter().any(|(label, value)| {
+            *label == "Source File" && value == "tech/cell_masters.json"
+        }));
+        assert!(rows
+            .iter()
+            .any(|(label, value)| *label == "Name" && value == "OAI21X0P5H7R/Y"));
+    }
+
+    #[test]
+    fn selection_layer_metadata_reads_layer_type_from_layer_info() {
+        let mut routing = LayerInfo::new(15, "MET5");
+        routing.layer_type = Some("ROUTING".to_owned());
+        let mut cut = LayerInfo::new(14, "VIA4");
+        cut.layer_type = Some("CUT".to_owned());
+        let layers = vec![routing, cut];
+
+        let routing_metadata = super::selection_layer_metadata_for_id(&layers, 15);
+        let cut_metadata = super::selection_layer_metadata_for_id(&layers, 14);
+        let missing_metadata = super::selection_layer_metadata_for_id(&layers, 99);
+
+        assert_eq!(routing_metadata.name, Some("MET5"));
+        assert_eq!(routing_metadata.layer_type, Some("ROUTING"));
+        assert_eq!(cut_metadata.name, Some("VIA4"));
+        assert_eq!(cut_metadata.layer_type, Some("CUT"));
+        assert_eq!(missing_metadata.name, None);
+        assert_eq!(missing_metadata.layer_type, None);
+    }
+
+    #[test]
+    fn selection_name_index_reads_io_pin_names_from_source_root() {
+        let root = std::env::temp_dir().join(format!(
+            "layout_viewer_native_name_index_test_{}_{}",
+            std::process::id(),
+            HIERARCHY_TEST_PACKAGE_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        let package_root = root.join(".layoutpkg");
+        let source_root = root.join("source");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&package_root).unwrap();
+        fs::create_dir_all(source_root.join("design")).unwrap();
+        fs::write(
+            package_root.join("manifest.json"),
+            format!(
+                r#"{{
+                    "schema": "ecos.layoutpkg.v1",
+                    "source": {{ "kind": "view-json", "root": "{}" }}
+                }}"#,
+                source_root.display()
+            ),
+        )
+        .unwrap();
+        fs::write(
+            source_root.join("manifest.json"),
+            r#"{
+                "schema": "ieda.view.v1",
+                "files": {
+                    "layers": "tech/layers.json",
+                    "vias": "tech/vias.json",
+                    "io_pins": "design/io_pins.json",
+                    "regular_wires": "design/regular_wires.json",
+                    "special_wires": "design/special_wires.json",
+                    "regular_nets": "design/regular_nets.json",
+                    "special_nets": "design/special_nets.json"
+                }
+            }"#,
+        )
+        .unwrap();
+        fs::create_dir_all(source_root.join("tech")).unwrap();
+        fs::write(
+            source_root.join("tech/layers.json"),
+            r#"{
+                "schema": "ieda.view.v1",
+                "kind": "layers",
+                "data": [
+                    { "id": 1, "name": "M1", "type": "ROUTING" },
+                    { "id": 2, "name": "VIA1", "type": "CUT" },
+                    { "id": 3, "name": "M2", "type": "ROUTING" },
+                    { "id": 4, "name": "VIA2", "type": "CUT" },
+                    { "id": 5, "name": "M3", "type": "ROUTING" }
+                ]
+            }"#,
+        )
+        .unwrap();
+        fs::write(
+            source_root.join("tech/vias.json"),
+            r#"{
+                "schema": "ieda.view.v1",
+                "kind": "vias",
+                "data": [
+                    {
+                        "id": 10,
+                        "name": "M2_M1_VIA1",
+                        "shapes": [
+                            { "layer_id": 1, "rects": [[-50, -50, 50, 50]] },
+                            { "layer_id": 2, "rects": [[-40, -40, 40, 40]] },
+                            { "layer_id": 3, "rects": [[-50, -50, 50, 50]] }
+                        ]
+                    },
+                    {
+                        "id": 11,
+                        "name": "M3_M2_VIA2",
+                        "shapes": [
+                            { "layer_id": 3, "rects": [[-50, -50, 50, 50]] },
+                            { "layer_id": 4, "rects": [[-40, -40, 40, 40]] },
+                            { "layer_id": 5, "rects": [[-50, -50, 50, 50]] }
+                        ]
+                    }
+                ]
+            }"#,
+        )
+        .unwrap();
+        fs::write(
+            source_root.join("design/io_pins.json"),
+            r#"{
+                "schema": "ieda.view.v1",
+                "kind": "io_pins",
+                "data": [
+                    { "id": 14, "name": "req_msg_12_", "net_id": 2 }
+                ]
+            }"#,
+        )
+        .unwrap();
+        fs::write(
+            source_root.join("design/regular_wires.json"),
+            r#"{
+                "schema": "ieda.view.v1",
+                "kind": "regular_wires",
+                "data": [
+                    { "id": 4, "kind": "via", "via_master_id": 10, "net_id": 0, "bbox": [10, 10, 20, 20], "layers": [1, 3, 2] },
+                    { "id": 7, "kind": "path", "net_id": 1 }
+                ]
+            }"#,
+        )
+        .unwrap();
+        fs::write(
+            source_root.join("design/special_wires.json"),
+            r#"{
+                "schema": "ieda.view.v1",
+                "kind": "special_wires",
+                "data": [
+                    { "id": 0, "kind": "path", "special_net_id": 0 },
+                    { "id": 4, "kind": "via", "via_master_id": 11, "special_net_id": 0, "bbox": [30, 30, 40, 40], "layers": [3, 5, 4] }
+                ]
+            }"#,
+        )
+        .unwrap();
+        fs::write(
+            source_root.join("design/regular_nets.json"),
+            r#"{
+                "schema": "ieda.view.v1",
+                "kind": "regular_nets",
+                "data": [
+                    { "id": 0, "name": "clk" },
+                    { "id": 1, "name": "reset" },
+                    { "id": 2, "name": "req_msg_12_" }
+                ]
+            }"#,
+        )
+        .unwrap();
+        fs::write(
+            source_root.join("design/special_nets.json"),
+            r#"{
+                "schema": "ieda.view.v1",
+                "kind": "special_nets",
+                "data": [
+                    { "id": 0, "name": "VDD" }
+                ]
+            }"#,
+        )
+        .unwrap();
+
+        let names = super::SelectionNameIndex::load(&package_root).unwrap();
+        let (_db, leaf_view) = hierarchy_test_db_and_leaf_view();
+        let mut hit = sample_pick_hit(PickHitTarget::Shape, leaf_view.specific_path().clone());
+        hit.kind = ShapeKind::IoPin;
+        hit.source_id = 14;
+        hit.instance_path = InstancePath::new();
+        hit.object_path.instance_path = InstancePath::new();
+
+        assert_eq!(names.name_for_hit(&hit), Some("req_msg_12_"));
+        assert_eq!(names.net_name_for_hit(&hit), Some("req_msg_12_"));
+
+        hit.kind = ShapeKind::RegularWire;
+        hit.source_id = 7;
+        assert_eq!(names.name_for_hit(&hit), None);
+        assert_eq!(names.net_name_for_hit(&hit), Some("reset"));
+
+        hit.kind = ShapeKind::SpecialWire;
+        hit.source_id = 0;
+        assert_eq!(names.net_name_for_hit(&hit), Some("VDD"));
+
+        hit.kind = ShapeKind::Via;
+        hit.source_id = 4;
+        hit.layer_id = 2;
+        hit.bbox = Rect::new(10, 10, 20, 20);
+        assert_eq!(names.name_for_hit(&hit), None);
+        assert_eq!(names.net_name_for_hit(&hit), Some("clk"));
+
+        hit.layer_id = 4;
+        hit.bbox = Rect::new(30, 30, 40, 40);
+        assert_eq!(names.net_name_for_hit(&hit), Some("VDD"));
+
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
@@ -3181,13 +4035,21 @@ mod tests {
         let (db, leaf_view) = hierarchy_test_db_and_leaf_view();
         let hit = sample_pick_hit(PickHitTarget::Shape, leaf_view.specific_path().clone());
 
-        let text = super::selection_summary_text(&hit);
+        let text = super::selection_summary_text_with_layer(
+            &hit,
+            SelectionLayerMetadata {
+                name: Some("M1"),
+                layer_type: Some("ROUTING"),
+            },
+        );
 
         assert!(text.contains("target: shape"));
         assert!(text.contains("depth: 2"));
         assert!(text.contains(&format!("cell: {}", db.cell_by_name("leaf").unwrap().raw())));
-        assert!(text.contains("layer: 1"));
-        assert!(text.contains("bbox: 2, 2, 8, 8"));
+        assert!(text.contains("layer: M1"));
+        assert!(text.contains("layer id: 1"));
+        assert!(text.contains("layer type: ROUTING"));
+        assert!(text.contains("display bbox: 2, 2, 8, 8"));
     }
 
     #[test]
