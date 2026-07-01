@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import {
   activatePdkApi,
   cancelResourceApi,
+  importLocalResourcePathApi,
   installResourceApi,
   listResourcesApi,
   removePdkReferenceApi,
@@ -16,6 +17,7 @@ import {
 import type { InstallProgress, ResourceItem, ToolInfo } from '@/api/plugin'
 
 const PROGRESS_UPDATE_INTERVAL_MS = 180
+type LocalResourceImporter = (resourceId: string, path: string) => Promise<unknown>
 
 export const usePluginStore = defineStore('plugin', () => {
   const resources = ref<ResourceItem[]>([])
@@ -316,6 +318,25 @@ export const usePluginStore = defineStore('plugin', () => {
     await fetchTools({ silent: true })
   }
 
+  async function importLocalResource(
+    resourceId: string,
+    path: string,
+    importer: LocalResourceImporter = importLocalResourcePathApi,
+  ): Promise<void> {
+    delete resourceErrors.value[resourceId]
+    _syncLegacyToolError(resourceId)
+    try {
+      await importer(resourceId, path)
+      await fetchTools({ silent: true })
+    } catch (e) {
+      _setResourceError(
+        resourceId,
+        e instanceof Error ? e.message : `Failed to import ${_resourceName(resourceId)}`,
+      )
+      await fetchTools({ silent: true })
+    }
+  }
+
   async function refresh(): Promise<void> {
     refreshing.value = true
     error.value = null
@@ -360,6 +381,7 @@ export const usePluginStore = defineStore('plugin', () => {
     activatePdk,
     validatePdk,
     removePdkReference,
+    importLocalResource,
     refresh,
     cleanup,
   }

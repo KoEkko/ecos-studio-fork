@@ -334,7 +334,9 @@ export class ResourceManagerService {
       throw new Error(`Tool '${name}' is not installed`)
     }
     if (!entry.managed) {
-      throw new Error(`Tool '${name}' is unmanaged and cannot be uninstalled`)
+      delete manifest.installed[resourceId]
+      await this.writeManifest(manifest)
+      return { status: 'removed', resource_id: resourceId }
     }
     await rm(entry.path, { force: true, recursive: true })
     delete manifest.installed[resourceId]
@@ -420,12 +422,108 @@ export class ResourceManagerService {
     return this.pdkEntryToResource(manifest.installed[resourceId] as PdkInventoryEntry)
   }
 
+  async importLocalPath(resourceId: string, path: string): Promise<ResourceInfo> {
+    if (resourceId.startsWith('tool:')) {
+      return await this.importToolPath(resourceNameFromId(resourceId, 'tool'), path)
+    }
+    if (resourceId.startsWith('pdk:')) {
+      return await this.importPdkPathForResource(resourceNameFromId(resourceId, 'pdk'), path)
+    }
+    throw new Error(`Unsupported resource id: ${resourceId}`)
+  }
+
   async refreshRegistry(): Promise<{ status: string; tools_count: number }> {
     const state = await this.fetchRegistry(true)
     return {
       status: state.registry ? 'refreshed' : 'degraded',
       tools_count: state.registry?.tools.length ?? 0,
     }
+  }
+
+  private async importToolPath(name: string, path: string): Promise<ResourceInfo> {
+    const canonicalPath = resolve(path)
+    const pathStats = await stat(canonicalPath)
+    if (!pathStats.isDirectory()) {
+      throw new Error(`Not a directory: ${path}`)
+    }
+
+    const expectedExecutable = `bin/${name}`
+    const expectedPath = join(canonicalPath, ...expectedExecutable.split('/'))
+    if (!await pathExists(expectedPath)) {
+      throw new Error(`Expected executable not found for ${name}`)
+    }
+    const expectedStats = await stat(expectedPath)
+    if (!expectedStats.isFile()) {
+      throw new Error(`Expected executable is not a file for ${name}`)
+    }
+    if (!await isUsableExecutable(expectedPath, process.platform)) {
+      throw new Error(`Expected executable is not executable for ${name}`)
+    }
+
+    const detected = [expectedExecutable]
+    const resourceId = `tool:${name}`
+    const manifest = await this.readManifest()
+    const entry: ToolInventoryEntry = {
+      type: 'tool',
+      name,
+      version: '',
+      path: canonicalPath,
+      installed_at: utcNowIso(),
+      sha256: '',
+      detected_executables: detected,
+      executable: expectedExecutable,
+      active: true,
+      managed: false,
+    }
+    manifest.installed[resourceId] = entry
+    await this.writeManifest(manifest)
+    return await this.getResource(resourceId)
+  }
+
+  private async importPdkPathForResource(pdkId: string, path: string): Promise<ResourceInfo> {
+    const scanned = await scanPdkDirectory(path)
+    if (scanned.pdkId !== pdkId) {
+      throw new Error(`Selected directory contains PDK '${scanned.pdkId}', expected '${pdkId}'`)
+    }
+
+    const resourceId = `pdk:${pdkId}`
+    const manifest = await this.readManifest()
+    const previous = manifest.installed[resourceId]
+    const hasOtherActivePdk = Object.entries(manifest.installed).some(([id, entry]) => {
+      return id !== resourceId && isPdkEntry(entry) && entry.active
+    })
+    const active = isPdkEntry(previous)
+      ? previous.active || !hasOtherActivePdk
+      : !hasOtherActivePdk
+    if (active) {
+      for (const [id, entry] of Object.entries(manifest.installed)) {
+        if (id !== resourceId && isPdkEntry(entry)) {
+          entry.active = false
+        }
+      }
+    }
+
+    const entry: PdkInventoryEntry = {
+      type: 'pdk',
+      id: pdkId,
+      name: scanned.name,
+      pdk_id: pdkId,
+      version: '',
+      sha256: '',
+      source: 'local',
+      source_url: '',
+      canonical_path: scanned.canonicalPath,
+      path: scanned.canonicalPath,
+      detected_files: [...scanned.detectedFiles.directories, ...scanned.detectedFiles.files],
+      detected_file_groups: scanned.detectedFiles,
+      imported_at: utcNowIso(),
+      active,
+      managed: false,
+      health: 'ok',
+    }
+    manifest.installed[resourceId] = entry
+    await this.writeManifest(manifest)
+    return this.pdkEntryToResource(entry, this.findRegistryPdk(this.registryMemory, pdkId))
   }
 
   private async installTool(
@@ -915,13 +1013,19 @@ export class ResourceManagerService {
     const resourceId = `tool:${tool.name}`
     let status: ResourceStatus = 'available'
     let actions: ResourceAction[] = ['install']
+    const source = local && !local.managed ? 'local' : 'registry'
 
     if (this.activeJobs.has(resourceId)) {
       status = 'installing'
       actions = []
     } else if (local) {
-      status = versions.length > 0 && versions[0] !== local.version ? 'update_available' : 'installed'
-      actions = local.managed ? (status === 'update_available' ? ['update', 'uninstall'] : ['uninstall']) : []
+      if (local.managed) {
+        status = versions.length > 0 && versions[0] !== local.version ? 'update_available' : 'installed'
+        actions = status === 'update_available' ? ['update', 'uninstall'] : ['uninstall']
+      } else {
+        status = 'installed'
+        actions = asset ? ['install', 'remove_reference'] : ['remove_reference']
+      }
     }
 
     return {
@@ -940,7 +1044,7 @@ export class ResourceManagerService {
       managed_root: this.toolsDir,
       platform,
       size: asset?.size ?? null,
-      source: 'registry',
+      source,
       homepage: tool.homepage,
       actions,
       health: local ? toolHealth(local) : {},
@@ -968,7 +1072,7 @@ export class ResourceManagerService {
       size: null,
       source: 'local',
       homepage: '',
-      actions: entry.managed ? ['uninstall'] : [],
+      actions: entry.managed ? ['uninstall'] : ['remove_reference'],
       health: toolHealth(entry),
       error: null,
     }
@@ -1797,7 +1901,7 @@ async function collectExecutableFiles(root: string, directory: string, results: 
       await collectExecutableFiles(root, path, results)
     } else if (entry.isFile()) {
       try {
-        await access(path, 0o111)
+        await access(path, constants.X_OK)
         results.push(path.slice(root.length + 1).replace(/\\/g, '/'))
       } catch {
         // Non-executable files are ignored.

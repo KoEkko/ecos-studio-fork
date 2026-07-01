@@ -94,17 +94,6 @@
             <div class="manager-table-actions">
               <button
                 type="button"
-                :disabled="pluginStore.loading || importingPdk"
-                @click="handleImportPdk"
-              >
-                <i
-                  :class="importingPdk ? 'ri-loader-4-line spin' : 'ri-folder-add-line'"
-                  aria-hidden="true"
-                ></i>
-                Import PDK
-              </button>
-              <button
-                type="button"
                 :disabled="pluginStore.refreshing"
                 @click="pluginStore.refresh()"
               >
@@ -117,8 +106,12 @@
             </div>
           </div>
 
-          <div v-if="pluginStore.error" class="resource-error">
-            {{ pluginStore.error }}
+          <div
+            v-if="managerErrorText"
+            class="resource-error"
+            :title="pluginStore.error ?? undefined"
+          >
+            {{ managerErrorText }}
           </div>
 
           <div class="resource-table-scroll">
@@ -161,14 +154,16 @@
                     <span class="resource-avatar">{{ row.icon }}</span>
                     <span class="resource-copy">
                       <strong>{{ row.name }}</strong>
-                      <small>{{ row.description }}</small>
+                      <small :title="row.descriptionTitle || undefined">{{ row.description }}</small>
                     </span>
                   </span>
 
                   <span class="resource-muted">{{ row.version }}</span>
                   <span class="resource-muted">{{ row.sizeLabel }}</span>
-                  <span>
-                    <b class="status-pill" :class="row.statusKind">{{ row.statusText }}</b>
+                  <span class="resource-status-cell">
+                    <b class="status-pill" :class="row.statusKind" :title="row.statusTitle || undefined">
+                      <span>{{ row.statusText }}</span>
+                    </b>
                     <span
                       v-if="row.progressPercent !== null"
                       class="mini-progress"
@@ -181,19 +176,33 @@
                     >
                       <span></span>
                     </span>
-                    <span v-if="rowError(row)" class="row-error-msg">{{ rowError(row) }}</span>
                   </span>
 
                   <span class="row-actions">
                     <template
                       v-if="
                         rowActionForStatus(row.resource) !== 'none' ||
+                        removalActionForRow(row) !== null ||
+                        canImportLocalResource(row) ||
                         (
                           row.statusKind !== 'installing' &&
                           (row.actions.includes('activate') || row.actions.includes('validate'))
                         )
                       "
                     >
+                      <button
+                        v-if="canImportLocalResource(row)"
+                        type="button"
+                        class="row-action-btn icon-only info"
+                        data-title="Import Local"
+                        :disabled="importingResourceIds.has(row.id)"
+                        @click.stop="handleLocalImport(row)"
+                      >
+                        <i
+                          :class="importingResourceIds.has(row.id) ? 'ri-loader-4-line spin' : 'ri-folder-add-line'"
+                          aria-hidden="true"
+                        ></i>
+                      </button>
                       <button
                         v-if="rowActionForStatus(row.resource) === 'install' && row.statusKind !== 'error'"
                         type="button"
@@ -211,6 +220,15 @@
                         @click.stop="handleRowInstall(row)"
                       >
                         <i class="ri-refresh-line" aria-hidden="true"></i>
+                      </button>
+                      <button
+                        v-else-if="rowActionForStatus(row.resource) === 'replace'"
+                        type="button"
+                        class="row-action-btn icon-only info"
+                        data-title="Replace"
+                        @click.stop="handleRowInstall(row)"
+                      >
+                        <i class="ri-loop-left-line" aria-hidden="true"></i>
                       </button>
                       <button
                         v-else-if="rowActionForStatus(row.resource) === 'cancel'"
@@ -249,14 +267,14 @@
                         <i class="ri-shield-check-line" aria-hidden="true"></i>
                       </button>
                       <button
-                        v-if="['uninstall', 'remove_reference'].includes(rowActionForStatus(row.resource))"
+                        v-if="removalActionForRow(row) !== null"
                         type="button"
                         class="row-action-btn icon-only danger-outlined"
-                        :data-title="rowActionForStatus(row.resource) === 'remove_reference' ? 'Remove' : 'Uninstall'"
-                        @click.stop="handleRowUninstall(row)"
+                        :data-title="removalActionForRow(row) === 'remove_reference' ? 'Remove' : 'Uninstall'"
+                        @click.stop="handleRowRemove(row)"
                       >
                         <i
-                          :class="rowActionForStatus(row.resource) === 'remove_reference' ? 'ri-link-unlink' : 'ri-delete-bin-line'"
+                          :class="removalActionForRow(row) === 'remove_reference' ? 'ri-link-unlink' : 'ri-delete-bin-line'"
                           aria-hidden="true"
                         ></i>
                       </button>
@@ -298,9 +316,7 @@
               <span class="selected-item-body">
                 <strong>{{ row.name }}</strong>
                 <small class="selected-item-meta" :title="resolveInstallPath(row)">
-                  <b v-if="row.statusKind === 'update'">Update</b>
-                  <span v-else-if="row.statusKind === 'installing'">{{ row.statusText }}</span>
-                  <span v-else>{{ row.version }}</span>
+                  <span>{{ selectedResourceMetaText(row) }}</span>
                 </small>
               </span>
               <em>{{ row.sizeLabel }}</em>
@@ -317,7 +333,7 @@
 
           <p class="manager-note">
             <i class="ri-information-line" aria-hidden="true"></i>
-            Updates will replace the existing installed versions.
+            Updates apply to managed installs. Replace switches a local tool to the registry-managed version without deleting the original local directory.
           </p>
 
           <div class="selected-actions">
@@ -348,10 +364,14 @@ import { usePluginStore } from '@/stores/pluginStore'
 import { usePdkManager } from '@/composables/usePdkManager'
 import { getOptionalDesktopApi, hasDesktopApi, waitForDesktopApi } from '@/platform/desktop'
 import {
+  canImportLocalResource,
+  compactResourceMessage,
   primaryActionForRow,
   resourceToRow,
+  removalActionForRow,
   resolveRowInstallPath,
   rowActionForStatus,
+  selectedResourceMetaText,
   runBatchDownload,
   runPrimaryAction,
 } from './pluginToolsRows'
@@ -362,7 +382,7 @@ type StatusFilter = 'all' | 'available' | 'installed' | 'updates'
 
 const router = useRouter()
 const pluginStore = usePluginStore()
-const { importPdk } = usePdkManager()
+const { importPdkForResource } = usePdkManager()
 
 const searchQuery = ref('')
 const searchInput = ref('')
@@ -378,12 +398,16 @@ watch(searchInput, (val) => {
 const categoryFilter = ref<CategoryFilter>('all')
 const statusFilter = ref<StatusFilter>('all')
 const selectedResourceIds = ref<Set<string>>(new Set())
-const importingPdk = ref(false)
+const importingResourceIds = ref<Set<string>>(new Set())
 
 const resourceRows = computed<ResourceRow[]>(() => {
   return pluginStore.resources.map((resource) => {
     return resourceToRow(resource, pluginStore.resourceProgress[resource.id])
   })
+})
+
+const managerErrorText = computed(() => {
+  return pluginStore.error ? compactResourceMessage(pluginStore.error, 'Resource manager error') : null
 })
 
 const filteredRows = computed(() => {
@@ -513,10 +537,6 @@ function clearFilters(): void {
   statusFilter.value = 'all'
 }
 
-function rowError(row: ResourceRow): string | undefined {
-  return pluginStore.resourceErrors[row.id] || row.resource.error || undefined
-}
-
 async function handleRowInstall(row: ResourceRow): Promise<void> {
   await runPrimaryAction(row, pluginStore)
 }
@@ -525,19 +545,32 @@ async function handleRowCancel(row: ResourceRow): Promise<void> {
   await pluginStore.cancelResource(row.id)
 }
 
-async function handleImportPdk(): Promise<void> {
-  if (importingPdk.value) {
+async function handleLocalImport(row: ResourceRow): Promise<void> {
+  if (importingResourceIds.value.has(row.id)) {
     return
   }
 
-  importingPdk.value = true
+  const next = new Set(importingResourceIds.value)
+  next.add(row.id)
+  importingResourceIds.value = next
   try {
-    const imported = await importPdk()
-    if (imported) {
-      await pluginStore.fetchTools({ silent: true })
+    const desktopApi = await waitForDesktopApi()
+    const path = await desktopApi.dialog.pickDirectory({
+      title: `Select Local ${row.name} Directory`,
+    })
+    if (!path) {
+      return
     }
+
+    await pluginStore.importLocalResource(
+      row.id,
+      path,
+      row.type === 'pdk' ? importPdkForResource : undefined,
+    )
   } finally {
-    importingPdk.value = false
+    const done = new Set(importingResourceIds.value)
+    done.delete(row.id)
+    importingResourceIds.value = done
   }
 }
 
@@ -553,8 +586,9 @@ async function handlePdkValidate(row: ResourceRow): Promise<void> {
   }
 }
 
-async function handleRowUninstall(row: ResourceRow): Promise<void> {
-  const action = rowActionForStatus(row.resource)
+async function handleRowRemove(row: ResourceRow): Promise<void> {
+  const action = removalActionForRow(row)
+  if (!action) return
   const isDestructive = action === 'uninstall'
   const confirmMsg = isDestructive
     ? `Are you sure you want to uninstall "${row.name}"? This action cannot be undone.`
@@ -562,7 +596,11 @@ async function handleRowUninstall(row: ResourceRow): Promise<void> {
   if (!confirm(confirmMsg)) return
 
   if (action === 'remove_reference') {
-    await pluginStore.removePdkReference(row.id)
+    if (row.type === 'pdk') {
+      await pluginStore.removePdkReference(row.id)
+      return
+    }
+    await pluginStore.uninstallResource(row.id)
     return
   }
   await pluginStore.uninstallResource(row.id)
@@ -1061,15 +1099,21 @@ async function openDocs(): Promise<void> {
 }
 
 .resource-table {
+  --resource-table-columns: 32px minmax(150px, 2fr) minmax(96px, 0.6fr) minmax(68px, 0.5fr) minmax(112px, 0.7fr) 116px;
   width: 100%;
 }
 
 .resource-table-head,
 .resource-row {
   display: grid;
-  grid-template-columns: 32px minmax(150px, 2fr) minmax(68px, 0.6fr) minmax(58px, 0.5fr) minmax(88px, 0.7fr) minmax(70px, auto);
+  grid-template-columns: var(--resource-table-columns);
   align-items: center;
   gap: 0;
+}
+
+.resource-table-head > *,
+.resource-row > * {
+  min-width: 0;
 }
 
 .resource-table-head {
@@ -1084,6 +1128,7 @@ async function openDocs(): Promise<void> {
 }
 
 .resource-row {
+  --resource-row-primary-line: 22px;
   width: 100%;
   min-height: 56px;
   padding: 8px 12px;
@@ -1092,6 +1137,7 @@ async function openDocs(): Promise<void> {
   color: var(--text-primary);
   background: transparent;
   cursor: pointer;
+  align-items: start;
   text-align: left;
   transition: background 0.15s ease;
 }
@@ -1113,6 +1159,7 @@ async function openDocs(): Promise<void> {
   display: grid;
   width: 18px;
   height: 18px;
+  margin-top: 7px;
   place-items: center;
   border: 1px solid var(--border-color);
   border-radius: 4px;
@@ -1128,7 +1175,7 @@ async function openDocs(): Promise<void> {
 
 .resource-name-cell {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   min-width: 0;
 }
 
@@ -1164,6 +1211,7 @@ async function openDocs(): Promise<void> {
   color: var(--text-primary);
   font-size: 13px;
   font-weight: 750;
+  line-height: var(--resource-row-primary-line);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1172,27 +1220,44 @@ async function openDocs(): Promise<void> {
   display: block;
   overflow: hidden;
   max-width: min(260px, 100%);
-  margin-top: 2px;
   color: var(--text-secondary);
   font-size: 11px;
+  line-height: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.resource-row > .resource-muted,
+.resource-status-cell,
+.row-actions {
+  align-self: start;
+}
+
 .resource-muted {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--resource-row-primary-line);
   color: var(--text-secondary);
   font-size: 12px;
+  line-height: 1.2;
 }
 
 /* ---- Pills ---- */
 .status-pill {
   display: inline-flex;
   align-items: center;
+  max-width: 100%;
   min-height: 22px;
   padding: 0 8px;
   border-radius: 6px;
   font-size: 11px;
   font-weight: 700;
+  white-space: nowrap;
+}
+
+.status-pill span {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .status-pill.installed {
@@ -1211,9 +1276,11 @@ async function openDocs(): Promise<void> {
 }
 
 .status-pill.installing {
-  color: var(--text-secondary);
-  background: transparent;
-  padding: 0;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 0 7px;
+  color: var(--info-color);
+  background: var(--info-bg);
 }
 
 .status-pill.error {
@@ -1251,19 +1318,11 @@ async function openDocs(): Promise<void> {
   will-change: transform;
 }
 
-.row-error-msg {
-  display: block;
-  margin-top: 4px;
-  color: var(--danger-color);
-  font-size: 11px;
-  line-height: 1.3;
-}
-
 /* ---- Row actions ---- */
 .row-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 6px;
   flex-wrap: wrap;
 }
@@ -1375,6 +1434,11 @@ async function openDocs(): Promise<void> {
 .row-action-btn.warn:disabled {
   cursor: not-allowed;
   opacity: 0.7;
+}
+
+.row-action-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
 .row-action-btn.danger {
@@ -1840,7 +1904,7 @@ async function openDocs(): Promise<void> {
 
   .resource-table-head,
   .resource-row {
-    grid-template-columns: 28px minmax(130px, 1fr) minmax(74px, auto) minmax(68px, auto);
+    --resource-table-columns: 28px minmax(88px, 1fr) minmax(96px, auto) minmax(68px, auto);
   }
 
   .resource-table-head span:nth-child(3),

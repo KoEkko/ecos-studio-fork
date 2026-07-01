@@ -2,8 +2,9 @@ import type { InstallProgress, ResourceAction, ResourceItem } from '@/api/plugin
 
 export type ResourceType = 'tool' | 'pdk'
 export type StatusKind = 'available' | 'installed' | 'update' | 'installing' | 'error'
-export type RowAction = 'install' | 'update' | 'cancel' | 'uninstall' | 'remove_reference' | 'none'
-export type PrimaryRowAction = 'install' | 'update'
+export type RowAction = 'install' | 'update' | 'replace' | 'cancel' | 'uninstall' | 'remove_reference' | 'none'
+export type PrimaryRowAction = 'install' | 'update' | 'replace'
+export type RemovalRowAction = 'uninstall' | 'remove_reference'
 
 export interface ResourceActionExecutor {
   installResource(resourceId: string): Promise<void>
@@ -16,11 +17,13 @@ export interface ResourceRow {
   name: string
   resourceName: string
   description: string
+  descriptionTitle: string
   version: string
   sizeLabel: string
   sizeMb: number
   platform: string
   statusText: string
+  statusTitle: string
   statusKind: StatusKind
   icon: string
   accent: string
@@ -50,7 +53,9 @@ export function formatResourceSize(size: number | null): { sizeLabel: string; si
 }
 
 function versionLabel(resource: ResourceItem): string {
-  const version = resource.active_version || resource.installed_version || resource.available_versions[0]
+  const version = resource.active_version
+    || resource.installed_version
+    || (resource.source === 'local' ? undefined : resource.available_versions[0])
   if (!version) {
     return resource.source === 'local' ? 'Local' : '-'
   }
@@ -89,11 +94,49 @@ function progressPercentFor(progress: InstallProgress | undefined): number | nul
   return Math.max(0, Math.min(100, Math.round((progress.progress || 0) * 100)))
 }
 
+export function compactResourceMessage(
+  message: string | null | undefined,
+  fallback: string = 'Resource operation failed',
+): string {
+  const text = message?.trim()
+  if (!text) return fallback
+
+  const lower = text.toLowerCase()
+  const hasUrl = /https?:\/\//i.test(text)
+  const isShortDisplayText = text.length <= 80 &&
+    !hasUrl &&
+    !text.includes('\n') &&
+    !lower.includes('fetch failed') &&
+    !lower.includes('und_err')
+
+  if (isShortDisplayText) return text
+  if (lower.includes('timeout') || lower.includes('und_err_connect_timeout')) return 'Connection timeout'
+  if (lower.includes('failed to download') || lower.includes('fetch failed') || hasUrl) return 'Download failed'
+  if (lower.includes('checksum') || lower.includes('hash') || lower.includes('integrity')) return 'Verification failed'
+  if (lower.includes('post-install') || lower.includes('post_install')) return 'Post-install failed'
+  if (lower.includes('not found') || lower.includes('missing')) return 'Resource not found'
+  return fallback
+}
+
 function installedStatusText(resource: ResourceItem): string {
+  if (isLocalTool(resource)) {
+    return 'Local'
+  }
   if (resource.type === 'pdk' && resource.active) {
     return 'Active'
   }
   return 'Installed'
+}
+
+function isLocalTool(resource: ResourceItem): boolean {
+  return resource.type === 'tool' &&
+    resource.status === 'installed' &&
+    resource.source === 'local' &&
+    resource.health.managed === false
+}
+
+function isReplaceableLocalTool(resource: ResourceItem): boolean {
+  return isLocalTool(resource) && resource.actions.includes('install')
 }
 
 function errorStatusText(resource: ResourceItem): string {
@@ -102,37 +145,48 @@ function errorStatusText(resource: ResourceItem): string {
   return 'Error'
 }
 
-function progressStatusText(progress: InstallProgress | undefined, percent: number | null): string {
-  if (progress?.phase === 'uninstalling') {
-    return 'Removing'
+function rowDescription(resource: ResourceItem): { text: string; title: string } {
+  const text = resource.description || resource.path || ''
+  if (resource.error) {
+    return {
+      text: compactResourceMessage(resource.error),
+      title: resource.error,
+    }
   }
-  if (percent !== null && progress?.phase === 'downloading') {
-    return `Downloading ${percent}%`
+  return { text, title: text }
+}
+
+function progressStatusText(progress: InstallProgress | undefined): string {
+  switch (progress?.phase) {
+    case 'downloading':
+      return 'Downloading'
+    case 'verifying':
+      return 'Verifying'
+    case 'extracting':
+      return 'Extracting'
+    case 'post_install':
+      return 'Post-install'
+    case 'uninstalling':
+      return 'Removing'
+    case 'done':
+      return 'Installed'
+    case 'cancelled':
+      return 'Cancelled'
+    case 'error':
+      return 'Error'
+    default:
+      return 'Installing'
   }
-  if (percent !== null && progress?.phase === 'extracting') {
-    return `Extracting ${percent}%`
-  }
-  if (progress?.phase === 'post_install') {
-    return progress.message || 'Initializing'
-  }
-  if (progress?.message) {
-    return progress.message
-  }
-  if (percent !== null) {
-    return `Installing ${percent}%`
-  }
-  return 'Installing'
 }
 
 function mapStatus(
   resource: ResourceItem,
   progress: InstallProgress | undefined,
 ): { kind: StatusKind; text: string } {
-  const percent = progressPercentFor(progress)
   if (progress || resource.status === 'installing' || resource.status === 'uninstalling' || resource.status === 'removing') {
     return {
       kind: 'installing',
-      text: progressStatusText(progress, percent),
+      text: progressStatusText(progress),
     }
   }
 
@@ -165,6 +219,9 @@ export function rowActionForStatus(resource: ResourceItem): RowAction {
   ) {
     return 'update'
   }
+  if (isReplaceableLocalTool(resource)) {
+    return 'replace'
+  }
   if ((resource.status === 'available' || resource.status === 'error') && actions.has('install')) {
     return 'install'
   }
@@ -180,10 +237,25 @@ export function rowActionForStatus(resource: ResourceItem): RowAction {
 
 export function primaryActionForRow(row: ResourceRow): PrimaryRowAction | null {
   const action = rowActionForStatus(row.resource)
-  if (action === 'install' || action === 'update') {
+  if (action === 'install' || action === 'update' || action === 'replace') {
     return action
   }
   return null
+}
+
+export function removalActionForRow(row: ResourceRow): RemovalRowAction | null {
+  const action = rowActionForStatus(row.resource)
+  if (action === 'uninstall' || action === 'remove_reference') {
+    return action
+  }
+  if (action === 'replace' && row.resource.actions.includes('remove_reference')) {
+    return 'remove_reference'
+  }
+  return null
+}
+
+export function canImportLocalResource(row: ResourceRow): boolean {
+  return (row.type === 'tool' || row.type === 'pdk') && row.statusKind !== 'installing'
 }
 
 export function createPrimaryActionTask(
@@ -194,7 +266,7 @@ export function createPrimaryActionTask(
   if (action === 'update') {
     return executor.updateResource(row.id)
   }
-  if (action === 'install') {
+  if (action === 'install' || action === 'replace') {
     return executor.installResource(row.id)
   }
   return null
@@ -227,10 +299,28 @@ export async function runBatchDownload(
 
 function targetVersionForRow(row: ResourceRow): string | null {
   const resource = row.resource
-  if (resource.status === 'update_available' || resource.status === 'available') {
+  if (
+    resource.status === 'update_available' ||
+    resource.status === 'available' ||
+    primaryActionForRow(row) === 'replace'
+  ) {
     return resource.available_versions[0] ?? null
   }
   return resource.installed_version ?? resource.active_version ?? resource.available_versions[0] ?? null
+}
+
+export function selectedResourceMetaText(row: ResourceRow): string {
+  if (primaryActionForRow(row) === 'replace') {
+    const version = row.resource.available_versions[0]
+    return version ? `Replace with managed v${String(version).replace(/^v/i, '')}` : 'Replace with managed version'
+  }
+  if (row.statusKind === 'update') {
+    return 'Update'
+  }
+  if (row.statusKind === 'installing') {
+    return row.statusText
+  }
+  return row.version
 }
 
 function joinInstallPath(root: string, segments: string[]): string {
@@ -288,18 +378,21 @@ export function resourceToRow(
   const progressPercent = progressPercentFor(progress)
   const size = formatResourceSize(resource.size)
   const status = mapStatus(resource, progress)
+  const description = rowDescription(resource)
 
   return {
     id: resource.id,
     type: resource.type,
     name: resource.display_name || resource.name,
     resourceName: resource.name,
-    description: resource.description || resource.path || resource.error || '',
+    description: description.text,
+    descriptionTitle: description.title,
     version: versionLabel(resource),
     sizeLabel: size.sizeLabel,
     sizeMb: size.sizeMb,
     platform: resource.platform || (resource.source === 'local' ? 'Local' : ''),
     statusText: status.text,
+    statusTitle: status.kind === 'error' ? resource.error || '' : '',
     statusKind: status.kind,
     icon: iconFor(resource),
     accent: accentFor(resource),
