@@ -17,6 +17,7 @@
     "package": "pnpm run build && rm -rf release && electron-builder --config electron-builder.yml",
     "smoke": "node scripts/smoke-electron.mjs",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {

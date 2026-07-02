@@ -1140,12 +1140,16 @@ const browseRtlFiles = async () => {
     return
   }
 
-  if (!result || result.files.length === 0) {
+  if (!result) {
     return
   }
 
   if (result.directories.length > 0) {
     showDirectoryUploadFailurePrompt()
+    return
+  }
+
+  if (result.files.length === 0) {
     return
   }
 

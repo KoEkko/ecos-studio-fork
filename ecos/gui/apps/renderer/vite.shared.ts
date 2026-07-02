@@ -1,7 +1,6 @@
-/// <reference types="vitest/config" />
 import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
-import type { UserConfig } from 'vite'
+import { configDefaults, type ViteUserConfig } from 'vitest/config'
 
 export interface RendererViteBuildOptions {
   emptyOutDir?: boolean
@@ -19,8 +18,8 @@ export interface RendererViteConfigOptions {
   root?: string
 }
 
-type RendererVitestConfig = NonNullable<UserConfig['test']>
-type RendererUserConfig = UserConfig & {
+type RendererVitestConfig = NonNullable<ViteUserConfig['test']>
+type RendererUserConfig = ViteUserConfig & {
   test?: RendererVitestConfig
 }
 
@@ -34,7 +33,7 @@ export function createRendererViteConfig({
   root,
 }: RendererViteConfigOptions): RendererUserConfig {
   const isProd = command === 'build' && mode !== 'development'
-  const buildConfig: NonNullable<UserConfig['build']> = {
+  const buildConfig: NonNullable<ViteUserConfig['build']> = {
     target: 'esnext',
     minify: 'esbuild',
     rollupOptions: {
@@ -110,6 +109,7 @@ export function createRendererViteConfig({
   if (includeTestConfig) {
     config.test = {
       environment: 'node',
+      exclude: [...configDefaults.exclude, '**/*.component.test.ts'],
       globals: true,
     }
   }

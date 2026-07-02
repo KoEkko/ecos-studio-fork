@@ -26,6 +26,9 @@ dist-ssr
 .cursor/
 .shared/
 openspec/
+coverage/
+playwright-report/
+test-results/
 
 
 assets/*.json

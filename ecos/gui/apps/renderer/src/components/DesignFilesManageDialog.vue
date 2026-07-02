@@ -388,12 +388,16 @@ async function browseRtlFiles() {
     return
   }
 
-  if (!picked || picked.files.length === 0) {
+  if (!picked) {
     return
   }
 
   if (picked.directories.length > 0) {
     showDirectoryUploadFailurePrompt()
+    return
+  }
+
+  if (picked.files.length === 0) {
     return
   }
 
