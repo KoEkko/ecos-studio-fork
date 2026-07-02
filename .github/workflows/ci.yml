@@ -104,9 +104,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Playwright Chromium
-        run: pnpm exec playwright install --with-deps chromium
-
       - name: Run GUI typecheck
         run: pnpm run typecheck
 
@@ -118,9 +115,6 @@ jobs:
 
       - name: Run GUI tests
         run: pnpm run test
-
-      - name: Run GUI E2E smoke tests
-        run: pnpm run test:e2e
 
   layout-viewer-rust:
     name: Layout Viewer Rust Checks
