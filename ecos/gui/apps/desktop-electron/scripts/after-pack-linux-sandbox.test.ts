@@ -40,6 +40,8 @@ describe('afterPackLinuxSandbox', () => {
 
     expect(renamedBinary).toBe('binary-placeholder')
     expect(wrapperScript).toContain('exec "$BINARY" --no-sandbox "$@"')
+    expect(wrapperScript).toContain('LIBGL_ALWAYS_SOFTWARE="${LIBGL_ALWAYS_SOFTWARE:-1}"')
+    expect(wrapperScript).toContain('GIO_EXTRA_MODULES="${GIO_EXTRA_MODULES:-}"')
     expect(wrapperScript).toContain('helper_mode')
   })
 

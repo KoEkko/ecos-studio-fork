@@ -4,7 +4,7 @@ import {
 } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import {
   resolveProjectFileAbsolutePath,
   type LayoutViewerOpenRequest,
@@ -16,6 +16,13 @@ const BUILD_HINT =
 const LAYOUT_PACKAGE_SCHEMA = 'ecos.layoutpkg.v1'
 const LAYOUT_PACKAGE_VERSION = 1
 const LAYOUT_PACKER_NAME = 'ecos-layout-packer'
+const APPIMAGE_ENV_KEYS_TO_STRIP = [
+  'APPDIR',
+  'APPIMAGE',
+  'ARGV0',
+  'ELECTRON_RUN_AS_NODE',
+  'OWD',
+] as const
 
 type FileExists = (path: string) => boolean
 interface ExecFileResult {
@@ -92,6 +99,11 @@ function executableName(baseName: string, platform: NodeJS.Platform): string {
   return platform === 'win32' ? `${baseName}.exe` : baseName
 }
 
+function isEnabled(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase()
+  return normalized === '1' || normalized === 'true'
+}
+
 function ancestorPaths(startPath: string, maxDepth = 12): string[] {
   const paths: string[] = []
   let current = startPath
@@ -152,6 +164,53 @@ function layoutPackageCacheMatches(
   )
 }
 
+function isInsideDirectory(pathValue: string, directory: string): boolean {
+  const normalizedPath = resolve(pathValue)
+  const normalizedDirectory = resolve(directory)
+  return (
+    normalizedPath === normalizedDirectory ||
+    normalizedPath.startsWith(`${normalizedDirectory}/`)
+  )
+}
+
+function removeAppDirLibraryPathEntries(
+  libraryPath: string | undefined,
+  appDir: string | undefined,
+): string | undefined {
+  if (!libraryPath || !appDir) {
+    return libraryPath
+  }
+
+  const entries = libraryPath
+    .split(':')
+    .filter((entry) => entry && !isInsideDirectory(entry, appDir))
+
+  return entries.length > 0 ? entries.join(':') : undefined
+}
+
+function createPackagedLinuxViewerEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const nextEnv = { ...env }
+  const appDir = nextEnv.APPDIR
+
+  for (const key of APPIMAGE_ENV_KEYS_TO_STRIP) {
+    delete nextEnv[key]
+  }
+
+  if (!isEnabled(nextEnv.ECOS_ELECTRON_ENABLE_GPU)) {
+    nextEnv.LIBGL_ALWAYS_SOFTWARE ??= '1'
+  }
+  nextEnv.GIO_EXTRA_MODULES = ''
+
+  const libraryPath = removeAppDirLibraryPathEntries(nextEnv.LD_LIBRARY_PATH, appDir)
+  if (libraryPath) {
+    nextEnv.LD_LIBRARY_PATH = libraryPath
+  } else {
+    delete nextEnv.LD_LIBRARY_PATH
+  }
+
+  return nextEnv
+}
+
 export class LayoutViewerService {
   private readonly appPath: string
   private readonly cwd: string
@@ -198,7 +257,7 @@ export class LayoutViewerService {
 
     const child = this.spawnProcess(binaries.viewerPath, [layoutPackagePath], {
       detached: true,
-      env: this.env,
+      env: this.createViewerEnv(),
       stdio: 'ignore',
     })
     child.unref()
@@ -275,6 +334,14 @@ export class LayoutViewerService {
     }
 
     return this.resolveDevBinaries()
+  }
+
+  private createViewerEnv(): NodeJS.ProcessEnv {
+    if (this.platform === 'linux' && this.isPackaged) {
+      return createPackagedLinuxViewerEnv(this.env)
+    }
+
+    return { ...this.env }
   }
 
   private resolvePackagedBinaries(): LayoutViewerBinaries | null {

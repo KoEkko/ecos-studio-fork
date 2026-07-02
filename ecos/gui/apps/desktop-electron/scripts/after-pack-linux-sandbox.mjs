@@ -9,6 +9,15 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 HELPER="$SCRIPT_DIR/chrome-sandbox"
 BINARY="$SCRIPT_DIR/${binaryName}"
 
+case "\${ECOS_ELECTRON_ENABLE_GPU:-}" in
+  1|true|TRUE|True)
+    ;;
+  *)
+    export LIBGL_ALWAYS_SOFTWARE="\${LIBGL_ALWAYS_SOFTWARE:-1}"
+    ;;
+esac
+export GIO_EXTRA_MODULES="\${GIO_EXTRA_MODULES:-}"
+
 if [ -r "$HELPER" ]; then
   helper_uid="$(stat -c '%u' "$HELPER" 2>/dev/null || printf '')"
   helper_mode="$(stat -c '%a' "$HELPER" 2>/dev/null || printf '')"

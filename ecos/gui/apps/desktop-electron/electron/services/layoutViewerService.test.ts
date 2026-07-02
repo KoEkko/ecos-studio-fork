@@ -7,6 +7,12 @@ interface ExecFileResult {
   stderr: string
 }
 
+interface SpawnOptions {
+  detached: boolean
+  env: NodeJS.ProcessEnv
+  stdio: 'ignore'
+}
+
 const CURRENT_SOURCE_METADATA = {
   generator: {
     build_id: 'current-packer-build-id',
@@ -69,7 +75,9 @@ function createService(options: {
       stdout: '',
     }))
   const unref = vi.fn()
-  const spawnProcess = vi.fn(() => ({ unref }))
+  const spawnProcess = vi.fn(
+    (_file: string, _args: string[], _options: SpawnOptions) => ({ unref }),
+  )
   const existingPaths = new Set([...(options.existingPaths ?? []), ...files.keys()])
   const service = new LayoutViewerService({
     appPath: options.appPath ?? '/repo/ecos/gui/apps/desktop-electron',
@@ -305,6 +313,60 @@ describe('LayoutViewerService', () => {
         stdio: 'ignore',
       }),
     )
+  })
+
+  it('launches packaged native viewer with an isolated software-rendering environment', async () => {
+    const packageRoot = '/project/output/gcd_route_view'
+    const resourcesPath = '/tmp/.mount_ECOS/resources'
+    const appDir = '/tmp/.mount_ECOS'
+    const binaryDir = join(resourcesPath, 'binaries')
+    const packer = join(binaryDir, 'ecos-layout-packer')
+    const viewer = join(binaryDir, 'layout-viewer-native')
+    const layoutPackagePath = join(packageRoot, '.layoutpkg')
+    const { service, spawnProcess } = createService({
+      env: {
+        APPDIR: appDir,
+        APPIMAGE: '/home/ecos/ECOS-Studio.AppImage',
+        ARGV0: './ECOS-Studio.AppImage',
+        ELECTRON_RUN_AS_NODE: '1',
+        GIO_EXTRA_MODULES: '/usr/lib/x86_64-linux-gnu/gio/modules',
+        LD_LIBRARY_PATH: `${appDir}/usr/lib:/usr/local/lib`,
+        OWD: '/home/ecos',
+        PATH: '/usr/bin',
+      },
+      existingPaths: [packer, viewer],
+      isPackaged: true,
+      resourcesPath,
+    })
+
+    await service.open({
+      projectPath: '/project',
+      viewJsonPackageRoot: packageRoot,
+      rebuildPackage: true,
+    })
+
+    expect(spawnProcess).toHaveBeenCalledWith(
+      viewer,
+      [layoutPackagePath],
+      expect.objectContaining({
+        env: expect.objectContaining({
+          GIO_EXTRA_MODULES: '',
+          LD_LIBRARY_PATH: '/usr/local/lib',
+          LIBGL_ALWAYS_SOFTWARE: '1',
+          PATH: '/usr/bin',
+        }),
+      }),
+    )
+    const viewerSpawnCall = spawnProcess.mock.calls[0]
+    if (!viewerSpawnCall) {
+      throw new Error('layout viewer was not spawned')
+    }
+    const viewerEnv = viewerSpawnCall[2].env
+    expect(viewerEnv.APPDIR).toBeUndefined()
+    expect(viewerEnv.APPIMAGE).toBeUndefined()
+    expect(viewerEnv.ARGV0).toBeUndefined()
+    expect(viewerEnv.ELECTRON_RUN_AS_NODE).toBeUndefined()
+    expect(viewerEnv.OWD).toBeUndefined()
   })
 
   it('falls back to PATH binaries in packaged Nix builds', async () => {

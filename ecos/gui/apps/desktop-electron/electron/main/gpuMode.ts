@@ -19,13 +19,6 @@ function isEnabled(value: string | undefined): boolean {
   return normalized === '1' || normalized === 'true'
 }
 
-function isVirtualizedHost(hostProductName: string, hostVendor: string): boolean {
-  const fingerprint = `${hostVendor} ${hostProductName}`.toLowerCase()
-  return /(vmware|virtualbox|virtual platform|virtual machine|qemu|kvm|hyper-v|hyperv|parallels)/.test(
-    fingerprint,
-  )
-}
-
 function shouldUseSoftwareGpu(options: Omit<ConfigureGpuModeOptions, 'app'>): boolean {
   if (isEnabled(options.env.ECOS_ELECTRON_ENABLE_GPU)) {
     return false
@@ -39,7 +32,7 @@ function shouldUseSoftwareGpu(options: Omit<ConfigureGpuModeOptions, 'app'>): bo
     return false
   }
 
-  return isVirtualizedHost(options.hostProductName, options.hostVendor)
+  return true
 }
 
 export function configureGpuMode(options: ConfigureGpuModeOptions): void {

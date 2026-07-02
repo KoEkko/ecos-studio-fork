@@ -53,7 +53,7 @@ describe('configureGpuMode', () => {
     expect(env.LIBGL_ALWAYS_SOFTWARE).toBe('1')
   })
 
-  it('does not force software rendering on packaged Linux apps for non-virtualized hosts', () => {
+  it('enables the software GPU workaround by default for packaged Linux apps', () => {
     const appDouble = createAppDouble()
     const env: NodeJS.ProcessEnv = {}
 
@@ -63,6 +63,24 @@ describe('configureGpuMode', () => {
       hostProductName: 'Precision 5680',
       hostVendor: 'Dell Inc.',
       isPackaged: true,
+      platform: 'linux',
+    })
+
+    expect(appDouble.disableHardwareAcceleration).toHaveBeenCalledTimes(1)
+    expect(appDouble.commandLine.appendSwitch).toHaveBeenCalledWith('disable-gpu')
+    expect(env.LIBGL_ALWAYS_SOFTWARE).toBe('1')
+  })
+
+  it('does not force software rendering for development Linux apps by default', () => {
+    const appDouble = createAppDouble()
+    const env: NodeJS.ProcessEnv = {}
+
+    configureGpuMode({
+      app: appDouble,
+      env,
+      hostProductName: 'Precision 5680',
+      hostVendor: 'Dell Inc.',
+      isPackaged: false,
       platform: 'linux',
     })
 
