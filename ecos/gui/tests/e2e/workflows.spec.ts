@@ -66,6 +66,29 @@ test('creates a workspace from the new project wizard with a mocked desktop brid
   })
 })
 
+test('opens an existing workspace from the File menu with a mocked desktop bridge', async ({
+  page,
+}) => {
+  await page.getByRole('button', { name: 'File' }).click()
+  await page.getByRole('button', { name: /Open Workspace/ }).click()
+
+  await expect(page).toHaveURL(/#\/workspace\/home$/)
+
+  const state = await readEcosE2EState(page)
+  expect(state.loadedWorkspace).toMatchObject({
+    directory: '/workspace/e2e_chip',
+  })
+  expect(state.settings.current_project_path).toBe('/workspace/e2e_chip')
+  expect(state.settings.recent_projects).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        name: 'e2e_chip',
+        path: '/workspace/e2e_chip',
+      }),
+    ]),
+  )
+})
+
 test('manages RTL design files from the Design menu in a mocked workspace', async ({
   page,
 }) => {

@@ -11,6 +11,7 @@ export interface EcosE2EState {
   addedDesignFiles: string[][]
   cliCommands: Array<{ cmd: string; data: Record<string, unknown>; source?: string }>
   createdWorkspace: Record<string, unknown> | null
+  loadedWorkspace: Record<string, unknown> | null
   removedDesignFiles: string[]
   settings: Record<string, unknown>
 }
@@ -21,6 +22,7 @@ export async function installDesktopMock(page: Page) {
       addedDesignFiles: [],
       cliCommands: [],
       createdWorkspace: null,
+      loadedWorkspace: null,
       removedDesignFiles: [],
       settings: {
         imported_pdks: [
@@ -70,6 +72,7 @@ export async function installDesktopMock(page: Page) {
             }
           }
           if (request.cmd === 'load_workspace') {
+            state.loadedWorkspace = request.data
             return {
               cmd: request.cmd,
               data: {
