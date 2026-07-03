@@ -2,7 +2,7 @@ import {
   execFile as execFileCallback,
   spawn as spawnProcessCallback,
 } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import {
@@ -10,6 +10,7 @@ import {
   type LayoutViewerOpenRequest,
   type LayoutViewerOpenResult,
 } from '@ecos-studio/shared'
+import { electronLogger, type ElectronLogger } from './logger'
 
 const BUILD_HINT =
   'Build them with: cd ecos/layout-viewer && cargo build --release -p layout-viewer-native -p ecos-layout-packer'
@@ -18,19 +19,24 @@ const LAYOUT_PACKAGE_VERSION = 1
 const LAYOUT_PACKER_NAME = 'ecos-layout-packer'
 
 type FileExists = (path: string) => boolean
+type MakeDirectory = (path: string) => void
+type AppendTextFile = (path: string, text: string) => void
+type OpenLogFile = (path: string, flags: string) => number
+type CloseLogFile = (fd: number) => void
 interface ExecFileResult {
   stdout: string
   stderr: string
 }
 type ExecFileRunner = (file: string, args: string[]) => Promise<ExecFileResult>
 type ReadTextFile = (path: string) => Promise<string>
+type ViewerStdio = 'ignore' | ['ignore', number, number]
 type SpawnProcess = (
   file: string,
   args: string[],
   options: {
     detached: boolean
     env: NodeJS.ProcessEnv
-    stdio: 'ignore'
+    stdio: ViewerStdio
   },
 ) => { unref(): void }
 
@@ -41,6 +47,13 @@ export interface LayoutViewerServiceOptions {
   execFile?: ExecFileRunner
   fileExists?: FileExists
   isPackaged: boolean
+  layoutViewerLogDirectory?: string
+  logger?: ElectronLogger
+  makeDirectory?: MakeDirectory
+  appendTextFile?: AppendTextFile
+  closeLogFile?: CloseLogFile
+  now?: () => Date
+  openLogFile?: OpenLogFile
   platform?: NodeJS.Platform
   readTextFile?: ReadTextFile
   resourcesPath?: string
@@ -50,6 +63,12 @@ export interface LayoutViewerServiceOptions {
 interface LayoutViewerBinaries {
   packerPath: string
   viewerPath: string
+}
+
+interface LayoutViewerLaunchLog {
+  fd: number
+  path: string
+  stdio: ['ignore', number, number]
 }
 
 interface LayoutPackageSourceMetadata {
@@ -82,6 +101,18 @@ function defaultExecFile(file: string, args: string[]): Promise<ExecFileResult> 
       })
     })
   })
+}
+
+function defaultMakeDirectory(path: string): void {
+  mkdirSync(path, { recursive: true })
+}
+
+function defaultAppendTextFile(path: string, text: string): void {
+  appendFileSync(path, text, 'utf8')
+}
+
+function defaultOpenLogFile(path: string, flags: string): number {
+  return openSync(path, flags)
 }
 
 async function defaultReadTextFile(path: string): Promise<string> {
@@ -152,13 +183,65 @@ function layoutPackageCacheMatches(
   )
 }
 
+function formatLogTimestamp(date: Date, sequence: number): string {
+  const [datePart = '', timePart = ''] = date.toISOString().split('T')
+  const [time = '', millisWithZone = ''] = timePart.split('.')
+  const millis = millisWithZone.replace('Z', '').padEnd(3, '0').slice(0, 3)
+
+  return `${datePart.replace(/-/g, '')}-${time.replace(/:/g, '')}-${millis}-${sequence}`
+}
+
+function formatLaunchLogHeader(options: {
+  env: NodeJS.ProcessEnv
+  layoutPackagePath: string
+  packageRoot: string
+  timestamp: Date
+  viewerPath: string
+}): string {
+  const envKeys = [
+    'APPDIR',
+    'APPIMAGE',
+    'DISPLAY',
+    'WAYLAND_DISPLAY',
+    'XDG_SESSION_TYPE',
+    'XDG_CURRENT_DESKTOP',
+    'WINIT_UNIX_BACKEND',
+    'WGPU_BACKEND',
+    'LIBGL_ALWAYS_SOFTWARE',
+    'MESA_LOADER_DRIVER_OVERRIDE',
+    'LD_LIBRARY_PATH',
+  ]
+  const lines = [
+    '# ECOS Layout Viewer Launch',
+    `timestamp=${options.timestamp.toISOString()}`,
+    `viewer=${options.viewerPath}`,
+    `packageRoot=${options.packageRoot}`,
+    `layoutPackage=${options.layoutPackagePath}`,
+    '',
+    '[env]',
+    ...envKeys.map((key) => `${key}=${options.env[key] ?? ''}`),
+    '',
+    '[output]',
+  ]
+
+  return `${lines.join('\n')}\n`
+}
+
 export class LayoutViewerService {
+  private launchLogSequence = 0
   private readonly appPath: string
+  private readonly appendTextFile: AppendTextFile
+  private readonly closeLogFile: CloseLogFile
   private readonly cwd: string
   private readonly env: NodeJS.ProcessEnv
   private readonly execFile: ExecFileRunner
   private readonly fileExists: FileExists
   private readonly isPackaged: boolean
+  private readonly layoutViewerLogDirectory?: string
+  private readonly logger: ElectronLogger
+  private readonly makeDirectory: MakeDirectory
+  private readonly now: () => Date
+  private readonly openLogFile: OpenLogFile
   private readonly platform: NodeJS.Platform
   private readonly readTextFile: ReadTextFile
   private readonly resourcesPath?: string
@@ -166,11 +249,18 @@ export class LayoutViewerService {
 
   constructor(options: LayoutViewerServiceOptions) {
     this.appPath = options.appPath
+    this.appendTextFile = options.appendTextFile ?? defaultAppendTextFile
+    this.closeLogFile = options.closeLogFile ?? closeSync
     this.cwd = options.cwd
     this.env = options.env ?? process.env
     this.execFile = options.execFile ?? defaultExecFile
     this.fileExists = options.fileExists ?? existsSync
     this.isPackaged = options.isPackaged
+    this.layoutViewerLogDirectory = options.layoutViewerLogDirectory
+    this.logger = options.logger ?? electronLogger
+    this.makeDirectory = options.makeDirectory ?? defaultMakeDirectory
+    this.now = options.now ?? (() => new Date())
+    this.openLogFile = options.openLogFile ?? defaultOpenLogFile
     this.platform = options.platform ?? process.platform
     this.readTextFile = options.readTextFile ?? defaultReadTextFile
     this.resourcesPath = options.resourcesPath
@@ -196,17 +286,82 @@ export class LayoutViewerService {
       await this.execFile(binaries.packerPath, [packageRoot, layoutPackagePath])
     }
 
-    const child = this.spawnProcess(binaries.viewerPath, [layoutPackagePath], {
-      detached: true,
-      env: this.env,
-      stdio: 'ignore',
-    })
+    const launchLog = this.createLaunchLog(
+      binaries.viewerPath,
+      packageRoot,
+      layoutPackagePath,
+    )
+    let child: ReturnType<SpawnProcess>
+    try {
+      child = this.spawnProcess(binaries.viewerPath, [layoutPackagePath], {
+        detached: true,
+        env: this.env,
+        stdio: launchLog?.stdio ?? 'ignore',
+      })
+    } finally {
+      if (launchLog) {
+        this.closeLaunchLog(launchLog)
+      }
+    }
     child.unref()
 
-    return {
+    const result: LayoutViewerOpenResult = {
       layoutPackagePath,
       packageRoot,
       spawned: true,
+    }
+    if (launchLog) {
+      result.viewerLogPath = launchLog.path
+    }
+    return result
+  }
+
+  private createLaunchLog(
+    viewerPath: string,
+    packageRoot: string,
+    layoutPackagePath: string,
+  ): LayoutViewerLaunchLog | null {
+    if (!this.layoutViewerLogDirectory) {
+      return null
+    }
+
+    const timestamp = this.now()
+    this.launchLogSequence += 1
+    const logPath = join(
+      this.layoutViewerLogDirectory,
+      `layout-viewer-${formatLogTimestamp(timestamp, this.launchLogSequence)}.log`,
+    )
+
+    try {
+      this.makeDirectory(this.layoutViewerLogDirectory)
+      this.appendTextFile(
+        logPath,
+        formatLaunchLogHeader({
+          env: this.env,
+          layoutPackagePath,
+          packageRoot,
+          timestamp,
+          viewerPath,
+        }),
+      )
+      const fd = this.openLogFile(logPath, 'a')
+      this.logger.info('[layout-viewer] Native viewer log: %s', logPath)
+      return {
+        fd,
+        path: logPath,
+        stdio: ['ignore', fd, fd],
+      }
+    } catch (err) {
+      this.logger.warn('[layout-viewer] Failed to create native viewer log: %s', err)
+      return null
+    }
+  }
+
+  private closeLaunchLog(launchLog: LayoutViewerLaunchLog): void {
+    try {
+      this.closeLogFile(launchLog.fd)
+    } catch (err) {
+      this.logger.warn('[layout-viewer] Failed to close native viewer log: %s', err)
     }
   }
 

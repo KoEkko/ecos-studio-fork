@@ -6,6 +6,16 @@ interface ExecFileResult {
   stdout: string
   stderr: string
 }
+type TestViewerStdio = 'ignore' | ['ignore', number, number]
+type TestSpawnProcess = (
+  file: string,
+  args: string[],
+  options: {
+    detached: boolean
+    env: NodeJS.ProcessEnv
+    stdio: TestViewerStdio
+  },
+) => { unref(): void }
 
 const CURRENT_SOURCE_METADATA = {
   generator: {
@@ -59,7 +69,14 @@ function createService(options: {
   files?: Record<string, string>
   existingPaths?: string[]
   isPackaged?: boolean
+  layoutViewerLogDirectory?: string
+  now?: () => Date
+  appendTextFile?: (path: string, text: string) => void
+  closeLogFile?: (fd: number) => void
+  makeDirectory?: (path: string) => void
+  openLogFile?: (path: string, flags: string) => number
   resourcesPath?: string
+  spawnProcess?: TestSpawnProcess
 }) {
   const files = new Map(Object.entries(options.files ?? {}))
   const execFile =
@@ -69,7 +86,8 @@ function createService(options: {
       stdout: '',
     }))
   const unref = vi.fn()
-  const spawnProcess = vi.fn(() => ({ unref }))
+  const spawnProcess: TestSpawnProcess =
+    options.spawnProcess ?? vi.fn<TestSpawnProcess>(() => ({ unref }))
   const existingPaths = new Set([...(options.existingPaths ?? []), ...files.keys()])
   const service = new LayoutViewerService({
     appPath: options.appPath ?? '/repo/ecos/gui/apps/desktop-electron',
@@ -78,6 +96,12 @@ function createService(options: {
     execFile,
     fileExists: (path) => existingPaths.has(path),
     isPackaged: options.isPackaged ?? false,
+    layoutViewerLogDirectory: options.layoutViewerLogDirectory,
+    now: options.now,
+    appendTextFile: options.appendTextFile,
+    closeLogFile: options.closeLogFile,
+    makeDirectory: options.makeDirectory,
+    openLogFile: options.openLogFile,
     platform: 'linux',
     readTextFile: async (path) => {
       const text = files.get(path)
@@ -303,6 +327,104 @@ describe('LayoutViewerService', () => {
       expect.objectContaining({
         detached: true,
         stdio: 'ignore',
+      }),
+    )
+  })
+
+  it('captures native viewer output in a launch log when a log directory is configured', async () => {
+    const packageRoot = '/project/output/gcd_route_view'
+    const resourcesPath = '/opt/ECOS Studio/resources'
+    const binaryDir = join(resourcesPath, 'binaries')
+    const packer = join(binaryDir, 'ecos-layout-packer')
+    const viewer = join(binaryDir, 'layout-viewer-native')
+    const layoutPackagePath = join(packageRoot, '.layoutpkg')
+    const logDirectory = '/tmp/ecos/logs/session/layout-viewer'
+    const viewerLogPath = join(logDirectory, 'layout-viewer-20260703-080001-002-1.log')
+    const appendTextFile = vi.fn()
+    const closeLogFile = vi.fn()
+    const makeDirectory = vi.fn()
+    const openLogFile = vi.fn(() => 42)
+    const { service, spawnProcess } = createService({
+      appendTextFile,
+      closeLogFile,
+      existingPaths: [packer, viewer],
+      isPackaged: true,
+      layoutViewerLogDirectory: logDirectory,
+      makeDirectory,
+      now: () => new Date('2026-07-03T08:00:01.002Z'),
+      openLogFile,
+      resourcesPath,
+    })
+
+    const result = await service.open({
+      projectPath: '/project',
+      viewJsonPackageRoot: packageRoot,
+      rebuildPackage: true,
+    })
+
+    expect(makeDirectory).toHaveBeenCalledWith(logDirectory)
+    expect(appendTextFile).toHaveBeenCalledWith(
+      viewerLogPath,
+      expect.stringContaining(`viewer=${viewer}`),
+    )
+    expect(appendTextFile).toHaveBeenCalledWith(
+      viewerLogPath,
+      expect.stringContaining(`layoutPackage=${layoutPackagePath}`),
+    )
+    expect(openLogFile).toHaveBeenCalledWith(viewerLogPath, 'a')
+    expect(spawnProcess).toHaveBeenCalledWith(
+      viewer,
+      [layoutPackagePath],
+      expect.objectContaining({
+        detached: true,
+        stdio: ['ignore', 42, 42],
+      }),
+    )
+    expect(closeLogFile).toHaveBeenCalledWith(42)
+    expect(result).toEqual({
+      layoutPackagePath,
+      packageRoot,
+      spawned: true,
+      viewerLogPath,
+    })
+  })
+
+  it('closes the launch log file when native viewer spawn fails', async () => {
+    const packageRoot = '/project/output/gcd_route_view'
+    const resourcesPath = '/opt/ECOS Studio/resources'
+    const binaryDir = join(resourcesPath, 'binaries')
+    const packer = join(binaryDir, 'ecos-layout-packer')
+    const viewer = join(binaryDir, 'layout-viewer-native')
+    const closeLogFile = vi.fn()
+    const spawnProcess: TestSpawnProcess = vi.fn(() => {
+      throw new Error('spawn failed')
+    })
+    const { service } = createService({
+      appendTextFile: vi.fn(),
+      closeLogFile,
+      existingPaths: [packer, viewer],
+      isPackaged: true,
+      layoutViewerLogDirectory: '/tmp/ecos/logs/session/layout-viewer',
+      makeDirectory: vi.fn(),
+      openLogFile: vi.fn(() => 42),
+      resourcesPath,
+      spawnProcess,
+    })
+
+    await expect(
+      service.open({
+        projectPath: '/project',
+        viewJsonPackageRoot: packageRoot,
+        rebuildPackage: true,
+      }),
+    ).rejects.toThrow('spawn failed')
+
+    expect(closeLogFile).toHaveBeenCalledWith(42)
+    expect(spawnProcess).toHaveBeenCalledWith(
+      viewer,
+      [join(packageRoot, '.layoutpkg')],
+      expect.objectContaining({
+        stdio: ['ignore', 42, 42],
       }),
     )
   })

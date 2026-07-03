@@ -59,17 +59,21 @@ struct Args {
 fn main() -> Result<()> {
     let args = Args::parse();
     let app = LayoutViewerV2App::open(args)?;
-    let native_options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([1280.0, 860.0]),
-        ..Default::default()
-    };
     eframe::run_native(
         window_title(),
-        native_options,
+        native_options(),
         Box::new(move |_cc| Ok(Box::new(app))),
     )
     .map_err(|err| anyhow::anyhow!("{err}"))?;
     Ok(())
+}
+
+fn native_options() -> eframe::NativeOptions {
+    eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default().with_inner_size([1280.0, 860.0]),
+        renderer: eframe::Renderer::Glow,
+        ..Default::default()
+    }
 }
 
 fn window_title() -> &'static str {
@@ -3039,13 +3043,13 @@ fn scroll_zoom_factor(scroll: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::{
-        cached_plane_texture_action, canvas_scroll_delta, fill_draw_mode, overview_density_usable,
-        overview_error_is_unavailable, plan_source_for_units_per_pixel, plane_cache_world_rect,
-        scroll_zoom_factor, selection_inspector_rows, should_check_overview_density,
-        should_request_detail_tiles, should_request_smooth_repaint, should_reuse_render_plan,
-        should_sample_layout_fps, use_plane_renderer, viewport_for_world_rect, Args,
-        AsyncLoadState, CachedPlaneTextureAction, FillDrawMode, FrameRateState, LayoutViewerV2App,
-        LoadRequest, LodTuningState, SelectionLayerMetadata,
+        cached_plane_texture_action, canvas_scroll_delta, fill_draw_mode, native_options,
+        overview_density_usable, overview_error_is_unavailable, plan_source_for_units_per_pixel,
+        plane_cache_world_rect, scroll_zoom_factor, selection_inspector_rows,
+        should_check_overview_density, should_request_detail_tiles, should_request_smooth_repaint,
+        should_reuse_render_plan, should_sample_layout_fps, use_plane_renderer,
+        viewport_for_world_rect, Args, AsyncLoadState, CachedPlaneTextureAction, FillDrawMode,
+        FrameRateState, LayoutViewerV2App, LoadRequest, LodTuningState, SelectionLayerMetadata,
     };
     use crate::plane_cache::PlaneKey;
     use layout_display::{Color, DisplayLayer, DisplayModel, LayerStyle, Pattern};
@@ -3065,6 +3069,13 @@ mod tests {
     };
 
     static HIERARCHY_TEST_PACKAGE_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    #[test]
+    fn native_options_uses_glow_renderer_by_default() {
+        let options = native_options();
+
+        assert!(matches!(options.renderer, eframe::Renderer::Glow));
+    }
 
     fn hatch_segment_has_positive_slope(segment: &[egui::Pos2; 2]) -> bool {
         let dx = segment[1].x - segment[0].x;

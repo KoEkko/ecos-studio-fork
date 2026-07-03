@@ -128,6 +128,7 @@ export interface LayoutViewerOpenResult {
   packageRoot: string
   layoutPackagePath: string
   spawned: boolean
+  viewerLogPath?: string
 }
 
 export interface DesktopApi {

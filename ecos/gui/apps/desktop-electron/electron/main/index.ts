@@ -9,6 +9,7 @@ import { DesktopRuntimeManager } from '../services/desktopRuntimeManager'
 import {
   getElectronLatestMainLogFile,
   getElectronMainLogFile,
+  getLayoutViewerLogDirectory,
 } from '../services/desktopLogPaths'
 import { EccCliAdapter } from '../services/eccCliAdapter'
 import { createEccCliRuntimeEnv } from '../services/eccCliRuntime'
@@ -127,6 +128,7 @@ function getDesktopServices() {
     cwd: process.cwd(),
     env: runtimeEnv,
     isPackaged: app.isPackaged,
+    layoutViewerLogDirectory: getLayoutViewerLogDirectory(),
     platform: process.platform,
     resourcesPath: process.resourcesPath,
   })

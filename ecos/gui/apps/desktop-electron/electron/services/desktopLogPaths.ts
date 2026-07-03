@@ -36,3 +36,7 @@ export function getElectronLatestMainLogFile(): string {
 export function getElectronMainLogFile(): string {
   return join(getLogSessionDirectory(), 'main.log')
 }
+
+export function getLayoutViewerLogDirectory(): string {
+  return join(getLogSessionDirectory(), 'layout-viewer')
+}
