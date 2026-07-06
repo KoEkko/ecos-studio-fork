@@ -209,7 +209,7 @@ export class WorkspaceResourceService {
     errors: string[],
   ): Promise<WorkspaceStepResource> {
     const tool = step.tool || 'unknown'
-    const directory = join(root, `${step.name}_${tool}`)
+    const directory = join(root, workspaceStepDirectoryName(step.name, tool))
     const resources = createEmptyBuckets()
     const toolKey = tool.toLowerCase()
 
@@ -498,6 +498,16 @@ function createFile(
 
 function uniqueStrings(values: string[]): string[] {
   return Array.from(new Set(values))
+}
+
+function workspaceStepDirectoryName(stepName: string, tool: string): string {
+  // Workaround for Sizer step directory name
+  // Perhaps we should establish some conventions for naming folder paths
+  // during the creation of the ecc tool directory to better unify these paths.
+  if (tool.toLowerCase() === 'sizer') {
+    return `${stepName.trim().split(/\s+/).join('_').toLowerCase()}_sizer`
+  }
+  return `${stepName}_${tool}`
 }
 
 function createEmptyBuckets(): StepFileBuckets {
