@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PassThrough, Writable } from 'node:stream'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { EccRpcSidecarProcess, type SpawnedEccRpcSidecar } from './sidecarProcess'
 import { encodeContentLengthFrame } from './transport'
@@ -25,16 +25,21 @@ class FakeChild extends EventEmitter implements SpawnedEccRpcSidecar {
   readonly stderr = new PassThrough()
   readonly stdin = new FakeWritable()
   readonly stdout = new PassThrough()
+  readonly signals: Array<NodeJS.Signals | undefined> = []
   killed = false
 
   kill(signal?: NodeJS.Signals): boolean {
-    void signal
+    this.signals.push(signal)
     this.killed = true
     return true
   }
 }
 
 describe('EccRpcSidecarProcess', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('spawns ecc rpc serve --stdio', async () => {
     const child = new FakeChild()
     const spawn = vi.fn(() => child)
@@ -108,5 +113,24 @@ describe('EccRpcSidecarProcess', () => {
         type: 'runtime.exited',
       }),
     )
+  })
+
+  it('sends SIGTERM and then SIGKILL when rpc.shutdown times out', async () => {
+    vi.useFakeTimers()
+    const child = new FakeChild()
+    const sidecar = new EccRpcSidecarProcess({
+      shutdownTimeoutMs: 25,
+      spawn: () => child,
+    })
+
+    await sidecar.start()
+    const shutdown = sidecar.shutdown()
+
+    await vi.advanceTimersByTimeAsync(25)
+    await shutdown
+    expect(child.signals).toEqual(['SIGTERM'])
+
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(child.signals).toEqual(['SIGTERM', 'SIGKILL'])
   })
 })

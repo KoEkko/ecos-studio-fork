@@ -213,7 +213,7 @@ describe('registerIpc', () => {
     const { handlers, services } = registerHandlers()
     const versions = {
       gui: '0.1.0-alpha.4',
-      runtime: 'ECC CLI',
+      runtime: 'ECC RPC',
       ecc: '0.1.0a4',
       dreamplace: '0.1.0a2',
     }

@@ -9,7 +9,7 @@ import {
   getElectronLatestMainLogFile,
   getElectronMainLogFile,
 } from '../services/desktopLogPaths'
-import { createEccCliRuntimeEnv } from '../services/eccCliRuntime'
+import { createEccRuntimeEnv } from '../services/eccRpc/runtimeEnv'
 import { EccRpcRuntimeService } from '../services/eccRpc/runtimeService'
 import { EccRpcSidecarProcess } from '../services/eccRpc/sidecarProcess'
 import { LayoutViewerService } from '../services/layoutViewerService'
@@ -62,7 +62,7 @@ configureElectronLoggerFile({
 })
 electronLogger.status('[desktop] Logs: %s', mainLogFile)
 electronLogger.status('[desktop] Latest logs: %s', mainLatestLogFile)
-electronLogger.status('[runtime] Runtime: ECC CLI')
+electronLogger.status('[runtime] Runtime: ECC RPC')
 
 if (process.env.ECOS_ELECTRON_SMOKE === '1') {
   ipcMain.on('ecos-smoke:complete', () => {
@@ -83,7 +83,7 @@ function getDesktopServices() {
     filePath: join(app.getPath('userData'), 'settings.json'),
   })
   const projectScopeService = new ProjectScopeService()
-  const runtimeEnv = createEccCliRuntimeEnv({
+  const runtimeEnv = createEccRuntimeEnv({
     appPath: app.getAppPath(),
     cwd: process.cwd(),
     env: {

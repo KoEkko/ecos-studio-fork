@@ -89,6 +89,20 @@ describe('EccJsonRpcClient', () => {
     await expect(promise).rejects.toBeInstanceOf(EccJsonRpcTimeoutError)
   })
 
+  it('does not start a timeout timer when timeoutMs is zero', async () => {
+    vi.useFakeTimers()
+    const client = new EccJsonRpcClient({ writeFrame: () => undefined })
+
+    const promise = client.call('flow.run', undefined, { timeoutMs: 0 })
+    await vi.advanceTimersByTimeAsync(120_000)
+
+    client.feedStdout(
+      encodeContentLengthFrame('{"jsonrpc":"2.0","id":1,"result":{"rerun":false}}'),
+    )
+
+    await expect(promise).resolves.toEqual({ rerun: false })
+  })
+
   it('throws protocol errors for invalid JSON frames', () => {
     const client = new EccJsonRpcClient({ writeFrame: () => undefined })
 

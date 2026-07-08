@@ -56,6 +56,11 @@ interface RuntimeOperationMetadata {
   rerun?: boolean
 }
 
+interface InFlightOperation {
+  operationId: string
+  workspaceHandle: string | undefined
+}
+
 export class EccRpcRuntimeService {
   private readonly sessions: WorkspaceSessionRegistry
   private readonly sidecar: EccRpcRuntimeSidecar
@@ -63,6 +68,7 @@ export class EccRpcRuntimeService {
   private readonly activeRuntimeDirectories = new Set<string>()
   private readonly eventListeners = new Set<(event: EccRuntimeEvent) => void>()
   private helloResult: EccRpcHelloResult | null = null
+  private inFlightOperation: InFlightOperation | null = null
   private queue = Promise.resolve()
   private ready = false
 
@@ -104,13 +110,7 @@ export class EccRpcRuntimeService {
   }
 
   rpcShutdown(): Promise<EccRpcShutdownResult> {
-    return this.enqueue('rpc.shutdown', undefined, async () => {
-      await this.sidecar.shutdown()
-      this.ready = false
-      this.helloResult = null
-      this.sessions.clearEccWorkspaceIds()
-      return { ok: true }
-    })
+    return this.shutdownRuntime()
   }
 
   createWorkspace(request: EccWorkspaceCreateRequest): Promise<EccWorkspaceCreateResult> {
@@ -231,10 +231,14 @@ export class EccRpcRuntimeService {
       async () => {
         const client = await this.ensureStarted()
         const workspaceId = await this.resolveEccWorkspaceId(request.workspaceHandle)
-        return await client.call<EccFlowRunResult>('flow.run', {
-          rerun,
-          workspaceId,
-        })
+        return await client.call<EccFlowRunResult>(
+          'flow.run',
+          {
+            rerun,
+            workspaceId,
+          },
+          { timeoutMs: 0 },
+        )
       },
       { rerun },
     )
@@ -248,11 +252,15 @@ export class EccRpcRuntimeService {
       async () => {
         const client = await this.ensureStarted()
         const workspaceId = await this.resolveEccWorkspaceId(request.workspaceHandle)
-        return await client.call<EccFlowRunStepResult>('flow.run_step', {
-          rerun,
-          step: request.step,
-          workspaceId,
-        })
+        return await client.call<EccFlowRunStepResult>(
+          'flow.run_step',
+          {
+            rerun,
+            step: request.step,
+            workspaceId,
+          },
+          { timeoutMs: 0 },
+        )
       },
       { rerun },
     )
@@ -291,6 +299,15 @@ export class EccRpcRuntimeService {
     return response.workspaceId
   }
 
+  private async shutdownRuntime(): Promise<EccRpcShutdownResult> {
+    await this.sidecar.shutdown()
+    this.client = null
+    this.ready = false
+    this.helloResult = null
+    this.sessions.clearEccWorkspaceIds()
+    return { ok: true }
+  }
+
   private enqueue<T>(
     method: string,
     workspaceHandle: string | undefined,
@@ -302,6 +319,10 @@ export class EccRpcRuntimeService {
       const runtimeDirectory = this.runtimeDirectoryForHandle(workspaceHandle)
       if (runtimeDirectory) {
         this.activeRuntimeDirectories.add(runtimeDirectory)
+      }
+      this.inFlightOperation = {
+        operationId,
+        workspaceHandle,
       }
       this.emit({
         logFile: this.sidecar.logFile ?? undefined,
@@ -340,6 +361,9 @@ export class EccRpcRuntimeService {
         })
         throw normalized
       } finally {
+        if (this.inFlightOperation?.operationId === operationId) {
+          this.inFlightOperation = null
+        }
         if (runtimeDirectory) {
           this.activeRuntimeDirectories.delete(runtimeDirectory)
         }
@@ -360,6 +384,17 @@ export class EccRpcRuntimeService {
       this.ready = false
       this.helloResult = null
       this.sessions.clearEccWorkspaceIds()
+      const inFlight = this.inFlightOperation
+      this.emit(
+        inFlight
+          ? {
+              ...event,
+              interruptedOperationId: inFlight.operationId,
+              workspaceHandle: inFlight.workspaceHandle,
+            }
+          : event,
+      )
+      return
     }
     this.emit(event)
   }

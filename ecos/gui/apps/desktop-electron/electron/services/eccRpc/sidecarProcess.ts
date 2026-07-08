@@ -53,15 +53,18 @@ export class EccRpcSidecarProcess {
   private client: EccJsonRpcClient | null = null
   private readonly command: string
   private readonly env: NodeJS.ProcessEnv
+  private readonly forceKillTimeoutMs: number
   private readonly shutdownTimeoutMs: number
   private readonly spawnImpl: EccRpcSidecarSpawn
   private readonly tempDir: string
+  private forceKillTimer: ReturnType<typeof setTimeout> | null = null
   private shuttingDown = false
   logFile: string | null = null
 
   constructor(private readonly options: EccRpcSidecarProcessOptions = {}) {
     this.command = options.command ?? 'ecc'
     this.env = { ...(options.env ?? process.env) }
+    this.forceKillTimeoutMs = 1000
     this.shutdownTimeoutMs = options.shutdownTimeoutMs ?? 3000
     this.spawnImpl = options.spawn ?? (spawnChild as unknown as EccRpcSidecarSpawn)
     this.tempDir = options.tempDir ?? tmpdir()
@@ -117,6 +120,7 @@ export class EccRpcSidecarProcess {
     })
 
     child.once('close', (code: number | null, signal: NodeJS.Signals | null) => {
+      this.clearForceKillTimer()
       const reason = this.shuttingDown ? 'shutdown' : 'unexpected'
       const message =
         reason === 'unexpected'
@@ -153,7 +157,20 @@ export class EccRpcSidecarProcess {
       })
     } catch {
       child.kill('SIGTERM')
+      this.forceKillTimer = setTimeout(() => {
+        if (this.child === child) {
+          child.kill('SIGKILL')
+        }
+      }, this.forceKillTimeoutMs)
     }
+  }
+
+  private clearForceKillTimer(): void {
+    if (!this.forceKillTimer) {
+      return
+    }
+    clearTimeout(this.forceKillTimer)
+    this.forceKillTimer = null
   }
 
   private async resolveEnv(): Promise<NodeJS.ProcessEnv> {

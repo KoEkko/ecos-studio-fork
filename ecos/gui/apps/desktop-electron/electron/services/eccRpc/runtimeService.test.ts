@@ -9,6 +9,7 @@ import {
 
 interface RpcCall {
   method: string
+  options?: { timeoutMs?: number }
   params?: Record<string, unknown>
 }
 
@@ -32,8 +33,14 @@ class FakeRpcClient implements EccRpcRuntimeClient {
   readonly calls: RpcCall[] = []
   responses: Array<unknown | Promise<unknown>> = []
 
-  async call<T>(method: string, params?: Record<string, unknown>): Promise<T> {
-    this.calls.push({ method, params })
+  async call<T>(
+    method: string,
+    params?: Record<string, unknown>,
+    options?: { timeoutMs?: number },
+  ): Promise<T> {
+    this.calls.push(
+      options === undefined ? { method, params } : { method, options, params },
+    )
     const response = this.responses.shift()
     if (response instanceof Error) {
       throw response
@@ -44,11 +51,13 @@ class FakeRpcClient implements EccRpcRuntimeClient {
 
 class FakeSidecar implements EccRpcRuntimeSidecar {
   logFile: string | null = '/tmp/ecc-rpc-runtime.log'
+  shutdownCount = 0
   startCount = 0
 
   constructor(private readonly client: FakeRpcClient) {}
 
   async shutdown(): Promise<void> {
+    this.shutdownCount += 1
     return
   }
 
@@ -120,6 +129,7 @@ describe('EccRpcRuntimeService', () => {
 
     expect(client.calls.at(-1)).toEqual({
       method: 'flow.run_step',
+      options: { timeoutMs: 0 },
       params: {
         rerun: true,
         step: 'placement',
@@ -176,6 +186,69 @@ describe('EccRpcRuntimeService', () => {
     ])
   })
 
+  it('bypasses the operation queue when shutting down the sidecar', async () => {
+    const { client, service, sidecar } = createService()
+    client.responses.push({ capabilities: [], eccVersion: '0.1.0', version: 1 })
+    await service.rpcHello()
+    await Promise.resolve()
+    client.calls.length = 0
+
+    const blockedPing = deferred<{ ok: boolean }>()
+    client.responses.push(blockedPing.promise)
+
+    const ping = service.rpcPing()
+    await waitForQueuedOperation()
+
+    await expect(service.rpcShutdown()).resolves.toEqual({ ok: true })
+
+    expect(sidecar.shutdownCount).toBe(1)
+    expect(client.calls).toEqual([{ method: 'rpc.ping', params: undefined }])
+
+    blockedPing.resolve({ ok: true })
+    await expect(ping).resolves.toEqual({ ok: true })
+  })
+
+  it('enriches unexpected runtime exits with the in-flight operation', async () => {
+    const { client, events, service, sidecarEvent } = createService()
+    client.responses.push(
+      { capabilities: [], eccVersion: '0.1.0', version: 1 },
+      { directory: '/work/demo', workspaceId: 'workspace-1' },
+    )
+
+    const workspace = await service.openWorkspace({ directory: '/work/demo' })
+    const blockedFlow = deferred<{ rerun: boolean }>()
+    client.responses.push(blockedFlow.promise)
+
+    const flow = service.runFlow({
+      rerun: false,
+      workspaceHandle: workspace.workspaceHandle,
+    })
+    await waitForQueuedOperation()
+    const started = events.find(
+      (event): event is Extract<EccRuntimeEvent, { type: 'operation.started' }> =>
+        event.type === 'operation.started' && event.method === 'flow.run',
+    )
+
+    sidecarEvent({
+      code: 1,
+      reason: 'unexpected',
+      signal: null,
+      type: 'runtime.exited',
+    })
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        interruptedOperationId: started?.operationId,
+        reason: 'unexpected',
+        type: 'runtime.exited',
+        workspaceHandle: workspace.workspaceHandle,
+      }),
+    )
+
+    blockedFlow.resolve({ rerun: false })
+    await expect(flow).resolves.toEqual({ rerun: false })
+  })
+
   it('restarts and reopens the active workspace on the next call after exit', async () => {
     const { client, service, sidecar, sidecarEvent } = createService()
     client.responses.push(
@@ -207,6 +280,7 @@ describe('EccRpcRuntimeService', () => {
       { method: 'workspace.open', params: { directory: '/work/demo' } },
       {
         method: 'flow.run',
+        options: { timeoutMs: 0 },
         params: {
           rerun: false,
           workspaceId: 'workspace-2',

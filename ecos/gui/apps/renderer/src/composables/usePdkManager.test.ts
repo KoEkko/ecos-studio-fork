@@ -100,7 +100,7 @@ const desktopBridge = {
   app: {
     getVersions: async () => ({
       gui: '0.1.0-alpha.4',
-      runtime: 'ECC CLI',
+      runtime: 'ECC RPC',
       ecc: 'unknown',
       dreamplace: 'unknown',
     }),
