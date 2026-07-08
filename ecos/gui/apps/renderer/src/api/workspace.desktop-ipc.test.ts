@@ -27,21 +27,20 @@ describe('createWorkspaceApi desktop bridge payload', () => {
   })
 
   it('sends a structured-cloneable request when wizard config is reactive', async () => {
-    const execute = vi.fn(async (request: unknown) => {
+    const create = vi.fn(async (request: unknown) => {
       expect(() => structuredClone(request)).not.toThrow()
       return {
-        cmd: 'create_workspace',
-        data: { directory: '/workspace/demo' },
-        message: ['ok'],
-        ok: true,
-        response: 'success',
+        directory: '/workspace/demo',
+        workspaceHandle: 'workspace-handle-1',
       }
     })
 
     setWindow({
       ecosDesktop: {
-        cli: {
-          execute,
+        ecc: {
+          workspace: {
+            create,
+          },
         },
       },
     })
@@ -68,16 +67,16 @@ describe('createWorkspaceApi desktop bridge payload', () => {
 
     await expect(createWorkspaceApi(options)).resolves.toMatchObject({
       response: 'success',
+      data: {
+        workspace_handle: 'workspace-handle-1',
+      },
     })
-    expect(execute).toHaveBeenCalledWith(
+    expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
-        cmd: 'create_workspace',
-        data: expect.objectContaining({
-          parameters: expect.objectContaining({
-            design: 'demo',
-          }),
-          rtl_list: ['/rtl/top.v'],
+        parameters: expect.objectContaining({
+          design: 'demo',
         }),
+        rtlList: ['/rtl/top.v'],
       }),
     )
   })
