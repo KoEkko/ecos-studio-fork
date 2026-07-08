@@ -5,13 +5,13 @@ import { createMainWindow } from './createMainWindow'
 import { configureGpuMode } from './gpuMode'
 import { registerIpc } from './registerIpc'
 import { AppInfoService } from '../services/appInfoService'
-import { DesktopRuntimeManager } from '../services/desktopRuntimeManager'
 import {
   getElectronLatestMainLogFile,
   getElectronMainLogFile,
 } from '../services/desktopLogPaths'
-import { EccCliAdapter } from '../services/eccCliAdapter'
 import { createEccCliRuntimeEnv } from '../services/eccCliRuntime'
+import { EccRpcRuntimeService } from '../services/eccRpc/runtimeService'
+import { EccRpcSidecarProcess } from '../services/eccRpc/sidecarProcess'
 import { LayoutViewerService } from '../services/layoutViewerService'
 import { configureElectronLoggerFile, electronLogger } from '../services/logger'
 import { registerApplicationMenu } from '../services/menuService'
@@ -27,7 +27,7 @@ import { WorkspaceService } from '../services/workspaceService'
 let ipcRegistered = false
 let services: {
   appInfoService: AppInfoService
-  desktopRuntimeManager: DesktopRuntimeManager
+  eccRuntimeService: EccRpcRuntimeService
   remoteContentService: RemoteContentService
   settingsStore: SettingsStore
   resourceManagerService: ResourceManagerService
@@ -107,16 +107,22 @@ function getDesktopServices() {
     resourceManagerService.createRuntimeEnv(runtimeEnv, {
       platform: process.platform,
     })
-  const desktopRuntimeManager = new DesktopRuntimeManager({
-    adapter: new EccCliAdapter({
-      env: runtimeEnv,
-      envProvider: runtimeEnvProvider,
-      isPackaged: app.isPackaged,
-    }),
+  let eccRuntimeService: EccRpcRuntimeService
+  eccRuntimeService = new EccRpcRuntimeService({
+    createSidecar: (onEvent) =>
+      new EccRpcSidecarProcess({
+        env: runtimeEnv,
+        envProvider: runtimeEnvProvider,
+        logDirectoryProvider: () => {
+          const directory = eccRuntimeService.activeWorkspaceDirectory
+          return directory ? join(directory, 'log') : null
+        },
+        onEvent,
+      }),
   })
   const workspaceService = new WorkspaceService({
     projectScopeProvider: projectScopeService,
-    runtimeMutationGuard: desktopRuntimeManager,
+    runtimeMutationGuard: eccRuntimeService,
   })
   const shellService = new ShellPtyService({
     env: runtimeEnv,
@@ -133,7 +139,7 @@ function getDesktopServices() {
 
   services = {
     appInfoService,
-    desktopRuntimeManager,
+    eccRuntimeService,
     remoteContentService,
     resourceManagerService,
     layoutViewerService,
@@ -152,7 +158,7 @@ async function launchMainWindow(): Promise<void> {
   if (!ipcRegistered) {
     registerIpc(undefined, {
       appInfoService: desktopServices.appInfoService,
-      desktopRuntimeManager: desktopServices.desktopRuntimeManager,
+      eccRuntimeService: desktopServices.eccRuntimeService,
       remoteContentService: desktopServices.remoteContentService,
       resourceManagerService: desktopServices.resourceManagerService,
       layoutViewerService: desktopServices.layoutViewerService,

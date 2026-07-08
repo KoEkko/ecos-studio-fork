@@ -57,6 +57,8 @@ export class EccRpcRuntimeService {
   private readonly sessions: WorkspaceSessionRegistry
   private readonly sidecar: EccRpcRuntimeSidecar
   private client: EccRpcRuntimeClient | null = null
+  private readonly activeRuntimeDirectories = new Set<string>()
+  private readonly eventListeners = new Set<(event: EccRuntimeEvent) => void>()
   private helloResult: EccRpcHelloResult | null = null
   private queue = Promise.resolve()
   private ready = false
@@ -64,6 +66,21 @@ export class EccRpcRuntimeService {
   constructor(private readonly options: EccRpcRuntimeServiceOptions) {
     this.sessions = options.sessions ?? new WorkspaceSessionRegistry()
     this.sidecar = options.createSidecar((event) => this.handleSidecarEvent(event))
+  }
+
+  get activeWorkspaceDirectory(): string | null {
+    return this.sessions.active?.directory ?? null
+  }
+
+  onEvent(listener: (event: EccRuntimeEvent) => void): () => void {
+    this.eventListeners.add(listener)
+    return () => {
+      this.eventListeners.delete(listener)
+    }
+  }
+
+  isWorkspaceRuntimeActive(directory: string): boolean {
+    return this.activeRuntimeDirectories.has(directory)
   }
 
   rpcHello(): Promise<EccRpcHelloResult> {
@@ -241,7 +258,7 @@ export class EccRpcRuntimeService {
       version: 1,
     })
     this.ready = true
-    this.options.onEvent?.({ type: 'runtime.ready' })
+    this.emit({ type: 'runtime.ready' })
     return client
   }
 
@@ -266,7 +283,11 @@ export class EccRpcRuntimeService {
   ): Promise<T> {
     const run = async (): Promise<T> => {
       const operationId = `operation-${randomUUID()}`
-      this.options.onEvent?.({
+      const runtimeDirectory = this.runtimeDirectoryForHandle(workspaceHandle)
+      if (runtimeDirectory) {
+        this.activeRuntimeDirectories.add(runtimeDirectory)
+      }
+      this.emit({
         logFile: this.sidecar.logFile ?? undefined,
         method,
         operationId,
@@ -275,7 +296,7 @@ export class EccRpcRuntimeService {
       })
       try {
         const result = await operation()
-        this.options.onEvent?.({
+        this.emit({
           logFile: this.sidecar.logFile ?? undefined,
           method,
           operationId,
@@ -290,7 +311,7 @@ export class EccRpcRuntimeService {
           operationId,
           workspaceHandle,
         })
-        this.options.onEvent?.({
+        this.emit({
           logFile: normalized.logFile,
           message: normalized.message,
           method,
@@ -299,6 +320,10 @@ export class EccRpcRuntimeService {
           workspaceHandle,
         })
         throw normalized
+      } finally {
+        if (runtimeDirectory) {
+          this.activeRuntimeDirectories.delete(runtimeDirectory)
+        }
       }
     }
 
@@ -317,6 +342,24 @@ export class EccRpcRuntimeService {
       this.helloResult = null
       this.sessions.clearEccWorkspaceIds()
     }
+    this.emit(event)
+  }
+
+  private runtimeDirectoryForHandle(workspaceHandle: string | undefined): string | null {
+    if (!workspaceHandle) {
+      return null
+    }
+    try {
+      return this.sessions.require(workspaceHandle).directory
+    } catch {
+      return null
+    }
+  }
+
+  private emit(event: EccRuntimeEvent): void {
     this.options.onEvent?.(event)
+    for (const listener of this.eventListeners) {
+      listener(event)
+    }
   }
 }

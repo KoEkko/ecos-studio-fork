@@ -8,6 +8,7 @@ import type {
   DesktopCliCommandEvent,
   DesktopCliCommandRequest,
   DesktopDirectoryDialogOptions,
+  EccRuntimeEvent,
   DesktopFileDialogOptions,
   DesktopRtlSourceDialogOptions,
   LayoutViewerOpenRequest,
@@ -302,6 +303,40 @@ const desktopApi: DesktopApi = {
           listener(payload as DesktopCliCommandEvent)
         },
       ),
+  },
+  ecc: {
+    events: {
+      onEvent: (listener) =>
+        subscribeToDesktopEvent(
+          desktopApiEventChannels.eccEvent,
+          (_event, payload: unknown) => {
+            listener(payload as EccRuntimeEvent)
+          },
+        ),
+    },
+    flow: {
+      run: (request) => invokeDesktop(desktopApiIpcChannels.eccFlowRun, request),
+      runStep: (request) => invokeDesktop(desktopApiIpcChannels.eccFlowRunStep, request),
+    },
+    rpc: {
+      hello: () => invokeDesktop(desktopApiIpcChannels.eccRpcHello),
+      ping: () => invokeDesktop(desktopApiIpcChannels.eccRpcPing),
+      shutdown: () => invokeDesktop(desktopApiIpcChannels.eccRpcShutdown),
+    },
+    workspace: {
+      close: (request) => invokeDesktop(desktopApiIpcChannels.eccWorkspaceClose, request),
+      create: (request) =>
+        invokeDesktop(desktopApiIpcChannels.eccWorkspaceCreate, request),
+      home: (request) => invokeDesktop(desktopApiIpcChannels.eccWorkspaceHome, request),
+      info: (request) => invokeDesktop(desktopApiIpcChannels.eccWorkspaceInfo, request),
+      open: (request) => invokeDesktop(desktopApiIpcChannels.eccWorkspaceOpen, request),
+      refreshConfig: (request) =>
+        invokeDesktop(desktopApiIpcChannels.eccWorkspaceRefreshConfig, request),
+      resetFlow: (request) =>
+        invokeDesktop(desktopApiIpcChannels.eccWorkspaceResetFlow, request),
+      syncConfig: (request) =>
+        invokeDesktop(desktopApiIpcChannels.eccWorkspaceSyncConfig, request),
+    },
   },
   shell: {
     createSession: (options: DesktopShellSessionOptions) =>
