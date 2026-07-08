@@ -128,6 +128,30 @@ describe('EccRpcRuntimeService', () => {
     })
   })
 
+  it('emits rerun metadata when a full flow rerun starts', async () => {
+    const { client, events, service } = createService()
+    client.responses.push(
+      { capabilities: [], eccVersion: '0.1.0', version: 1 },
+      { directory: '/work/demo', workspaceId: 'workspace-1' },
+      { rerun: true },
+    )
+
+    const workspace = await service.openWorkspace({ directory: '/work/demo' })
+    await service.runFlow({
+      rerun: true,
+      workspaceHandle: workspace.workspaceHandle,
+    })
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        method: 'flow.run',
+        rerun: true,
+        type: 'operation.started',
+        workspaceHandle: workspace.workspaceHandle,
+      }),
+    )
+  })
+
   it('serializes all RPC operations through a global queue', async () => {
     const { client, service } = createService()
     client.responses.push({ capabilities: [], eccVersion: '0.1.0', version: 1 })

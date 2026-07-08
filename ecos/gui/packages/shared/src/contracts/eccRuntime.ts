@@ -130,6 +130,7 @@ export type EccRuntimeEvent =
       logFile?: string
       method: string
       operationId: string
+      rerun?: boolean
       type: 'operation.started'
       workspaceHandle?: string
     }
@@ -137,6 +138,7 @@ export type EccRuntimeEvent =
       logFile?: string
       method: string
       operationId: string
+      rerun?: boolean
       type: 'operation.completed'
       workspaceHandle?: string
     }
@@ -145,6 +147,7 @@ export type EccRuntimeEvent =
       message: string
       method: string
       operationId: string
+      rerun?: boolean
       type: 'operation.failed'
       workspaceHandle?: string
     }

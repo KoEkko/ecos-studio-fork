@@ -1144,9 +1144,9 @@ export function useWorkspace() {
         runtimeEvents.value.push(response)
         if (isRtl2gdsRerunStartEvent(response)) {
           const resetProjectPath =
-            asString(response.data.workspaceId) ??
             asString(response.data.directory) ??
-            currentProject.value?.path
+            currentProject.value?.path ??
+            asString(response.data.workspaceId)
           if (resetProjectPath) {
             clearHomeRunArtifactResetAwaitingBackendStart(resetProjectPath)
             requestHomeRunArtifactReset(resetProjectPath)

@@ -1716,6 +1716,26 @@ describe('useWorkspace openProject', () => {
     expect(requestHomeRunArtifactResetMock).toHaveBeenCalledWith('/work/demo')
   })
 
+  it('uses the current project path for RPC rerun start events that only carry a workspace handle', async () => {
+    const workspace = await openWorkspaceAndConnectRuntimeEvents()
+
+    onRuntimeEvent?.({
+      cmd: 'notify',
+      data: {
+        type: 'message',
+        cmd: 'rtl2gds',
+        workspaceId: 'workspace-demo',
+        rerun: true,
+      },
+      message: ['Started rtl2gds'],
+      response: 'success',
+    })
+
+    expect(workspace.runtimeEvents.value).toHaveLength(1)
+    expect(requestHomeRunArtifactResetMock).toHaveBeenCalledWith('/work/demo')
+    expect(requestHomeRunArtifactResetMock).not.toHaveBeenCalledWith('workspace-demo')
+  })
+
   it('keeps the workspace loading overlay visible while a new workspace is being created', async () => {
     const workspace = useWorkspace()
     let resolveCreateWorkspace: ((value: unknown) => void) | undefined

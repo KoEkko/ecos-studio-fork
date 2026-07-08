@@ -82,6 +82,48 @@ describe('createRuntimeEventClient desktop ECC events', () => {
     expect(client.getState()).toBe('disconnected')
   })
 
+  it('maps flow rerun start metadata onto renderer notifications', async () => {
+    const listeners: Array<(event: EccRuntimeEvent) => void> = []
+    setWindow({
+      ecosDesktop: {
+        ecc: {
+          events: {
+            onEvent: (listener: (event: EccRuntimeEvent) => void) => {
+              listeners.push(listener)
+              return () => undefined
+            },
+          },
+        },
+      },
+    })
+
+    const { createRuntimeEventClient } = await import('./runtimeEvents')
+    const client = createRuntimeEventClient('workspace-handle-1')
+    const allHandler = vi.fn()
+    client.onAll(allHandler)
+    client.connect()
+
+    listeners[0]({
+      method: 'flow.run',
+      operationId: 'operation-rerun',
+      rerun: true,
+      type: 'operation.started',
+      workspaceHandle: 'workspace-handle-1',
+    })
+
+    expect(allHandler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          cmd: 'rtl2gds',
+          jobId: 'operation-rerun',
+          rerun: true,
+          type: 'message',
+          workspaceId: 'workspace-handle-1',
+        }),
+      }),
+    )
+  })
+
   it('ignores operation events for another workspace handle', async () => {
     const listeners: Array<(event: EccRuntimeEvent) => void> = []
     setWindow({

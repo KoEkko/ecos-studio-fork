@@ -52,6 +52,9 @@ interface EccWorkspaceSessionResult {
 }
 
 type RuntimeOperation<T> = () => Promise<T>
+interface RuntimeOperationMetadata {
+  rerun?: boolean
+}
 
 export class EccRpcRuntimeService {
   private readonly sessions: WorkspaceSessionRegistry
@@ -221,26 +224,38 @@ export class EccRpcRuntimeService {
   }
 
   runFlow(request: EccFlowRunRequest): Promise<EccFlowRunResult> {
-    return this.enqueue('flow.run', request.workspaceHandle, async () => {
-      const client = await this.ensureStarted()
-      const workspaceId = await this.resolveEccWorkspaceId(request.workspaceHandle)
-      return await client.call<EccFlowRunResult>('flow.run', {
-        rerun: Boolean(request.rerun),
-        workspaceId,
-      })
-    })
+    const rerun = Boolean(request.rerun)
+    return this.enqueue(
+      'flow.run',
+      request.workspaceHandle,
+      async () => {
+        const client = await this.ensureStarted()
+        const workspaceId = await this.resolveEccWorkspaceId(request.workspaceHandle)
+        return await client.call<EccFlowRunResult>('flow.run', {
+          rerun,
+          workspaceId,
+        })
+      },
+      { rerun },
+    )
   }
 
   runStep(request: EccFlowRunStepRequest): Promise<EccFlowRunStepResult> {
-    return this.enqueue('flow.run_step', request.workspaceHandle, async () => {
-      const client = await this.ensureStarted()
-      const workspaceId = await this.resolveEccWorkspaceId(request.workspaceHandle)
-      return await client.call<EccFlowRunStepResult>('flow.run_step', {
-        rerun: Boolean(request.rerun),
-        step: request.step,
-        workspaceId,
-      })
-    })
+    const rerun = Boolean(request.rerun)
+    return this.enqueue(
+      'flow.run_step',
+      request.workspaceHandle,
+      async () => {
+        const client = await this.ensureStarted()
+        const workspaceId = await this.resolveEccWorkspaceId(request.workspaceHandle)
+        return await client.call<EccFlowRunStepResult>('flow.run_step', {
+          rerun,
+          step: request.step,
+          workspaceId,
+        })
+      },
+      { rerun },
+    )
   }
 
   private async ensureStarted(): Promise<EccRpcRuntimeClient> {
@@ -280,6 +295,7 @@ export class EccRpcRuntimeService {
     method: string,
     workspaceHandle: string | undefined,
     operation: RuntimeOperation<T>,
+    metadata: RuntimeOperationMetadata = {},
   ): Promise<T> {
     const run = async (): Promise<T> => {
       const operationId = `operation-${randomUUID()}`
@@ -291,6 +307,7 @@ export class EccRpcRuntimeService {
         logFile: this.sidecar.logFile ?? undefined,
         method,
         operationId,
+        ...metadata,
         type: 'operation.started',
         workspaceHandle,
       })
@@ -300,6 +317,7 @@ export class EccRpcRuntimeService {
           logFile: this.sidecar.logFile ?? undefined,
           method,
           operationId,
+          ...metadata,
           type: 'operation.completed',
           workspaceHandle,
         })
@@ -316,6 +334,7 @@ export class EccRpcRuntimeService {
           message: normalized.message,
           method,
           operationId,
+          ...metadata,
           type: 'operation.failed',
           workspaceHandle,
         })

@@ -91,6 +91,7 @@ function responseFromEccEvent(event: EccRuntimeEvent): RuntimeEventResponse | nu
     jobId: 'operationId' in event ? event.operationId : undefined,
     logFile: 'logFile' in event ? event.logFile : undefined,
     method,
+    rerun: 'rerun' in event ? event.rerun : undefined,
     timestamp: Date.now(),
     type: notifyType,
     workspaceId: 'workspaceHandle' in event ? event.workspaceHandle : undefined,
