@@ -217,7 +217,7 @@ describe('useWorkspace openProject', () => {
       response: 'success',
       data: {
         directory: '/work/demo',
-        workspace_id: 'workspace-demo',
+        workspace_handle: 'workspace-demo',
       },
     })
 
@@ -228,7 +228,7 @@ describe('useWorkspace openProject', () => {
     return workspace
   }
 
-  it('re-enters the active workspace without reloading it through the CLI', async () => {
+  it('re-enters the active workspace without reloading it through ECC RPC', async () => {
     const workspace = useWorkspace()
     const activeProject: Project = {
       id: '/work/demo',
@@ -267,7 +267,7 @@ describe('useWorkspace openProject', () => {
       response: 'success',
       data: {
         directory: '/work/old',
-        workspace_id: '/work/old',
+        workspace_handle: '/work/old',
       },
     })
 
@@ -307,7 +307,7 @@ describe('useWorkspace openProject', () => {
       response: 'success',
       data: {
         directory: '/work/old',
-        workspace_id: '/work/old',
+        workspace_handle: '/work/old',
       },
     })
 
@@ -329,7 +329,7 @@ describe('useWorkspace openProject', () => {
       response: 'success',
       data: {
         directory: '/work/new',
-        workspace_id: '/work/new',
+        workspace_handle: '/work/new',
       },
     })
 
@@ -350,7 +350,7 @@ describe('useWorkspace openProject', () => {
       response: 'success',
       data: {
         directory: '/work/old',
-        workspace_id: '/work/old',
+        workspace_handle: '/work/old',
       },
     })
 
@@ -927,7 +927,7 @@ describe('useWorkspace openProject', () => {
         response: 'success',
         data: {
           directory: path,
-          workspace_id: path,
+          workspace_handle: path,
         },
       }
     })
@@ -1052,7 +1052,7 @@ describe('useWorkspace openProject', () => {
         response: 'success',
         data: {
           directory: path,
-          workspace_id: path,
+          workspace_handle: path,
         },
       })
     })
@@ -1071,7 +1071,7 @@ describe('useWorkspace openProject', () => {
       response: 'success',
       data: {
         directory: '/work/a',
-        workspace_id: '/work/a',
+        workspace_handle: '/work/a',
       },
     })
 
@@ -1146,7 +1146,7 @@ describe('useWorkspace openProject', () => {
       response: 'success',
       data: {
         directory: path,
-        workspace_id: path,
+        workspace_handle: path,
       },
     }))
 
@@ -1266,7 +1266,7 @@ describe('useWorkspace openProject', () => {
         response: 'success',
         data: {
           directory: path,
-          workspace_id: path,
+          workspace_handle: path,
         },
       }
     })
@@ -1359,7 +1359,7 @@ describe('useWorkspace openProject', () => {
       response: 'success',
       data: {
         directory: path,
-        workspace_id: path,
+        workspace_handle: path,
       },
     }))
     vi.mocked(desktopApi.settings.set).mockImplementation(
@@ -1423,7 +1423,7 @@ describe('useWorkspace openProject', () => {
       response: 'success',
       data: {
         directory: '/work/old',
-        workspace_id: '/work/old',
+        workspace_handle: '/work/old',
       },
     })
 
@@ -1461,7 +1461,7 @@ describe('useWorkspace openProject', () => {
       response: 'success',
       data: {
         directory: '/work/old',
-        workspace_id: '/work/old',
+        workspace_handle: '/work/old',
       },
     })
 
@@ -1475,7 +1475,7 @@ describe('useWorkspace openProject', () => {
       response: 'success',
       data: {
         directory: '/work/new',
-        workspace_id: '/work/new',
+        workspace_handle: '/work/new',
       },
     })
 
@@ -1531,7 +1531,7 @@ describe('useWorkspace openProject', () => {
       response: 'success',
       data: {
         directory: '/work/demo',
-        workspace_id: 'workspace-demo',
+        workspace_handle: 'workspace-demo',
       },
       message: [],
     })
@@ -1553,7 +1553,7 @@ describe('useWorkspace openProject', () => {
       response: 'success',
       data: {
         directory: '/work/demo',
-        workspace_id: 'workspace-demo',
+        workspace_handle: 'workspace-demo',
       },
     })
 
@@ -1620,14 +1620,14 @@ describe('useWorkspace openProject', () => {
         response: 'success',
         data: {
           directory: '/work/old',
-          workspace_id: 'workspace-old',
+          workspace_handle: 'workspace-old',
         },
       })
       .mockResolvedValueOnce({
         response: 'success',
         data: {
           directory: '/work/new',
-          workspace_id: 'workspace-new',
+          workspace_handle: 'workspace-new',
         },
       })
 
@@ -1749,7 +1749,7 @@ describe('useWorkspace openProject', () => {
       response: 'success',
       data: {
         directory: '/work/new-project',
-        workspace_id: 'workspace-new-project',
+        workspace_handle: 'workspace-new-project',
       },
       message: [],
     })

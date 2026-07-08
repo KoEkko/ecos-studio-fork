@@ -67,6 +67,13 @@ function asNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
+function workspaceHandleFromResponseData(
+  data: { directory?: string; workspace_handle?: string; workspaceHandle?: string },
+  fallback?: string,
+): string {
+  return data.workspaceHandle || data.workspace_handle || data.directory || fallback || ''
+}
+
 // Runtime event connection（workspace 级别，跟随 workspace 生命周期）
 const runtimeEventClient = ref<RuntimeEventClient | null>(null)
 const runtimeEvents = ref<RuntimeEventResponse[]>([])
@@ -435,7 +442,7 @@ export function useWorkspace() {
           await router.isReady()
 
           if (router.currentRoute.value.path.startsWith('/workspace')) {
-            // reload 后需要重新通过桌面 CLI 加载 workspace 状态并建立 runtime event 连接
+            // reload 后需要重新通过 ECC RPC 加载 workspace 状态并建立 runtime event 连接
             const session = workspaceLifecycle.beginSession({
               projectRoot: normalizePath(restored.path),
             })
@@ -460,7 +467,10 @@ export function useWorkspace() {
                 }
                 messageStore.clearMessages()
                 await updateWindowTitle(restored.name)
-                const workspaceId = response.data.workspace_id || response.data.directory
+                const workspaceId = workspaceHandleFromResponseData(
+                  response.data,
+                  restored.path,
+                )
                 workspaceLifecycle.activateSession(session.sessionId, {
                   workspaceId,
                   projectRoot: canonicalProjectRoot,
@@ -603,7 +613,7 @@ export function useWorkspace() {
         workspaceLifecycle.setSessionLoading(activeSession.sessionId)
       }
 
-      // 3. 通过桌面 CLI 加载项目状态
+      // 3. 通过 ECC RPC 加载项目状态
       const response = await loadWorkspaceApi(selectedPath)
       if (!isLatestOpenProjectRequest()) return false
       if (session && !workspaceLifecycle.isCurrentSession(session.sessionId)) return false
@@ -647,7 +657,10 @@ export function useWorkspace() {
         await setSetting('current_project_path', normalizePath(loadedProject.path))
 
         // 建立 runtime event 连接
-        const workspaceId = response.data.workspace_id || response.data.directory
+        const workspaceId = workspaceHandleFromResponseData(
+          response.data,
+          canonicalProjectRoot,
+        )
         workspaceLifecycle.activateSession(activeSession.sessionId, {
           workspaceId,
           projectRoot: canonicalProjectRoot,
@@ -778,7 +791,7 @@ export function useWorkspace() {
         'Writing project files and preparing the workspace view'
       workspaceLifecycle.setSessionLoading(session.sessionId)
 
-      // 3. 通过桌面 CLI 创建工作区（传递 Wizard 配置信息）
+      // 3. 通过 ECC RPC 创建工作区（传递 Wizard 配置信息）
       const frontendParams = creationConfig?.parameters || {}
       const pdkName = creationConfig?.pdk || 'ics55'
       const toNumber = (value: unknown, fallback: number) => {
@@ -879,7 +892,10 @@ export function useWorkspace() {
         await setSetting('current_project_path', normalizePath(createdProject.path))
 
         // 建立 runtime event 连接
-        const workspaceId = response.data.workspace_id || response.data.directory
+        const workspaceId = workspaceHandleFromResponseData(
+          response.data,
+          canonicalProjectRoot,
+        )
         workspaceLifecycle.activateSession(session.sessionId, {
           workspaceId,
           projectRoot: canonicalProjectRoot,
