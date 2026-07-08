@@ -29,9 +29,6 @@ async function loadDesktopBridge() {
     app: {
       getVersions(): Promise<unknown>
     }
-    cli: {
-      onEvent(listener: (event: unknown) => void): () => void
-    }
     ecc: {
       events: {
         onEvent(listener: (event: unknown) => void): () => void
@@ -68,9 +65,6 @@ describe('preload desktop bridge contract', () => {
       expect.objectContaining({
         app: expect.objectContaining({
           getVersions: expect.any(Function),
-        }),
-        cli: expect.objectContaining({
-          onEvent: expect.any(Function),
         }),
         ecc: expect.objectContaining({
           events: expect.objectContaining({

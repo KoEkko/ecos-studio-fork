@@ -63,7 +63,6 @@ export const desktopApiIpcChannels = {
   resourcesImportLocalPath: 'resources:import-local-path',
   resourcesRefreshRegistry: 'resources:refresh-registry',
   layoutViewerOpen: 'layout-viewer:open',
-  cliExecute: 'cli:execute',
   eccRpcHello: 'ecc:rpc-hello',
   eccRpcPing: 'ecc:rpc-ping',
   eccRpcShutdown: 'ecc:rpc-shutdown',

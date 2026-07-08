@@ -10,9 +10,6 @@ import { stat } from 'node:fs/promises'
 import {
   desktopApiEventChannels,
   desktopApiIpcChannels,
-  type DesktopCliCommandEvent,
-  type DesktopCliCommandRequest,
-  type DesktopCliCommandResult,
   type DesktopProjectFileChangedEvent,
   type DesktopProjectLogTailEvent,
   type DesktopProjectDirectoryEntry,
@@ -177,12 +174,6 @@ export interface DesktopBridgeServices {
     importPdkPath(path: string): Promise<unknown>
     importLocalPath(resourceId: string, path: string): Promise<unknown>
     refreshRegistry(): Promise<unknown>
-  }
-  desktopRuntimeManager: {
-    execute(
-      request: DesktopCliCommandRequest,
-      listener?: (event: DesktopCliCommandEvent) => void,
-    ): Promise<DesktopCliCommandResult>
   }
   eccRuntimeService: {
     closeWorkspace(request: EccWorkspaceHandleRequest): Promise<unknown>

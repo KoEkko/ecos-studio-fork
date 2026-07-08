@@ -1,11 +1,22 @@
 import { EventEmitter } from 'node:events'
-import { desktopApiEventChannels, desktopApiIpcChannels } from '@ecos-studio/shared'
+import {
+  desktopApiEventChannels,
+  desktopApiIpcChannels,
+  type EccRuntimeEvent,
+} from '@ecos-studio/shared'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+interface MockBrowserWindow {
+  isDestroyed(): boolean
+  webContents: {
+    send(...args: unknown[]): void
+  }
+}
 
 const { fromWebContents, getAllWindows, openExternal, showOpenDialog, statMock } =
   vi.hoisted(() => ({
     fromWebContents: vi.fn(),
-    getAllWindows: vi.fn(() => []),
+    getAllWindows: vi.fn<() => MockBrowserWindow[]>(() => []),
     openExternal: vi.fn(),
     showOpenDialog: vi.fn(),
     statMock: vi.fn(),
@@ -111,14 +122,10 @@ function registerHandlers() {
     appInfoService: {
       getVersions: vi.fn(),
     },
-    desktopRuntimeManager: {
-      execute: vi.fn(),
-      onEvent: vi.fn(),
-    },
     eccRuntimeService: {
       closeWorkspace: vi.fn(),
       createWorkspace: vi.fn(),
-      onEvent: vi.fn(() => () => undefined),
+      onEvent: vi.fn((_listener: (event: EccRuntimeEvent) => void) => () => undefined),
       openWorkspace: vi.fn(),
       refreshConfig: vi.fn(),
       resetFlow: vi.fn(),

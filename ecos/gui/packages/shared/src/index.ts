@@ -25,15 +25,6 @@ export type {
   WorkspaceDirectoryReplacement,
 } from './contracts/desktopApi.ts'
 export type {
-  DesktopCliCommandEvent,
-  DesktopCliCommandEventType,
-  DesktopCliCommandName,
-  DesktopCliCommandRequest,
-  DesktopCliCommandResponse,
-  DesktopCliCommandResult,
-  DesktopCliCommandSource,
-} from './contracts/desktopCli.ts'
-export type {
   EccFlowRunRequest,
   EccFlowRunResult,
   EccFlowRunStepRequest,

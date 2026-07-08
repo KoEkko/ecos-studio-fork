@@ -17,11 +17,6 @@ import type {
   ResourceOperationResult,
 } from './resources.ts'
 import type { RemoteContentApi } from './remoteContent.ts'
-import type {
-  DesktopCliCommandEvent,
-  DesktopCliCommandRequest,
-  DesktopCliCommandResult,
-} from './desktopCli.ts'
 import type { EccRuntimeApi } from './eccRuntime.ts'
 import type {
   DesktopEventUnsubscribe,
@@ -249,10 +244,6 @@ export interface DesktopApi {
     importLocalPath(request: ResourceImportLocalRequest): Promise<ResourceInfo>
     refreshRegistry(): Promise<{ status: string; tools_count: number }>
     onProgress(listener: (event: ResourceJob) => void): DesktopEventUnsubscribe
-  }
-  cli: {
-    execute(request: DesktopCliCommandRequest): Promise<DesktopCliCommandResult>
-    onEvent(listener: (event: DesktopCliCommandEvent) => void): DesktopEventUnsubscribe
   }
   ecc: EccRuntimeApi
   shell: {
