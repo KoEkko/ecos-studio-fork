@@ -22,6 +22,7 @@ import type {
   DesktopCliCommandRequest,
   DesktopCliCommandResult,
 } from './desktopCli.ts'
+import type { EccRuntimeApi } from './eccRuntime.ts'
 import type {
   DesktopEventUnsubscribe,
   DesktopMenuEventId,
@@ -253,6 +254,7 @@ export interface DesktopApi {
     execute(request: DesktopCliCommandRequest): Promise<DesktopCliCommandResult>
     onEvent(listener: (event: DesktopCliCommandEvent) => void): DesktopEventUnsubscribe
   }
+  ecc: EccRuntimeApi
   shell: {
     createSession(options: DesktopShellSessionOptions): Promise<DesktopShellSession>
     write(sessionId: string, data: string): Promise<void>
