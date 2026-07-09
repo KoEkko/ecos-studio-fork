@@ -67,12 +67,17 @@ function registerHandlers() {
       readProjectTextFile: vi.fn(),
       readProjectTextFileTail: vi.fn(),
       registerProjectRoot: vi.fn(),
+      removeProjectDirectory: vi.fn(),
+      listProjectDirectory: vi.fn(),
       requestProjectPathAccess: vi.fn(),
       scanPdkDirectory: vi.fn(),
       scanRtlDirectory: vi.fn(),
       listDesignFiles: vi.fn(),
       addDesignFiles: vi.fn(),
       removeDesignFile: vi.fn(),
+      prepareProjectDirectoryReplacement: vi.fn(),
+      restoreProjectDirectoryReplacement: vi.fn(),
+      finalizeProjectDirectoryReplacement: vi.fn(),
       subscribeProjectLogTail: vi.fn(),
       unwatchProjectFile: vi.fn(),
       unsubscribeProjectLogTail: vi.fn(),
@@ -496,6 +501,17 @@ describe('registerIpc', () => {
     services.workspaceService.requestProjectPathAccess.mockResolvedValue(
       '/tmp/project/home.json',
     )
+    services.workspaceService.prepareProjectDirectoryReplacement.mockResolvedValue({
+      targetPath: '/tmp/project/ws_0001',
+      backupPath: '/tmp/project/.ws_0001.replace-backup',
+    })
+    services.workspaceService.listProjectDirectory.mockResolvedValue([
+      {
+        name: 'gcd_Floorplan.def.gz',
+        path: '/tmp/project/origin/gcd_Floorplan.def.gz',
+        type: 'file',
+      },
+    ])
     services.workspaceService.scanPdkDirectory.mockResolvedValue({
       canonicalPath: '/tmp/pdk',
       name: 'ics55',
@@ -617,6 +633,38 @@ describe('registerIpc', () => {
       '{"PDK":"ics55"}',
     )
     await expect(
+      handlers.get(desktopApiIpcChannels.workspaceListProjectDirectory)?.(
+        event,
+        '/tmp/project/origin',
+      ),
+    ).resolves.toEqual([
+      {
+        name: 'gcd_Floorplan.def.gz',
+        path: '/tmp/project/origin/gcd_Floorplan.def.gz',
+        type: 'file',
+      },
+    ])
+    await handlers.get(desktopApiIpcChannels.workspaceRemoveProjectDirectory)?.(
+      event,
+      '/tmp/project/ws_0001',
+    )
+    const replacement = {
+      targetPath: '/tmp/project/ws_0001',
+      backupPath: '/tmp/project/.ws_0001.replace-backup',
+    }
+    await expect(
+      handlers.get(desktopApiIpcChannels.workspacePrepareProjectDirectoryReplacement)?.(
+        event,
+        '/tmp/project/ws_0001',
+      ),
+    ).resolves.toEqual(replacement)
+    await handlers.get(
+      desktopApiIpcChannels.workspaceRestoreProjectDirectoryReplacement,
+    )?.(event, replacement)
+    await handlers.get(
+      desktopApiIpcChannels.workspaceFinalizeProjectDirectoryReplacement,
+    )?.(event, replacement)
+    await expect(
       handlers.get(desktopApiIpcChannels.workspaceScanPdkDirectory)?.(event, '/tmp/pdk'),
     ).resolves.toMatchObject({
       canonicalPath: '/tmp/pdk',
@@ -669,6 +717,21 @@ describe('registerIpc', () => {
       '/tmp/project/home/parameters.json',
       '{"PDK":"ics55"}',
     )
+    expect(services.workspaceService.listProjectDirectory).toHaveBeenCalledWith(
+      '/tmp/project/origin',
+    )
+    expect(services.workspaceService.removeProjectDirectory).toHaveBeenCalledWith(
+      '/tmp/project/ws_0001',
+    )
+    expect(
+      services.workspaceService.prepareProjectDirectoryReplacement,
+    ).toHaveBeenCalledWith('/tmp/project/ws_0001')
+    expect(
+      services.workspaceService.restoreProjectDirectoryReplacement,
+    ).toHaveBeenCalledWith(replacement)
+    expect(
+      services.workspaceService.finalizeProjectDirectoryReplacement,
+    ).toHaveBeenCalledWith(replacement)
     expect(services.workspaceService.clearProjectRoot).toHaveBeenCalledTimes(1)
   })
 
@@ -693,7 +756,7 @@ describe('registerIpc', () => {
     expect(showOpenDialog).toHaveBeenCalledWith({
       properties: ['openFile'],
       title: 'Add RTL Design Files',
-      filters: [{ name: 'HDL Files', extensions: ['v', 'sv', 'vhd', 'vhdl'] }],
+      filters: [{ name: 'HDL Files', extensions: ['v', 'sv', 'vhd', 'vhdl', 'gz'] }],
     })
 
     showOpenDialog.mockResolvedValueOnce({
