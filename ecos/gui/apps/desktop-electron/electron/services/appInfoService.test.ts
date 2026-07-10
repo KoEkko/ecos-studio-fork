@@ -47,7 +47,7 @@ describe('AppInfoService', () => {
       'data',
       JSON.stringify({
         schema_version: 1,
-        runtime: 'ECC RPC',
+        runtime: 'ECC CLI',
         ecc: '0.1.0a5',
         dreamplace: '0.1.0a3',
         ecc_tools: '0.1.0a2',

@@ -91,7 +91,7 @@ export class AppInfoService {
       dreamplace: stringValue(payload.dreamplace, UNKNOWN_VERSION),
       ecc: stringValue(payload.ecc, UNKNOWN_VERSION),
       eccTools: stringValue(payload.ecc_tools, UNKNOWN_VERSION),
-      runtime: stringValue(payload.runtime, DEFAULT_RUNTIME),
+      runtime: DEFAULT_RUNTIME,
     }
   }
 
