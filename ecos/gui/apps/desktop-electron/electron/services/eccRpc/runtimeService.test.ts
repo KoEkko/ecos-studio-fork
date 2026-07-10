@@ -406,4 +406,54 @@ describe('EccRpcRuntimeService', () => {
       },
     ])
   })
+
+  it('does not send a stale workspace id when close replaces the sidecar client', async () => {
+    const { client, service, sidecar } = createService()
+    client.responses.push(
+      { capabilities: [], eccVersion: '0.1.0', version: 1 },
+      { directory: '/work/demo', workspaceId: 'workspace-1' },
+    )
+    const workspace = await service.openWorkspace({ directory: '/work/demo' })
+    const replacementClient = new FakeRpcClient()
+    replacementClient.responses.push({
+      capabilities: [],
+      eccVersion: '0.1.0',
+      version: 1,
+    })
+    sidecar.client = replacementClient
+
+    await expect(
+      service.closeWorkspace({ workspaceHandle: workspace.workspaceHandle }),
+    ).resolves.toEqual({ ok: true })
+
+    expect(replacementClient.calls).toEqual([
+      { method: 'rpc.hello', params: { version: 1 } },
+    ])
+    await expect(
+      service.runFlow({
+        rerun: false,
+        workspaceHandle: workspace.workspaceHandle,
+      }),
+    ).rejects.toThrow('Workspace session not found')
+  })
+
+  it('releases the GUI handle when server-side workspace close fails', async () => {
+    const { client, service } = createService()
+    client.responses.push(
+      { capabilities: [], eccVersion: '0.1.0', version: 1 },
+      { directory: '/work/demo', workspaceId: 'workspace-1' },
+    )
+    const workspace = await service.openWorkspace({ directory: '/work/demo' })
+    client.responses.push(new Error('server close failed'))
+
+    await expect(
+      service.closeWorkspace({ workspaceHandle: workspace.workspaceHandle }),
+    ).rejects.toThrow('server close failed')
+    await expect(
+      service.runFlow({
+        rerun: false,
+        workspaceHandle: workspace.workspaceHandle,
+      }),
+    ).rejects.toThrow('Workspace session not found')
+  })
 })

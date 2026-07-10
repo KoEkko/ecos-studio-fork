@@ -144,6 +144,64 @@ describe('EccRpcSidecarProcess', () => {
     expect(spawn).toHaveBeenCalledOnce()
   })
 
+  it('bounds restart when shutdown responds but the child never exits', async () => {
+    vi.useFakeTimers()
+    const child = new FakeChild()
+    const spawn = vi.fn(() => child)
+    let runtimeEnv: NodeJS.ProcessEnv = { PATH: '/tools/v1/bin' }
+    const sidecar = new EccRpcSidecarProcess({
+      envProvider: async () => runtimeEnv,
+      shutdownTimeoutMs: 25,
+      spawn,
+    })
+    await sidecar.start()
+    runtimeEnv = { PATH: '/tools/v2/bin' }
+
+    const restartError = sidecar.start().catch((error: unknown) => error)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(child.stdin.chunks).toHaveLength(1)
+    child.stdout.write(
+      encodeContentLengthFrame('{"jsonrpc":"2.0","id":1,"result":{"ok":true}}'),
+    )
+    await vi.advanceTimersByTimeAsync(25)
+    expect(child.signals).toEqual(['SIGTERM'])
+
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(child.signals).toEqual(['SIGTERM', 'SIGKILL'])
+    await vi.advanceTimersByTimeAsync(25)
+
+    await expect(restartError).resolves.toMatchObject({
+      message: 'ECC RPC sidecar did not exit after SIGKILL.',
+    })
+    expect(spawn).toHaveBeenCalledOnce()
+  })
+
+  it('uses one bounded signal escalation when restart shutdown times out', async () => {
+    vi.useFakeTimers()
+    const child = new FakeChild()
+    let runtimeEnv: NodeJS.ProcessEnv = { PATH: '/tools/v1/bin' }
+    const sidecar = new EccRpcSidecarProcess({
+      envProvider: async () => runtimeEnv,
+      shutdownTimeoutMs: 25,
+      spawn: () => child,
+    })
+    await sidecar.start()
+    runtimeEnv = { PATH: '/tools/v2/bin' }
+
+    const restartError = sidecar.start().catch((error: unknown) => error)
+    await vi.advanceTimersByTimeAsync(25)
+    expect(child.signals).toEqual(['SIGTERM'])
+
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(child.signals).toEqual(['SIGTERM', 'SIGKILL'])
+    await vi.advanceTimersByTimeAsync(25)
+
+    await expect(restartError).resolves.toMatchObject({
+      message: 'ECC RPC sidecar did not exit after SIGKILL.',
+    })
+    expect(child.listenerCount('close')).toBe(1)
+  })
+
   it('connects stdout responses to the JSON-RPC client', async () => {
     const child = new FakeChild()
     const sidecar = new EccRpcSidecarProcess({ spawn: () => child })

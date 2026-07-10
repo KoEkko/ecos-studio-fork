@@ -57,7 +57,9 @@ function eventMatchesWorkspace(event: EccRuntimeEvent, workspaceId: string): boo
 }
 
 function notifyTypeFromEvent(event: EccRuntimeEvent): RuntimeNotifyType | null {
-  if (event.type === 'runtime.exited') return 'error'
+  if (event.type === 'runtime.exited') {
+    return event.reason === 'unexpected' ? 'error' : null
+  }
   if (event.type === 'operation.failed')
     return isFlowMethod(event.method) ? 'error' : null
   if (event.type !== 'operation.completed' && event.type !== 'operation.started') {

@@ -250,4 +250,39 @@ describe('createRuntimeEventClient desktop ECC events', () => {
 
     expect(errorHandler).toHaveBeenCalledWith('ECC RPC sidecar exited unexpectedly')
   })
+
+  it('does not publish planned sidecar shutdowns as errors', async () => {
+    const listeners: Array<(event: EccRuntimeEvent) => void> = []
+    setWindow({
+      ecosDesktop: {
+        ecc: {
+          events: {
+            onEvent: (listener: (event: EccRuntimeEvent) => void) => {
+              listeners.push(listener)
+              return () => undefined
+            },
+          },
+        },
+      },
+    })
+
+    const { createRuntimeEventClient } = await import('./runtimeEvents')
+    const client = createRuntimeEventClient('workspace-handle-1')
+    const allHandler = vi.fn()
+    const errorHandler = vi.fn()
+    client.onAll(allHandler)
+    client.onError(errorHandler)
+    client.connect()
+
+    listeners[0]({
+      code: 0,
+      reason: 'shutdown',
+      signal: null,
+      type: 'runtime.exited',
+      workspaceHandle: 'workspace-handle-1',
+    })
+
+    expect(allHandler).not.toHaveBeenCalled()
+    expect(errorHandler).not.toHaveBeenCalled()
+  })
 })

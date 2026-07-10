@@ -95,11 +95,7 @@ export class EccRpcSidecarProcess {
     if (this.client) {
       const child = this.child
       if (child) {
-        const exited = new Promise<void>((resolve) => {
-          child.once('close', () => resolve())
-        })
-        await this.shutdown()
-        await exited
+        await this.stopForRestart(child)
       }
     }
 
@@ -181,12 +177,7 @@ export class EccRpcSidecarProcess {
       return
     }
 
-    this.shuttingDown = true
-    try {
-      await client.call('rpc.shutdown', undefined, {
-        timeoutMs: this.shutdownTimeoutMs,
-      })
-    } catch {
+    if (!(await this.requestShutdown(client))) {
       child.kill('SIGTERM')
       this.forceKillTimer = setTimeout(() => {
         if (this.child === child) {
@@ -194,6 +185,71 @@ export class EccRpcSidecarProcess {
         }
       }, this.forceKillTimeoutMs)
     }
+  }
+
+  private async stopForRestart(child: SpawnedEccRpcSidecar): Promise<void> {
+    let didExit = false
+    let resolveExit: (() => void) | undefined
+    const onClose = () => {
+      didExit = true
+      resolveExit?.()
+    }
+    const exited = new Promise<void>((resolve) => {
+      resolveExit = resolve
+      child.once('close', onClose)
+    })
+
+    try {
+      this.clearForceKillTimer()
+      const client = this.client
+      const shutdownAcknowledged = client ? await this.requestShutdown(client) : false
+      if (didExit || this.child !== child) {
+        return
+      }
+      if (
+        shutdownAcknowledged &&
+        (await this.waitForExit(exited, this.shutdownTimeoutMs))
+      ) {
+        return
+      }
+
+      child.kill('SIGTERM')
+      if (await this.waitForExit(exited, this.forceKillTimeoutMs)) {
+        return
+      }
+
+      child.kill('SIGKILL')
+      if (await this.waitForExit(exited, this.shutdownTimeoutMs)) {
+        return
+      }
+      throw new Error('ECC RPC sidecar did not exit after SIGKILL.')
+    } finally {
+      child.off('close', onClose)
+    }
+  }
+
+  private async requestShutdown(client: EccJsonRpcClient): Promise<boolean> {
+    this.shuttingDown = true
+    try {
+      await client.call('rpc.shutdown', undefined, {
+        timeoutMs: this.shutdownTimeoutMs,
+      })
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  private async waitForExit(exited: Promise<void>, timeoutMs: number): Promise<boolean> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timedOut = new Promise<false>((resolve) => {
+      timer = setTimeout(() => resolve(false), timeoutMs)
+    })
+    const result = await Promise.race([exited.then(() => true as const), timedOut])
+    if (timer) {
+      clearTimeout(timer)
+    }
+    return result
   }
 
   private clearForceKillTimer(): void {

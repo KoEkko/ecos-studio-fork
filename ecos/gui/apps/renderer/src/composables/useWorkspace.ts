@@ -59,6 +59,28 @@ interface SerializedProject {
 const currentProject = ref<Project | null>()
 const recentProjects = ref<Project[]>([])
 let openProjectRequestSequence = 0
+let activeCurrentProjectPathOwner: number | null = null
+let activeProjectRootOwner: number | null = null
+let currentProjectPathMutationQueue = Promise.resolve()
+let projectRootMutationQueue = Promise.resolve()
+
+function enqueueCurrentProjectPathMutation<T>(operation: () => Promise<T>): Promise<T> {
+  const next = currentProjectPathMutationQueue.then(operation, operation)
+  currentProjectPathMutationQueue = next.then(
+    () => undefined,
+    () => undefined,
+  )
+  return next
+}
+
+function enqueueProjectRootMutation<T>(operation: () => Promise<T>): Promise<T> {
+  const next = projectRootMutationQueue.then(operation, operation)
+  projectRootMutationQueue = next.then(
+    () => undefined,
+    () => undefined,
+  )
+  return next
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -384,25 +406,80 @@ export function useWorkspace() {
     }
   }
 
-  const registerProjectRoot = async (path: string): Promise<string | null> => {
-    try {
-      const desktopApi = await waitForDesktopApi()
-      const canonicalPath = await desktopApi.workspace.registerProjectRoot(path)
-      return normalizePath(canonicalPath)
-    } catch (error) {
-      console.error('Failed to register project root permission:', error)
-      return null
-    }
-  }
+  const registerProjectRoot = (
+    path: string,
+    owner: number | null = null,
+  ): Promise<string | null> =>
+    enqueueProjectRootMutation(async () => {
+      try {
+        const desktopApi = await waitForDesktopApi()
+        const canonicalPath = await desktopApi.workspace.registerProjectRoot(path)
+        activeProjectRootOwner = owner
+        return normalizePath(canonicalPath)
+      } catch (error) {
+        console.error('Failed to register project root permission:', error)
+        return null
+      }
+    })
 
-  const clearProjectRoot = async (): Promise<void> => {
-    try {
-      const desktopApi = await waitForDesktopApi()
-      await desktopApi.workspace.clearProjectRoot()
-    } catch (error) {
-      console.error('Failed to clear project root permission:', error)
-    }
-  }
+  const clearProjectRoot = (): Promise<void> =>
+    enqueueProjectRootMutation(async () => {
+      try {
+        const desktopApi = await waitForDesktopApi()
+        await desktopApi.workspace.clearProjectRoot()
+        activeProjectRootOwner = null
+      } catch (error) {
+        console.error('Failed to clear project root permission:', error)
+      }
+    })
+
+  const persistCurrentProjectPath = (
+    path: string,
+    owner: number | null = null,
+  ): Promise<void> =>
+    enqueueCurrentProjectPathMutation(async () => {
+      await setSetting('current_project_path', normalizePath(path))
+      activeCurrentProjectPathOwner = owner
+    })
+
+  const clearCurrentProjectPath = (): Promise<void> =>
+    enqueueCurrentProjectPathMutation(async () => {
+      await deleteSetting('current_project_path')
+      activeCurrentProjectPathOwner = null
+    })
+
+  const rollbackProjectRoot = (owner: number): Promise<void> =>
+    enqueueProjectRootMutation(async () => {
+      if (activeProjectRootOwner !== owner) return
+      try {
+        const desktopApi = await waitForDesktopApi()
+        const committedPath = currentProject.value?.path
+        if (committedPath) {
+          await desktopApi.workspace.registerProjectRoot(committedPath)
+        } else {
+          await desktopApi.workspace.clearProjectRoot()
+        }
+        activeProjectRootOwner = null
+      } catch (error) {
+        console.error('Failed to restore project root permission:', error)
+      }
+    })
+
+  const rollbackCurrentProjectPath = (owner: number): Promise<void> =>
+    enqueueCurrentProjectPathMutation(async () => {
+      if (activeCurrentProjectPathOwner !== owner) return
+      try {
+        const committedPath = currentProject.value?.path
+        if (committedPath) {
+          await setSetting('current_project_path', normalizePath(committedPath))
+        } else {
+          await deleteSetting('current_project_path')
+        }
+        activeCurrentProjectPathOwner = null
+      } catch (error) {
+        console.error('Failed to restore current project path:', error)
+      }
+    })
 
   /**
    * loadRecentProjects 从本地加载最近项目，并异步标记 workspace 识别状态。
@@ -553,6 +630,8 @@ export function useWorkspace() {
         : ''
     let candidateWorkspaceHandle = ''
     let candidateWorkspaceCommitted = false
+    let candidateProjectPathPersisted = false
+    let candidateProjectRootRegistered = false
     let sessionId: string | null = null
     try {
       let selectedPath: string | null = null
@@ -641,7 +720,11 @@ export function useWorkspace() {
       if (session && !workspaceLifecycle.isCurrentSession(session.sessionId)) return false
       if (response.response === 'success') {
         const resolvedPath = normalizePath(response.data.directory || selectedPath)
-        const canonicalProjectRoot = await registerProjectRoot(resolvedPath)
+        const canonicalProjectRoot = await registerProjectRoot(
+          resolvedPath,
+          openProjectRequestId,
+        )
+        candidateProjectRootRegistered = Boolean(canonicalProjectRoot)
         if (!isLatestOpenProjectRequest()) return false
         if (session && !workspaceLifecycle.isCurrentSession(session.sessionId))
           return false
@@ -670,7 +753,8 @@ export function useWorkspace() {
         }
 
         // 持久化当前项目路径，以便 reload 后恢复
-        await setSetting('current_project_path', normalizePath(loadedProject.path))
+        await persistCurrentProjectPath(loadedProject.path, openProjectRequestId)
+        candidateProjectPathPersisted = true
         if (!isLatestOpenProjectRequest()) return false
         if (session && !workspaceLifecycle.isCurrentSession(session.sessionId))
           return false
@@ -722,8 +806,16 @@ export function useWorkspace() {
       })
       return false
     } finally {
-      if (candidateWorkspaceHandle && !candidateWorkspaceCommitted) {
-        await releaseWorkspaceHandle(candidateWorkspaceHandle)
+      if (!candidateWorkspaceCommitted) {
+        if (candidateProjectRootRegistered) {
+          await rollbackProjectRoot(openProjectRequestId)
+        }
+        if (candidateProjectPathPersisted) {
+          await rollbackCurrentProjectPath(openProjectRequestId)
+        }
+        if (candidateWorkspaceHandle) {
+          await releaseWorkspaceHandle(candidateWorkspaceHandle)
+        }
       }
       if (isLatestOpenProjectRequest()) {
         runtimeBackendConnecting.value = false
@@ -920,7 +1012,7 @@ export function useWorkspace() {
         messageStore.clearMessages()
 
         // 持久化当前项目路径，以便 reload 后恢复
-        await setSetting('current_project_path', normalizePath(createdProject.path))
+        await persistCurrentProjectPath(createdProject.path)
 
         // 建立 runtime event 连接
         const workspaceId = workspaceHandleFromResponseData(
@@ -1138,27 +1230,36 @@ export function useWorkspace() {
   }
 
   const closeProject = async () => {
+    const closeProjectRequestId = ++openProjectRequestSequence
+    const isCurrentCloseRequest = () =>
+      closeProjectRequestId === openProjectRequestSequence
     const closingWorkspaceHandle =
       workspaceLifecycle.session.value.state === 'active'
         ? workspaceLifecycle.session.value.workspaceId
         : ''
     if (currentProject.value) {
       try {
-        await snapshotCurrentProject()
+        await snapshotCurrentProject(isCurrentCloseRequest)
       } catch (err) {
         console.error('Failed to snapshot project data on close:', err)
       }
     }
-
-    await releaseWorkspaceHandle(closingWorkspaceHandle)
+    if (!isCurrentCloseRequest()) return
 
     currentProject.value = null
     messageStore.clearMessages()
     disconnectRuntimeEvents()
     workspaceLifecycle.closeSession()
-    await clearProjectRoot()
-    await deleteSetting('current_project_path')
-    await updateWindowTitle()
+    runtimeBackendConnecting.value = false
+
+    // Queue both clears before yielding so a later open always writes after them.
+    const clearProjectRootPromise = clearProjectRoot()
+    const clearCurrentProjectPathPromise = clearCurrentProjectPath()
+    await releaseWorkspaceHandle(closingWorkspaceHandle)
+    await Promise.all([clearProjectRootPromise, clearCurrentProjectPathPromise])
+    if (isCurrentCloseRequest()) {
+      await updateWindowTitle()
+    }
   }
 
   /**
