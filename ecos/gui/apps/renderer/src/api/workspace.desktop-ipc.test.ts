@@ -20,7 +20,7 @@ function restoreWindow() {
   delete (globalThis as { window?: unknown }).window
 }
 
-describe('createWorkspaceApi desktop bridge payload', () => {
+describe('workspace desktop bridge', () => {
   afterEach(() => {
     restoreWindow()
     vi.resetModules()
@@ -79,5 +79,23 @@ describe('createWorkspaceApi desktop bridge payload', () => {
         rtlList: ['/rtl/top.v'],
       }),
     )
+  })
+
+  it('forwards workspace close requests with the GUI handle', async () => {
+    const close = vi.fn(async () => ({ ok: true }))
+    setWindow({
+      ecosDesktop: {
+        ecc: {
+          workspace: {
+            close,
+          },
+        },
+      },
+    })
+
+    const { closeWorkspaceApi } = await import('./workspace')
+
+    await expect(closeWorkspaceApi('workspace-handle-1')).resolves.toEqual({ ok: true })
+    expect(close).toHaveBeenCalledWith({ workspaceHandle: 'workspace-handle-1' })
   })
 })

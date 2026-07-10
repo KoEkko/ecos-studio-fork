@@ -67,6 +67,10 @@ export function loadWorkspaceApi(directory: string) {
     })) as Promise<WorkspaceResponse>
 }
 
+export function closeWorkspaceApi(workspaceHandle: string) {
+  return getDesktopApi().ecc.workspace.close({ workspaceHandle })
+}
+
 /**
  * Create a new project
  * @param path - Parent directory where the project will be created

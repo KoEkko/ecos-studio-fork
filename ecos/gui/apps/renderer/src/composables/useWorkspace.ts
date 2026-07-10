@@ -7,7 +7,12 @@ import type { Project, ProjectStatus, WorkspaceConfig } from '../types'
 import { useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { waitForDesktopApi } from '@/platform/desktop'
-import { loadWorkspaceApi, createWorkspaceApi, waitForRuntimeReady } from '../api'
+import {
+  closeWorkspaceApi,
+  loadWorkspaceApi,
+  createWorkspaceApi,
+  waitForRuntimeReady,
+} from '../api'
 import * as runtimeEventApi from '../api/runtimeEvents'
 import type { RuntimeEventClient, RuntimeEventResponse } from '../api/runtimeEvents'
 import { setDesktopWindowTitle } from './windowTitle'
@@ -156,6 +161,15 @@ export function useWorkspace() {
       console.warn(
         '[useWorkspace] Toast not initialized — called outside component context?',
       )
+    }
+  }
+
+  const releaseWorkspaceHandle = async (workspaceHandle: string): Promise<void> => {
+    if (!workspaceHandle) return
+    try {
+      await closeWorkspaceApi(workspaceHandle)
+    } catch (error) {
+      console.warn('Failed to close ECC workspace session:', error)
     }
   }
 
@@ -533,6 +547,12 @@ export function useWorkspace() {
     const openProjectRequestId = ++openProjectRequestSequence
     const isLatestOpenProjectRequest = () =>
       openProjectRequestId === openProjectRequestSequence
+    const previousWorkspaceHandle =
+      workspaceLifecycle.session.value.state === 'active'
+        ? workspaceLifecycle.session.value.workspaceId
+        : ''
+    let candidateWorkspaceHandle = ''
+    let candidateWorkspaceCommitted = false
     let sessionId: string | null = null
     try {
       let selectedPath: string | null = null
@@ -559,14 +579,13 @@ export function useWorkspace() {
 
       const normalizedSelectedPath = normalizePath(selectedPath)
       if (
-        project &&
         currentProject.value &&
         normalizePath(currentProject.value.path) === normalizedSelectedPath
       ) {
         return true
       }
 
-      const preserveExistingSession = Boolean(currentProject.value) && !project
+      const preserveExistingSession = Boolean(currentProject.value)
       let session: WorkspaceSession | null = null
       const ensureOpenSession = (projectRoot: string): WorkspaceSession => {
         if (session) return session
@@ -615,6 +634,9 @@ export function useWorkspace() {
 
       // 3. 通过 ECC RPC 加载项目状态
       const response = await loadWorkspaceApi(selectedPath)
+      if (response.response === 'success') {
+        candidateWorkspaceHandle = workspaceHandleFromResponseData(response.data)
+      }
       if (!isLatestOpenProjectRequest()) return false
       if (session && !workspaceLifecycle.isCurrentSession(session.sessionId)) return false
       if (response.response === 'success') {
@@ -647,25 +669,31 @@ export function useWorkspace() {
           lastOpened: new Date(),
         }
 
+        // 持久化当前项目路径，以便 reload 后恢复
+        await setSetting('current_project_path', normalizePath(loadedProject.path))
+        if (!isLatestOpenProjectRequest()) return false
+        if (session && !workspaceLifecycle.isCurrentSession(session.sessionId))
+          return false
+
         const activeSession = ensureOpenSession(canonicalProjectRoot)
         workspaceLifecycle.setSessionLoading(activeSession.sessionId)
 
         currentProject.value = loadedProject
         messageStore.clearMessages()
 
-        // 持久化当前项目路径，以便 reload 后恢复
-        await setSetting('current_project_path', normalizePath(loadedProject.path))
-
         // 建立 runtime event 连接
-        const workspaceId = workspaceHandleFromResponseData(
-          response.data,
-          canonicalProjectRoot,
-        )
+        const workspaceId =
+          candidateWorkspaceHandle ||
+          workspaceHandleFromResponseData(response.data, canonicalProjectRoot)
         workspaceLifecycle.activateSession(activeSession.sessionId, {
           workspaceId,
           projectRoot: canonicalProjectRoot,
         })
+        candidateWorkspaceCommitted = true
         connectRuntimeEvents(workspaceId, activeSession.sessionId)
+        if (previousWorkspaceHandle !== workspaceId) {
+          await releaseWorkspaceHandle(previousWorkspaceHandle)
+        }
 
         // 更新窗口标题
         await updateWindowTitle(loadedProject.name)
@@ -694,6 +722,9 @@ export function useWorkspace() {
       })
       return false
     } finally {
+      if (candidateWorkspaceHandle && !candidateWorkspaceCommitted) {
+        await releaseWorkspaceHandle(candidateWorkspaceHandle)
+      }
       if (isLatestOpenProjectRequest()) {
         runtimeBackendConnecting.value = false
       }
@@ -1107,6 +1138,10 @@ export function useWorkspace() {
   }
 
   const closeProject = async () => {
+    const closingWorkspaceHandle =
+      workspaceLifecycle.session.value.state === 'active'
+        ? workspaceLifecycle.session.value.workspaceId
+        : ''
     if (currentProject.value) {
       try {
         await snapshotCurrentProject()
@@ -1114,6 +1149,8 @@ export function useWorkspace() {
         console.error('Failed to snapshot project data on close:', err)
       }
     }
+
+    await releaseWorkspaceHandle(closingWorkspaceHandle)
 
     currentProject.value = null
     messageStore.clearMessages()
