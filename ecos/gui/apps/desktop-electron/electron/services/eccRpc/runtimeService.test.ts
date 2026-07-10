@@ -50,11 +50,14 @@ class FakeRpcClient implements EccRpcRuntimeClient {
 }
 
 class FakeSidecar implements EccRpcRuntimeSidecar {
+  client: FakeRpcClient
   logFile: string | null = '/tmp/ecc-rpc-runtime.log'
   shutdownCount = 0
   startCount = 0
 
-  constructor(private readonly client: FakeRpcClient) {}
+  constructor(client: FakeRpcClient) {
+    this.client = client
+  }
 
   async shutdown(): Promise<void> {
     this.shutdownCount += 1
@@ -276,6 +279,42 @@ describe('EccRpcRuntimeService', () => {
 
     expect(sidecar.startCount).toBe(2)
     expect(client.calls.slice(2)).toEqual([
+      { method: 'rpc.hello', params: { version: 1 } },
+      { method: 'workspace.open', params: { directory: '/work/demo' } },
+      {
+        method: 'flow.run',
+        options: { timeoutMs: 0 },
+        params: {
+          rerun: false,
+          workspaceId: 'workspace-2',
+        },
+      },
+    ])
+  })
+
+  it('handshakes and reopens retained sessions when the sidecar returns a new client', async () => {
+    const { client, service, sidecar } = createService()
+    client.responses.push(
+      { capabilities: [], eccVersion: '0.1.0', version: 1 },
+      { directory: '/work/demo', workspaceId: 'workspace-1' },
+    )
+    const workspace = await service.openWorkspace({ directory: '/work/demo' })
+    const replacementClient = new FakeRpcClient()
+    replacementClient.responses.push(
+      { capabilities: [], eccVersion: '0.1.0', version: 1 },
+      { directory: '/work/demo', workspaceId: 'workspace-2' },
+      { rerun: false },
+    )
+    sidecar.client = replacementClient
+
+    await expect(
+      service.runFlow({
+        rerun: false,
+        workspaceHandle: workspace.workspaceHandle,
+      }),
+    ).resolves.toEqual({ rerun: false })
+
+    expect(replacementClient.calls).toEqual([
       { method: 'rpc.hello', params: { version: 1 } },
       { method: 'workspace.open', params: { directory: '/work/demo' } },
       {

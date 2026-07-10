@@ -273,12 +273,13 @@ export class EccRpcRuntimeService {
   }
 
   private async ensureStarted(): Promise<EccRpcRuntimeClient> {
-    if (this.ready && this.helloResult && this.client) {
-      return this.client
-    }
-
     const client = await this.sidecar.start()
-    this.client = client
+    if (client !== this.client) {
+      this.client = client
+      this.ready = false
+      this.helloResult = null
+      this.sessions.clearEccWorkspaceIds()
+    }
     if (this.ready && this.helloResult) {
       return client
     }
@@ -297,7 +298,7 @@ export class EccRpcRuntimeService {
       return session.eccWorkspaceId
     }
 
-    const client = await this.ensureStarted()
+    const client = this.client ?? (await this.ensureStarted())
     const response = await client.call<EccWorkspaceSessionResult>('workspace.open', {
       directory: session.directory,
     })

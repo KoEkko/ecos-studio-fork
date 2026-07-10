@@ -48,6 +48,22 @@ function dataToString(data: unknown): string {
   return Buffer.isBuffer(data) ? data.toString('utf8') : String(data)
 }
 
+function environmentsEqual(
+  left: NodeJS.ProcessEnv | null,
+  right: NodeJS.ProcessEnv,
+): boolean {
+  if (!left) {
+    return false
+  }
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)])
+  for (const key of keys) {
+    if (left[key] !== right[key]) {
+      return false
+    }
+  }
+  return true
+}
+
 export class EccRpcSidecarProcess {
   private child: SpawnedEccRpcSidecar | null = null
   private client: EccJsonRpcClient | null = null
@@ -59,6 +75,7 @@ export class EccRpcSidecarProcess {
   private readonly tempDir: string
   private forceKillTimer: ReturnType<typeof setTimeout> | null = null
   private shuttingDown = false
+  private spawnEnv: NodeJS.ProcessEnv | null = null
   logFile: string | null = null
 
   constructor(private readonly options: EccRpcSidecarProcessOptions = {}) {
@@ -71,11 +88,21 @@ export class EccRpcSidecarProcess {
   }
 
   async start(): Promise<EccJsonRpcClient> {
-    if (this.client) {
+    const env = await this.resolveEnv()
+    if (this.client && environmentsEqual(this.spawnEnv, env)) {
       return this.client
     }
+    if (this.client) {
+      const child = this.child
+      if (child) {
+        const exited = new Promise<void>((resolve) => {
+          child.once('close', () => resolve())
+        })
+        await this.shutdown()
+        await exited
+      }
+    }
 
-    const env = await this.resolveEnv()
     this.logFile = this.createLogFile()
     this.shuttingDown = false
 
@@ -84,6 +111,7 @@ export class EccRpcSidecarProcess {
       stdio: ['pipe', 'pipe', 'pipe'],
     })
     this.child = child
+    this.spawnEnv = { ...env }
 
     const client = new EccJsonRpcClient({
       writeFrame: (frame) => {
@@ -116,7 +144,7 @@ export class EccRpcSidecarProcess {
     child.once('error', (error) => {
       const sidecarError =
         error instanceof Error ? error : new Error(`ECC RPC sidecar error: ${error}`)
-      this.client?.rejectPending(sidecarError)
+      client.rejectPending(sidecarError)
     })
 
     child.once('close', (code: number | null, signal: NodeJS.Signals | null) => {
@@ -127,9 +155,12 @@ export class EccRpcSidecarProcess {
           ? `ECC RPC sidecar exited with ${signal ? `signal ${signal}` : `code ${code ?? 'unknown'}`}.`
           : undefined
       const exitError = new Error(message ?? 'ECC RPC sidecar exited.')
-      this.client?.rejectPending(exitError)
-      this.client = null
-      this.child = null
+      client.rejectPending(exitError)
+      if (this.child === child) {
+        this.client = null
+        this.child = null
+        this.spawnEnv = null
+      }
       this.options.onEvent?.({
         code,
         logFile: this.logFile ?? undefined,
@@ -181,7 +212,7 @@ export class EccRpcSidecarProcess {
     try {
       return await this.options.envProvider()
     } catch {
-      return this.env
+      return this.spawnEnv ? { ...this.spawnEnv } : this.env
     }
   }
 

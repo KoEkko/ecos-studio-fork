@@ -56,6 +56,94 @@ describe('EccRpcSidecarProcess', () => {
     })
   })
 
+  it('rechecks equivalent runtime environments before reusing the sidecar', async () => {
+    const child = new FakeChild()
+    const spawn = vi.fn(() => child)
+    const envProvider = vi
+      .fn<() => Promise<NodeJS.ProcessEnv>>()
+      .mockResolvedValueOnce({ PATH: '/bin', TOOL_ROOT: '/tools' })
+      .mockResolvedValueOnce({ TOOL_ROOT: '/tools', PATH: '/bin' })
+    const sidecar = new EccRpcSidecarProcess({ envProvider, spawn })
+
+    const firstClient = await sidecar.start()
+    const secondClient = await sidecar.start()
+
+    expect(secondClient).toBe(firstClient)
+    expect(envProvider).toHaveBeenCalledTimes(2)
+    expect(spawn).toHaveBeenCalledOnce()
+  })
+
+  it('restarts the sidecar before using a changed runtime environment', async () => {
+    const firstChild = new FakeChild()
+    const secondChild = new FakeChild()
+    const children = [firstChild, secondChild]
+    const spawn = vi.fn(() => children.shift()!)
+    let runtimeEnv: NodeJS.ProcessEnv = { PATH: '/tools/v1/bin' }
+    const sidecar = new EccRpcSidecarProcess({
+      envProvider: async () => runtimeEnv,
+      spawn,
+    })
+    const firstClient = await sidecar.start()
+    runtimeEnv = { PATH: '/tools/v2/bin' }
+
+    const restart = sidecar.start()
+    await vi.waitFor(() => {
+      expect(firstChild.stdin.chunks).toHaveLength(1)
+    })
+    firstChild.stdout.write(
+      encodeContentLengthFrame('{"jsonrpc":"2.0","id":1,"result":{"ok":true}}'),
+    )
+    firstChild.emit('close', 0, null)
+
+    const secondClient = await restart
+
+    expect(secondClient).not.toBe(firstClient)
+    expect(spawn).toHaveBeenCalledTimes(2)
+    expect(spawn).toHaveBeenLastCalledWith('ecc', ['rpc', 'serve', '--stdio'], {
+      env: { PATH: '/tools/v2/bin' },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+  })
+
+  it('reuses the last successful environment when the provider temporarily fails', async () => {
+    const firstChild = new FakeChild()
+    const secondChild = new FakeChild()
+    const children = [firstChild, secondChild]
+    const spawn = vi.fn(() => children.shift()!)
+    const envProvider = vi
+      .fn<() => Promise<NodeJS.ProcessEnv>>()
+      .mockResolvedValueOnce({ PATH: '/tools/bin' })
+      .mockRejectedValueOnce(new Error('manifest unavailable'))
+    const sidecar = new EccRpcSidecarProcess({
+      env: { PATH: '/base/bin' },
+      envProvider,
+      spawn,
+    })
+    const firstClient = await sidecar.start()
+    let secondClient: unknown
+    let settled = false
+
+    const secondStart = sidecar.start().then((client) => {
+      secondClient = client
+      settled = true
+      return client
+    })
+    await new Promise((resolve) => setImmediate(resolve))
+    const reusedHealthyClient = settled && secondClient === firstClient
+
+    if (!settled) {
+      firstChild.stdout.write(
+        encodeContentLengthFrame('{"jsonrpc":"2.0","id":1,"result":{"ok":true}}'),
+      )
+      firstChild.emit('close', 0, null)
+      await secondStart
+    }
+
+    expect(reusedHealthyClient).toBe(true)
+    expect(envProvider).toHaveBeenCalledTimes(2)
+    expect(spawn).toHaveBeenCalledOnce()
+  })
+
   it('connects stdout responses to the JSON-RPC client', async () => {
     const child = new FakeChild()
     const sidecar = new EccRpcSidecarProcess({ spawn: () => child })
