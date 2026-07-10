@@ -152,7 +152,13 @@ export class EccRpcRuntimeService {
   closeWorkspace(request: EccWorkspaceHandleRequest): Promise<EccWorkspaceCloseResult> {
     return this.enqueue('workspace.close', request.workspaceHandle, async () => {
       const session = this.sessions.require(request.workspaceHandle)
-      if (session.eccWorkspaceId) {
+      if (
+        session.eccWorkspaceId &&
+        !this.sessions.hasOtherEccWorkspaceReference(
+          request.workspaceHandle,
+          session.eccWorkspaceId,
+        )
+      ) {
         const client = await this.ensureStarted()
         await client.call('workspace.close', {
           workspaceId: session.eccWorkspaceId,
@@ -295,7 +301,7 @@ export class EccRpcRuntimeService {
     const response = await client.call<EccWorkspaceSessionResult>('workspace.open', {
       directory: session.directory,
     })
-    this.sessions.rebindActive(response.workspaceId)
+    this.sessions.rebind(workspaceHandle, response.workspaceId)
     return response.workspaceId
   }
 

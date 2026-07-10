@@ -18,57 +18,79 @@ export interface WorkspaceSessionRegistryOptions {
 }
 
 export class WorkspaceSessionRegistry {
-  private activeSession: WorkspaceSessionRecord | null = null
+  private activeHandle: string | null = null
   private readonly idProvider: () => string
+  private readonly sessions = new Map<string, WorkspaceSessionRecord>()
 
   constructor(options: WorkspaceSessionRegistryOptions = {}) {
     this.idProvider = options.idProvider ?? (() => `workspace-${randomUUID()}`)
   }
 
   get active(): WorkspaceSessionRecord | null {
-    return this.activeSession ? { ...this.activeSession } : null
+    if (!this.activeHandle) {
+      return null
+    }
+    const session = this.sessions.get(this.activeHandle)
+    return session ? { ...session } : null
   }
 
   activate(directory: string, eccWorkspaceId: string): WorkspaceSessionRecord {
-    this.activeSession = {
+    const session = {
       directory,
       eccWorkspaceId,
       workspaceHandle: this.idProvider(),
     }
-    return { ...this.activeSession }
+    this.sessions.set(session.workspaceHandle, session)
+    this.activeHandle = session.workspaceHandle
+    return { ...session }
   }
 
   clearEccWorkspaceIds(): void {
-    if (!this.activeSession) {
-      return
-    }
-    this.activeSession = {
-      ...this.activeSession,
-      eccWorkspaceId: null,
+    for (const [workspaceHandle, session] of this.sessions) {
+      this.sessions.set(workspaceHandle, {
+        ...session,
+        eccWorkspaceId: null,
+      })
     }
   }
 
   close(workspaceHandle: string): void {
-    if (this.activeSession?.workspaceHandle === workspaceHandle) {
-      this.activeSession = null
+    if (!this.sessions.delete(workspaceHandle) || this.activeHandle !== workspaceHandle) {
+      return
     }
+    this.activeHandle = Array.from(this.sessions.keys()).at(-1) ?? null
   }
 
-  rebindActive(eccWorkspaceId: string): WorkspaceSessionRecord {
-    if (!this.activeSession) {
-      throw new WorkspaceSessionNotFoundError('')
-    }
-    this.activeSession = {
-      ...this.activeSession,
+  rebind(workspaceHandle: string, eccWorkspaceId: string): WorkspaceSessionRecord {
+    const session = this.require(workspaceHandle)
+    const rebound = {
+      ...session,
       eccWorkspaceId,
     }
-    return { ...this.activeSession }
+    this.sessions.set(workspaceHandle, rebound)
+    return { ...rebound }
+  }
+
+  hasOtherEccWorkspaceReference(
+    workspaceHandle: string,
+    eccWorkspaceId: string,
+  ): boolean {
+    for (const [candidateHandle, session] of this.sessions) {
+      if (
+        candidateHandle !== workspaceHandle &&
+        session.eccWorkspaceId === eccWorkspaceId
+      ) {
+        return true
+      }
+    }
+    return false
   }
 
   require(workspaceHandle: string): WorkspaceSessionRecord {
-    if (this.activeSession?.workspaceHandle !== workspaceHandle) {
+    const session = this.sessions.get(workspaceHandle)
+    if (!session) {
       throw new WorkspaceSessionNotFoundError(workspaceHandle)
     }
-    return { ...this.activeSession }
+    return { ...session }
   }
 }

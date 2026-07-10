@@ -288,4 +288,83 @@ describe('EccRpcRuntimeService', () => {
       },
     ])
   })
+
+  it('rebinds each retained workspace handle to its own session after an exit', async () => {
+    const { client, service, sidecarEvent } = createService()
+    client.responses.push(
+      { capabilities: [], eccVersion: '0.1.0', version: 1 },
+      { directory: '/work/a', workspaceId: 'workspace-a-1' },
+      { directory: '/work/b', workspaceId: 'workspace-b-1' },
+      { capabilities: [], eccVersion: '0.1.0', version: 1 },
+      { directory: '/work/a', workspaceId: 'workspace-a-2' },
+      { state: 'Success', step: 'placement' },
+      { directory: '/work/b', workspaceId: 'workspace-b-2' },
+      { rerun: false },
+    )
+
+    const workspaceA = await service.openWorkspace({ directory: '/work/a' })
+    const workspaceB = await service.openWorkspace({ directory: '/work/b' })
+    sidecarEvent({
+      code: 1,
+      reason: 'unexpected',
+      signal: null,
+      type: 'runtime.exited',
+    })
+
+    await expect(
+      service.runStep({
+        rerun: false,
+        step: 'placement',
+        workspaceHandle: workspaceA.workspaceHandle,
+      }),
+    ).resolves.toEqual({ state: 'Success', step: 'placement' })
+    await expect(
+      service.runFlow({
+        rerun: false,
+        workspaceHandle: workspaceB.workspaceHandle,
+      }),
+    ).resolves.toEqual({ rerun: false })
+
+    expect(client.calls.slice(-2)).toEqual([
+      { method: 'workspace.open', params: { directory: '/work/b' } },
+      {
+        method: 'flow.run',
+        options: { timeoutMs: 0 },
+        params: {
+          rerun: false,
+          workspaceId: 'workspace-b-2',
+        },
+      },
+    ])
+  })
+
+  it('closes a shared ECC workspace only after its final GUI handle is released', async () => {
+    const { client, service } = createService()
+    client.responses.push(
+      { capabilities: [], eccVersion: '0.1.0', version: 1 },
+      { directory: '/work/demo', workspaceId: 'workspace-shared' },
+      { directory: '/work/demo', workspaceId: 'workspace-shared' },
+      { ok: true },
+    )
+
+    const first = await service.openWorkspace({ directory: '/work/demo' })
+    const second = await service.openWorkspace({ directory: '/work/demo' })
+
+    await expect(
+      service.closeWorkspace({ workspaceHandle: first.workspaceHandle }),
+    ).resolves.toEqual({ ok: true })
+    expect(client.calls.filter((call) => call.method === 'workspace.close')).toHaveLength(
+      0,
+    )
+
+    await expect(
+      service.closeWorkspace({ workspaceHandle: second.workspaceHandle }),
+    ).resolves.toEqual({ ok: true })
+    expect(client.calls.filter((call) => call.method === 'workspace.close')).toEqual([
+      {
+        method: 'workspace.close',
+        params: { workspaceId: 'workspace-shared' },
+      },
+    ])
+  })
 })
