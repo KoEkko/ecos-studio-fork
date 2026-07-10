@@ -51,10 +51,13 @@ interface PendingRequest {
   timer?: ReturnType<typeof setTimeout>
 }
 
+const MAX_TIMED_OUT_REQUEST_IDS = 256
+
 export class EccJsonRpcClient {
   private readonly decoder = new ContentLengthDecoder()
   private readonly defaultTimeoutMs: number
   private readonly pending = new Map<number, PendingRequest>()
+  private readonly timedOutRequestIds = new Set<number>()
   private nextId = 1
 
   constructor(private readonly options: EccJsonRpcClientOptions) {
@@ -86,7 +89,10 @@ export class EccJsonRpcClient {
       }
       if (timeoutMs > 0) {
         pending.timer = setTimeout(() => {
-          this.pending.delete(id)
+          if (!this.pending.delete(id)) {
+            return
+          }
+          this.rememberTimedOutRequest(id)
           reject(new EccJsonRpcTimeoutError(method, timeoutMs))
         }, timeoutMs)
       }
@@ -122,6 +128,9 @@ export class EccJsonRpcClient {
 
     const pending = this.pending.get(payload.id)
     if (!pending) {
+      if (this.timedOutRequestIds.delete(payload.id)) {
+        return
+      }
       throw new EccJsonRpcProtocolError(
         `Received response for unknown ECC RPC request id: ${payload.id}`,
       )
@@ -142,6 +151,17 @@ export class EccJsonRpcClient {
     }
 
     pending.resolve(payload.result)
+  }
+
+  private rememberTimedOutRequest(id: number): void {
+    this.timedOutRequestIds.add(id)
+    if (this.timedOutRequestIds.size <= MAX_TIMED_OUT_REQUEST_IDS) {
+      return
+    }
+    const oldestId = this.timedOutRequestIds.values().next().value
+    if (oldestId !== undefined) {
+      this.timedOutRequestIds.delete(oldestId)
+    }
   }
 
   private parseResponse(message: string): JsonRpcResponsePayload {

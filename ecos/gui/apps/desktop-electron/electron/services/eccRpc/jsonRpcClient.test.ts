@@ -89,6 +89,32 @@ describe('EccJsonRpcClient', () => {
     await expect(promise).rejects.toBeInstanceOf(EccJsonRpcTimeoutError)
   })
 
+  it('ignores a late timed-out response without disrupting a newer request', async () => {
+    vi.useFakeTimers()
+    const client = new EccJsonRpcClient({ writeFrame: () => undefined })
+    const timedOut = client.call('rpc.slow', undefined, { timeoutMs: 25 })
+    const timedOutError = timedOut.catch((error: unknown) => error)
+
+    await vi.advanceTimersByTimeAsync(25)
+    expect(await timedOutError).toBeInstanceOf(EccJsonRpcTimeoutError)
+
+    const newer = client.call<{ ok: boolean }>('rpc.ping')
+    let lateResponseError: unknown
+    try {
+      client.feedStdout(
+        encodeContentLengthFrame('{"jsonrpc":"2.0","id":1,"result":{"ok":true}}'),
+      )
+    } catch (error) {
+      lateResponseError = error
+    }
+    client.feedStdout(
+      encodeContentLengthFrame('{"jsonrpc":"2.0","id":2,"result":{"ok":true}}'),
+    )
+
+    expect(lateResponseError).toBeUndefined()
+    await expect(newer).resolves.toEqual({ ok: true })
+  })
+
   it('does not start a timeout timer when timeoutMs is zero', async () => {
     vi.useFakeTimers()
     const client = new EccJsonRpcClient({ writeFrame: () => undefined })
@@ -109,6 +135,16 @@ describe('EccJsonRpcClient', () => {
     expect(() => client.feedStdout(encodeContentLengthFrame('{not json'))).toThrow(
       EccJsonRpcProtocolError,
     )
+  })
+
+  it('still throws protocol errors for response ids that were never issued', () => {
+    const client = new EccJsonRpcClient({ writeFrame: () => undefined })
+
+    expect(() =>
+      client.feedStdout(
+        encodeContentLengthFrame('{"jsonrpc":"2.0","id":999,"result":{"ok":true}}'),
+      ),
+    ).toThrow(EccJsonRpcProtocolError)
   })
 
   it('rejects pending requests when the process closes', async () => {
