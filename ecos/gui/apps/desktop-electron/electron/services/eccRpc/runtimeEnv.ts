@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path'
 
 type RuntimePlatform = NodeJS.Platform | 'linux' | 'darwin' | 'win32'
 
-export interface EccCliRuntimeEnvOptions {
+export interface EccRuntimeEnvOptions {
   appPath: string
   cwd: string
   env: NodeJS.ProcessEnv
@@ -34,7 +34,7 @@ function prependPath(
   }
 }
 
-function resolvePackagedRuntimeBin(options: EccCliRuntimeEnvOptions): string | null {
+function resolvePackagedRuntimeBin(options: EccRuntimeEnvOptions): string | null {
   const resourcesPath =
     options.env.ECOS_ELECTRON_RESOURCES_PATH ?? join(options.appPath, 'resources')
   const binariesPath =
@@ -57,7 +57,7 @@ function findRepoRootFromAppPath(appPath: string): string | null {
   return null
 }
 
-function resolvePackagedResourcesPath(options: EccCliRuntimeEnvOptions): string {
+function resolvePackagedResourcesPath(options: EccRuntimeEnvOptions): string {
   return options.env.ECOS_ELECTRON_RESOURCES_PATH ?? join(options.appPath, 'resources')
 }
 
@@ -81,7 +81,7 @@ function ensureRepoEccDevShim(
   return runtimeBin
 }
 
-function resolveDevelopmentEccBinDir(options: EccCliRuntimeEnvOptions): string | null {
+function resolveDevelopmentEccBinDir(options: EccRuntimeEnvOptions): string | null {
   const repoRoot = findRepoRootFromAppPath(options.appPath)
   if (!repoRoot) {
     return null
@@ -95,9 +95,7 @@ function resolveDevelopmentEccBinDir(options: EccCliRuntimeEnvOptions): string |
   return null
 }
 
-export function createEccCliRuntimeEnv(
-  options: EccCliRuntimeEnvOptions,
-): NodeJS.ProcessEnv {
+export function createEccRuntimeEnv(options: EccRuntimeEnvOptions): NodeJS.ProcessEnv {
   if (options.isPackaged) {
     const packagedRuntimeBin = resolvePackagedRuntimeBin(options)
     const resourcesPath = resolvePackagedResourcesPath(options)

@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { createEccCliRuntimeEnv } from './eccCliRuntime'
+import { createEccRuntimeEnv } from './runtimeEnv'
 
 function createRepoFixture(): {
   appPath: string
@@ -20,7 +20,7 @@ function createRepoFixture(): {
   return { appPath, repoRoot, userDataPath }
 }
 
-describe('createEccCliRuntimeEnv', () => {
+describe('createEccRuntimeEnv', () => {
   it('prepends a repo ecc development shim when the submodule exists', () => {
     const fixture = createRepoFixture()
     mkdirSync(join(fixture.repoRoot, 'ecc'), { recursive: true })
@@ -30,7 +30,7 @@ describe('createEccCliRuntimeEnv', () => {
     mkdirSync(wrapperPath, { recursive: true })
     writeFileSync(join(wrapperPath, 'ecc-wrapper.sh'), '#!/usr/bin/env bash\n')
 
-    const env = createEccCliRuntimeEnv({
+    const env = createEccRuntimeEnv({
       appPath: fixture.appPath,
       cwd: fixture.appPath,
       env: {
@@ -62,7 +62,7 @@ describe('createEccCliRuntimeEnv', () => {
     mkdirSync(wrapperDir, { recursive: true })
     writeFileSync(join(wrapperDir, 'ecc-wrapper.sh'), '#!/usr/bin/env bash\n')
 
-    const env = createEccCliRuntimeEnv({
+    const env = createEccRuntimeEnv({
       appPath: fixture.appPath,
       cwd: fixture.appPath,
       env: {
@@ -82,7 +82,7 @@ describe('createEccCliRuntimeEnv', () => {
     const fixture = createRepoFixture()
     writeFileSync(join(fixture.repoRoot, 'ecc', 'pyproject.toml'), '')
 
-    const env = createEccCliRuntimeEnv({
+    const env = createEccRuntimeEnv({
       appPath: fixture.appPath,
       cwd: fixture.appPath,
       env: {
@@ -105,7 +105,7 @@ describe('createEccCliRuntimeEnv', () => {
     const fixture = createRepoFixture()
     writeFileSync(join(fixture.repoRoot, 'ecc', 'pyproject.toml'), '')
 
-    const env = createEccCliRuntimeEnv({
+    const env = createEccRuntimeEnv({
       appPath: fixture.appPath,
       cwd: fixture.appPath,
       env: {
@@ -127,7 +127,7 @@ describe('createEccCliRuntimeEnv', () => {
     mkdirSync(appPath, { recursive: true })
     mkdirSync(userDataPath, { recursive: true })
 
-    const env = createEccCliRuntimeEnv({
+    const env = createEccRuntimeEnv({
       appPath,
       cwd: appPath,
       env: {
@@ -148,7 +148,7 @@ describe('createEccCliRuntimeEnv', () => {
     mkdirSync(join(resourcesPath, 'binaries'), { recursive: true })
     writeFileSync(packagedEcc, '#!/usr/bin/env bash\n')
 
-    const env = createEccCliRuntimeEnv({
+    const env = createEccRuntimeEnv({
       appPath: fixture.appPath,
       cwd: fixture.appPath,
       env: {
@@ -172,7 +172,7 @@ describe('createEccCliRuntimeEnv', () => {
     writeFileSync(join(resourcesPath, 'binaries', 'ecc'), '#!/usr/bin/env bash\n')
     writeFileSync(join(ossCadRoot, 'bin', 'yosys'), '#!/usr/bin/env bash\n')
 
-    const env = createEccCliRuntimeEnv({
+    const env = createEccRuntimeEnv({
       appPath: fixture.appPath,
       cwd: fixture.appPath,
       env: {
@@ -198,7 +198,7 @@ describe('createEccCliRuntimeEnv', () => {
     writeFileSync(join(resourcesPath, 'binaries', 'ecc'), '#!/usr/bin/env bash\n')
     writeFileSync(join(ossCadRoot, 'bin', 'yosys'), '#!/usr/bin/env bash\n')
 
-    const env = createEccCliRuntimeEnv({
+    const env = createEccRuntimeEnv({
       appPath: fixture.appPath,
       cwd: fixture.appPath,
       env: {
@@ -225,7 +225,7 @@ describe('createEccCliRuntimeEnv', () => {
     writeFileSync(join(resourcesPath, 'binaries', 'ecc'), '#!/usr/bin/env bash\n')
     writeFileSync(join(ossCadRoot, 'placeholder.txt'), '')
 
-    const env = createEccCliRuntimeEnv({
+    const env = createEccRuntimeEnv({
       appPath: fixture.appPath,
       cwd: fixture.appPath,
       env: {
@@ -252,7 +252,7 @@ describe('createEccCliRuntimeEnv', () => {
     mkdirSync(join(sourceOssCadRoot, 'bin'), { recursive: true })
     writeFileSync(join(sourceOssCadRoot, 'bin', 'yosys'), '#!/usr/bin/env bash\n')
 
-    const env = createEccCliRuntimeEnv({
+    const env = createEccRuntimeEnv({
       appPath: fixture.appPath,
       cwd: fixture.appPath,
       env: {
@@ -275,7 +275,7 @@ describe('createEccCliRuntimeEnv', () => {
     writeFileSync(join(resourcesPath, 'binaries', 'ecc'), '#!/usr/bin/env bash\n')
     writeFileSync(join(customOssCadRoot, 'bin', 'yosys'), '#!/usr/bin/env bash\n')
 
-    const env = createEccCliRuntimeEnv({
+    const env = createEccRuntimeEnv({
       appPath: fixture.appPath,
       cwd: fixture.appPath,
       env: {
@@ -300,7 +300,7 @@ describe('createEccCliRuntimeEnv', () => {
     mkdirSync(customOssCadRoot, { recursive: true })
     writeFileSync(join(resourcesPath, 'binaries', 'ecc'), '#!/usr/bin/env bash\n')
 
-    const env = createEccCliRuntimeEnv({
+    const env = createEccRuntimeEnv({
       appPath: fixture.appPath,
       cwd: fixture.appPath,
       env: {
@@ -326,7 +326,7 @@ describe('createEccCliRuntimeEnv', () => {
     writeFileSync(join(resourcesPath, 'binaries', 'ecc.cmd'), '@echo off\r\n')
     writeFileSync(join(ossCadRoot, 'bin', 'yosys.exe'), '')
 
-    const env = createEccCliRuntimeEnv({
+    const env = createEccRuntimeEnv({
       appPath: fixture.appPath,
       cwd: fixture.appPath,
       env: {
@@ -347,7 +347,7 @@ describe('createEccCliRuntimeEnv', () => {
     const fixture = createRepoFixture()
     writeFileSync(join(fixture.repoRoot, 'ecc', 'pyproject.toml'), '')
 
-    const env = createEccCliRuntimeEnv({
+    const env = createEccRuntimeEnv({
       appPath: fixture.appPath,
       cwd: fixture.appPath,
       env: {

@@ -10,13 +10,18 @@ import { stat } from 'node:fs/promises'
 import {
   desktopApiEventChannels,
   desktopApiIpcChannels,
-  type DesktopCliCommandEvent,
-  type DesktopCliCommandRequest,
-  type DesktopCliCommandResult,
   type DesktopProjectFileChangedEvent,
   type DesktopProjectLogTailEvent,
   type DesktopProjectDirectoryEntry,
   type DesktopDirectoryDialogOptions,
+  type EccFlowRunRequest,
+  type EccFlowRunStepRequest,
+  type EccRuntimeEvent,
+  type EccWorkspaceCreateRequest,
+  type EccWorkspaceHandleRequest,
+  type EccWorkspaceInfoRequest,
+  type EccWorkspaceOpenRequest,
+  type EccWorkspaceSyncConfigRequest,
   type DesktopFileDialogOptions,
   type DesktopRtlSourceDialogOptions,
   type PickedRtlSources,
@@ -170,11 +175,21 @@ export interface DesktopBridgeServices {
     importLocalPath(resourceId: string, path: string): Promise<unknown>
     refreshRegistry(): Promise<unknown>
   }
-  desktopRuntimeManager: {
-    execute(
-      request: DesktopCliCommandRequest,
-      listener?: (event: DesktopCliCommandEvent) => void,
-    ): Promise<DesktopCliCommandResult>
+  eccRuntimeService: {
+    closeWorkspace(request: EccWorkspaceHandleRequest): Promise<unknown>
+    createWorkspace(request: EccWorkspaceCreateRequest): Promise<unknown>
+    onEvent(listener: (event: EccRuntimeEvent) => void): () => void
+    openWorkspace(request: EccWorkspaceOpenRequest): Promise<unknown>
+    refreshConfig(request: EccWorkspaceHandleRequest): Promise<unknown>
+    resetFlow(request: EccWorkspaceHandleRequest): Promise<unknown>
+    rpcHello(): Promise<unknown>
+    rpcPing(): Promise<unknown>
+    rpcShutdown(): Promise<unknown>
+    runFlow(request: EccFlowRunRequest): Promise<unknown>
+    runStep(request: EccFlowRunStepRequest): Promise<unknown>
+    syncConfig(request: EccWorkspaceSyncConfigRequest): Promise<unknown>
+    workspaceHome(request: EccWorkspaceHandleRequest): Promise<unknown>
+    workspaceInfo(request: EccWorkspaceInfoRequest): Promise<unknown>
   }
   shellService: {
     createSession(
@@ -400,6 +415,13 @@ export function registerIpc(
       onDestroyed: () => void
     }
   >()
+
+  services.eccRuntimeService.onEvent((payload) => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (window.isDestroyed()) continue
+      window.webContents.send(desktopApiEventChannels.eccEvent, payload)
+    }
+  })
 
   const unwatchProjectFile = async (subscriptionId: string): Promise<void> => {
     const subscription = projectFileWatchSubscriptions.get(subscriptionId)
@@ -844,20 +866,72 @@ export function registerIpc(
     return await services.resourceManagerService.refreshRegistry()
   })
 
-  handle(desktopApiIpcChannels.cliExecute, async (event, request) => {
-    const sender = event.sender
-    const isSenderDestroyed = (): boolean =>
-      typeof sender.isDestroyed === 'function' ? sender.isDestroyed() : false
+  handle(desktopApiIpcChannels.eccRpcHello, async () => {
+    return await services.eccRuntimeService.rpcHello()
+  })
 
-    return await services.desktopRuntimeManager.execute(
-      request as DesktopCliCommandRequest,
-      (payload) => {
-        if (isSenderDestroyed()) return
-        if (typeof sender.send === 'function') {
-          sender.send(desktopApiEventChannels.cliEvent, payload)
-        }
-      },
+  handle(desktopApiIpcChannels.eccRpcPing, async () => {
+    return await services.eccRuntimeService.rpcPing()
+  })
+
+  handle(desktopApiIpcChannels.eccRpcShutdown, async () => {
+    return await services.eccRuntimeService.rpcShutdown()
+  })
+
+  handle(desktopApiIpcChannels.eccWorkspaceCreate, async (_event, request) => {
+    return await services.eccRuntimeService.createWorkspace(
+      request as EccWorkspaceCreateRequest,
     )
+  })
+
+  handle(desktopApiIpcChannels.eccWorkspaceOpen, async (_event, request) => {
+    return await services.eccRuntimeService.openWorkspace(
+      request as EccWorkspaceOpenRequest,
+    )
+  })
+
+  handle(desktopApiIpcChannels.eccWorkspaceClose, async (_event, request) => {
+    return await services.eccRuntimeService.closeWorkspace(
+      request as EccWorkspaceHandleRequest,
+    )
+  })
+
+  handle(desktopApiIpcChannels.eccWorkspaceHome, async (_event, request) => {
+    return await services.eccRuntimeService.workspaceHome(
+      request as EccWorkspaceHandleRequest,
+    )
+  })
+
+  handle(desktopApiIpcChannels.eccWorkspaceInfo, async (_event, request) => {
+    return await services.eccRuntimeService.workspaceInfo(
+      request as EccWorkspaceInfoRequest,
+    )
+  })
+
+  handle(desktopApiIpcChannels.eccWorkspaceRefreshConfig, async (_event, request) => {
+    return await services.eccRuntimeService.refreshConfig(
+      request as EccWorkspaceHandleRequest,
+    )
+  })
+
+  handle(desktopApiIpcChannels.eccWorkspaceSyncConfig, async (_event, request) => {
+    return await services.eccRuntimeService.syncConfig(
+      request as EccWorkspaceSyncConfigRequest,
+    )
+  })
+
+  handle(desktopApiIpcChannels.eccWorkspaceResetFlow, async (_event, request) => {
+    return await services.eccRuntimeService.resetFlow(
+      request as EccWorkspaceHandleRequest,
+    )
+  })
+
+  handle(desktopApiIpcChannels.eccFlowRun, async (_event, request) => {
+    return await services.eccRuntimeService.runFlow(request as EccFlowRunRequest)
+  })
+
+  handle(desktopApiIpcChannels.eccFlowRunStep, async (_event, request) => {
+    return await services.eccRuntimeService.runStep(request as EccFlowRunStepRequest)
   })
 
   handle(desktopApiIpcChannels.shellCreateSession, async (event, options) => {

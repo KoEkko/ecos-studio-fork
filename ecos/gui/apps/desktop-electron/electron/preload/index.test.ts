@@ -29,8 +29,13 @@ async function loadDesktopBridge() {
     app: {
       getVersions(): Promise<unknown>
     }
-    cli: {
-      onEvent(listener: (event: unknown) => void): () => void
+    ecc: {
+      events: {
+        onEvent(listener: (event: unknown) => void): () => void
+      }
+      flow: {
+        runStep(request: unknown): Promise<unknown>
+      }
     }
     workspace: {
       readProjectTextFile(path: string): Promise<unknown>
@@ -61,8 +66,13 @@ describe('preload desktop bridge contract', () => {
         app: expect.objectContaining({
           getVersions: expect.any(Function),
         }),
-        cli: expect.objectContaining({
-          onEvent: expect.any(Function),
+        ecc: expect.objectContaining({
+          events: expect.objectContaining({
+            onEvent: expect.any(Function),
+          }),
+          flow: expect.objectContaining({
+            runStep: expect.any(Function),
+          }),
         }),
         workspace: expect.objectContaining({
           readProjectTextFile: expect.any(Function),
@@ -146,22 +156,44 @@ describe('preload desktop bridge contract', () => {
     )
   })
 
+  it('routes ECC flow calls through the shared IPC channel constant', async () => {
+    const bridge = await loadDesktopBridge()
+    ipcRenderer.invoke.mockResolvedValueOnce({
+      state: 'Success',
+      step: 'place',
+    })
+    const request = {
+      rerun: false,
+      step: 'place',
+      workspaceHandle: 'workspace-handle-1',
+    }
+
+    await expect(bridge.ecc.flow.runStep(request)).resolves.toMatchObject({
+      state: 'Success',
+      step: 'place',
+    })
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith(
+      desktopApiIpcChannels.eccFlowRunStep,
+      request,
+    )
+  })
+
   it('subscribes and unsubscribes with shared event channel constants', async () => {
     const bridge = await loadDesktopBridge()
     const listener = vi.fn()
 
-    const unsubscribe = bridge.cli.onEvent(listener)
+    const unsubscribe = bridge.ecc.events.onEvent(listener)
     const eventListener = ipcRenderer.on.mock.calls[0]?.[1]
-    eventListener?.({}, { cmd: 'help', type: 'started' })
+    eventListener?.({}, { type: 'runtime.ready' })
     unsubscribe()
 
     expect(ipcRenderer.on).toHaveBeenCalledWith(
-      desktopApiEventChannels.cliEvent,
+      desktopApiEventChannels.eccEvent,
       expect.any(Function),
     )
-    expect(listener).toHaveBeenCalledWith({ cmd: 'help', type: 'started' })
+    expect(listener).toHaveBeenCalledWith({ type: 'runtime.ready' })
     expect(ipcRenderer.removeListener).toHaveBeenCalledWith(
-      desktopApiEventChannels.cliEvent,
+      desktopApiEventChannels.eccEvent,
       eventListener,
     )
   })

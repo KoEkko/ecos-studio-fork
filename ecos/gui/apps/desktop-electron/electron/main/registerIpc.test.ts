@@ -1,13 +1,26 @@
 import { EventEmitter } from 'node:events'
-import { desktopApiEventChannels, desktopApiIpcChannels } from '@ecos-studio/shared'
+import {
+  desktopApiEventChannels,
+  desktopApiIpcChannels,
+  type EccRuntimeEvent,
+} from '@ecos-studio/shared'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { fromWebContents, openExternal, showOpenDialog, statMock } = vi.hoisted(() => ({
-  fromWebContents: vi.fn(),
-  openExternal: vi.fn(),
-  showOpenDialog: vi.fn(),
-  statMock: vi.fn(),
-}))
+interface MockBrowserWindow {
+  isDestroyed(): boolean
+  webContents: {
+    send(...args: unknown[]): void
+  }
+}
+
+const { fromWebContents, getAllWindows, openExternal, showOpenDialog, statMock } =
+  vi.hoisted(() => ({
+    fromWebContents: vi.fn(),
+    getAllWindows: vi.fn<() => MockBrowserWindow[]>(() => []),
+    openExternal: vi.fn(),
+    showOpenDialog: vi.fn(),
+    statMock: vi.fn(),
+  }))
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>()
@@ -20,6 +33,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 vi.mock('electron', () => ({
   BrowserWindow: {
     fromWebContents,
+    getAllWindows,
   },
   dialog: {
     showOpenDialog,
@@ -108,9 +122,21 @@ function registerHandlers() {
     appInfoService: {
       getVersions: vi.fn(),
     },
-    desktopRuntimeManager: {
-      execute: vi.fn(),
-      onEvent: vi.fn(),
+    eccRuntimeService: {
+      closeWorkspace: vi.fn(),
+      createWorkspace: vi.fn(),
+      onEvent: vi.fn((_listener: (event: EccRuntimeEvent) => void) => () => undefined),
+      openWorkspace: vi.fn(),
+      refreshConfig: vi.fn(),
+      resetFlow: vi.fn(),
+      rpcHello: vi.fn(),
+      rpcPing: vi.fn(),
+      rpcShutdown: vi.fn(),
+      runFlow: vi.fn(),
+      runStep: vi.fn(),
+      syncConfig: vi.fn(),
+      workspaceHome: vi.fn(),
+      workspaceInfo: vi.fn(),
     },
     shellService: {
       createSession: vi.fn(),
@@ -152,6 +178,8 @@ function createWindowDouble(isMaximized = false) {
 describe('registerIpc', () => {
   beforeEach(() => {
     fromWebContents.mockReset()
+    getAllWindows.mockReset()
+    getAllWindows.mockReturnValue([])
     electronLogger.warn.mockReset()
     openExternal.mockReset()
     showOpenDialog.mockReset()
@@ -185,7 +213,7 @@ describe('registerIpc', () => {
     const { handlers, services } = registerHandlers()
     const versions = {
       gui: '0.1.0-alpha.4',
-      runtime: 'ECC CLI',
+      runtime: 'ECC RPC',
       ecc: '0.1.0a4',
       dreamplace: '0.1.0a2',
     }
@@ -290,6 +318,17 @@ describe('registerIpc', () => {
     expect(services.resourceManagerService.cancelResource).toHaveBeenCalledWith(
       'tool:yosys',
     )
+  })
+
+  it('delegates ECC ping to the runtime service', async () => {
+    const { handlers, services } = registerHandlers()
+    const event = { sender: { id: 'web-contents' } }
+    services.eccRuntimeService.rpcPing.mockResolvedValue({ ok: true })
+
+    await expect(
+      handlers.get(desktopApiIpcChannels.eccRpcPing)?.(event),
+    ).resolves.toEqual({ ok: true })
+    expect(services.eccRuntimeService.rpcPing).toHaveBeenCalledTimes(1)
   })
 
   it('delegates remote content requests to the remote content service', async () => {
@@ -878,107 +917,61 @@ describe('registerIpc', () => {
     })
   })
 
-  it('executes desktop commands through the runtime manager', async () => {
+  it('runs ECC flow steps through the runtime service', async () => {
     const { handlers, services } = registerHandlers()
     const event = { sender: { id: 'web-contents' } }
     const result = {
-      cmd: 'run_step',
-      data: { state: 'Success' },
-      message: ['ok'],
-      ok: true,
-      response: 'success',
+      state: 'Success',
+      step: 'place',
     }
-    services.desktopRuntimeManager.execute.mockResolvedValue(result)
     const request = {
-      cmd: 'run_step',
-      data: { step: 'place', rerun: false },
-      source: 'terminal',
+      rerun: false,
+      step: 'place',
+      workspaceHandle: 'workspace-handle-1',
     }
+    services.eccRuntimeService.runStep.mockResolvedValue(result)
 
     await expect(
-      handlers.get(desktopApiIpcChannels.cliExecute)?.(event, request),
+      handlers.get(desktopApiIpcChannels.eccFlowRunStep)?.(event, request),
     ).resolves.toEqual(result)
 
-    expect(services.desktopRuntimeManager.execute).toHaveBeenCalledWith(
-      request,
-      expect.any(Function),
-    )
+    expect(services.eccRuntimeService.runStep).toHaveBeenCalledWith(request)
   })
 
-  it('forwards command events to the requesting renderer when it is alive', async () => {
-    const { handlers, services } = registerHandlers()
-    const sender = Object.assign(new EventEmitter(), {
-      isDestroyed: vi.fn(() => false),
+  it('broadcasts ECC runtime events to live renderer windows', () => {
+    const { services } = registerHandlers()
+    const webContents = {
       send: vi.fn(),
-    })
-    const cliEvent = {
-      cmd: 'run_step',
-      jobId: 'job-1',
-      stream: 'system',
-      text: 'queued',
-      type: 'queued',
     }
-    services.desktopRuntimeManager.execute.mockImplementation(
-      async (_request, listener) => {
-        listener(cliEvent)
-        return {
-          cmd: 'run_step',
-          data: {},
-          message: [],
-          ok: true,
-          response: 'success',
-        }
-      },
-    )
-    const request = {
-      cmd: 'run_step',
-      data: { step: 'place', rerun: false },
-      source: 'terminal',
-    }
-
-    await handlers.get(desktopApiIpcChannels.cliExecute)?.({ sender }, request)
-
-    expect(sender.send).toHaveBeenCalledWith(
-      desktopApiEventChannels.cliEvent,
-      expect.objectContaining({ jobId: 'job-1', type: 'queued' }),
-    )
-  })
-
-  it('does not send command events to destroyed renderer windows', async () => {
-    const { handlers, services } = registerHandlers()
-    const destroyedSender = Object.assign(new EventEmitter(), {
-      isDestroyed: vi.fn(() => true),
-      send: vi.fn(),
-    })
-    services.desktopRuntimeManager.execute.mockImplementation(
-      async (_request, listener) => {
-        listener({
-          cmd: 'run_step',
-          jobId: 'job-1',
-          stream: 'stdout',
-          text: 'running',
-          type: 'stdout',
-        })
-        return {
-          cmd: 'run_step',
-          data: {},
-          message: [],
-          ok: true,
-          response: 'success',
-        }
-      },
-    )
-
-    await handlers.get(desktopApiIpcChannels.cliExecute)?.(
-      { sender: destroyedSender },
+    getAllWindows.mockReturnValue([
       {
-        cmd: 'run_step',
-        data: { step: 'place', rerun: false },
-        source: 'terminal',
+        isDestroyed: () => false,
+        webContents,
       },
-    )
+    ])
+    const listener = services.eccRuntimeService.onEvent.mock.calls[0]?.[0]
+    listener?.({ type: 'runtime.ready' })
 
-    expect(destroyedSender.send).not.toHaveBeenCalled()
+    expect(webContents.send).toHaveBeenCalledWith(desktopApiEventChannels.eccEvent, {
+      type: 'runtime.ready',
+    })
+  })
+
+  it('does not broadcast ECC runtime events to destroyed windows', () => {
+    const { services } = registerHandlers()
+    const webContents = {
+      send: vi.fn(),
+    }
+    getAllWindows.mockReturnValue([
+      {
+        isDestroyed: () => true,
+        webContents,
+      },
+    ])
+    const listener = services.eccRuntimeService.onEvent.mock.calls[0]?.[0]
+    listener?.({ type: 'runtime.ready' })
+
+    expect(webContents.send).not.toHaveBeenCalled()
   })
 
   it('creates shell sessions and forwards shell output to the requesting renderer', async () => {

@@ -247,7 +247,8 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean]
 }>()
 
-const { currentProject, showToast, invalidateWorkspaceResources } = useWorkspace()
+const { currentProject, showToast, invalidateWorkspaceResources, workspaceSession } =
+  useWorkspace()
 
 const loading = ref(false)
 const saving = ref(false)
@@ -494,7 +495,10 @@ async function handleClearRunResults() {
   try {
     const result = await resetFlowApi({
       cmd: CMDEnum.reset_flow,
-      data: { directory: projectPath },
+      data: {
+        directory: projectPath,
+        workspaceHandle: workspaceSession.value.workspaceId,
+      },
     })
     if (result.response !== 'success') {
       throw new Error(result.message?.[0] || 'Failed to reset workspace run results.')

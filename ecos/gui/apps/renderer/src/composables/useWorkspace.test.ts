@@ -4,6 +4,7 @@ import type { Project } from '@/types'
 
 const {
   createRuntimeEventClientMock,
+  closeWorkspaceApiMock,
   createWorkspaceApiMock,
   loadWorkspaceApiMock,
   clearMessagesMock,
@@ -19,6 +20,7 @@ const {
   clearHomeRunArtifactResetAwaitingBackendStartMock,
 } = vi.hoisted(() => ({
   createRuntimeEventClientMock: vi.fn(),
+  closeWorkspaceApiMock: vi.fn(),
   createWorkspaceApiMock: vi.fn(),
   loadWorkspaceApiMock: vi.fn(),
   clearMessagesMock: vi.fn(),
@@ -52,6 +54,7 @@ vi.mock('@/platform/desktop', () => ({
 }))
 
 vi.mock('@/api', () => ({
+  closeWorkspaceApi: closeWorkspaceApiMock,
   loadWorkspaceApi: loadWorkspaceApiMock,
   createWorkspaceApi: createWorkspaceApiMock,
   waitForRuntimeReady: waitForRuntimeReadyMock,
@@ -162,6 +165,7 @@ function readRecentProjectsSetting(): SerializedRecentProject[] {
 }
 
 describe('useWorkspace openProject', () => {
+  let activeProjectRoot: string | null
   let desktopApi: DesktopApi
   let onRuntimeEvent: ((response: unknown) => void) | undefined
 
@@ -177,6 +181,8 @@ describe('useWorkspace openProject', () => {
     workspace.runtimeBackendConnecting.value = false
 
     createRuntimeEventClientMock.mockReset()
+    closeWorkspaceApiMock.mockReset()
+    closeWorkspaceApiMock.mockResolvedValue({ ok: true })
     createWorkspaceApiMock.mockReset()
     loadWorkspaceApiMock.mockReset()
     clearMessagesMock.mockReset()
@@ -191,7 +197,17 @@ describe('useWorkspace openProject', () => {
     settingsData.clear()
 
     desktopApi = createDesktopApiMock()
+    activeProjectRoot = null
     vi.mocked(desktopApi.workspace.isProjectDirectory).mockResolvedValue(true)
+    vi.mocked(desktopApi.workspace.registerProjectRoot).mockImplementation(
+      async (path) => {
+        activeProjectRoot = path
+        return path
+      },
+    )
+    vi.mocked(desktopApi.workspace.clearProjectRoot).mockImplementation(async () => {
+      activeProjectRoot = null
+    })
     waitForDesktopApiMock.mockResolvedValue(desktopApi)
     waitForRuntimeReadyMock.mockResolvedValue(undefined)
     onRuntimeEvent = undefined
@@ -217,7 +233,7 @@ describe('useWorkspace openProject', () => {
       response: 'success',
       data: {
         directory: '/work/demo',
-        workspace_id: 'workspace-demo',
+        workspace_handle: 'workspace-demo',
       },
     })
 
@@ -228,7 +244,7 @@ describe('useWorkspace openProject', () => {
     return workspace
   }
 
-  it('re-enters the active workspace without reloading it through the CLI', async () => {
+  it('re-enters the active workspace without reloading it through ECC RPC', async () => {
     const workspace = useWorkspace()
     const activeProject: Project = {
       id: '/work/demo',
@@ -254,6 +270,32 @@ describe('useWorkspace openProject', () => {
     expect(settingsData.get('current_project_path')).toBe('/work/demo')
   })
 
+  it('does not reopen the active workspace when it is selected from the directory picker', async () => {
+    const workspace = useWorkspace()
+    const activeProject: Project = {
+      id: '/work/demo',
+      name: 'demo',
+      path: '/work/demo',
+      lastOpened: new Date('2026-01-01T00:00:00.000Z'),
+    }
+    loadWorkspaceApiMock.mockResolvedValueOnce({
+      response: 'success',
+      data: {
+        directory: '/work/demo',
+        workspace_handle: 'workspace-demo',
+      },
+    })
+
+    await expect(workspace.openProject(activeProject)).resolves.toBe(true)
+    vi.mocked(desktopApi.dialog.pickDirectory).mockResolvedValueOnce('/work/demo/')
+
+    await expect(workspace.openProject()).resolves.toBe(true)
+
+    expect(loadWorkspaceApiMock).toHaveBeenCalledOnce()
+    expect(closeWorkspaceApiMock).not.toHaveBeenCalled()
+    expect(workspace.workspaceSession.value.workspaceId).toBe('workspace-demo')
+  })
+
   it('keeps the active workspace when the directory picker is canceled', async () => {
     const workspace = useWorkspace()
     const existingProject: Project = {
@@ -267,7 +309,7 @@ describe('useWorkspace openProject', () => {
       response: 'success',
       data: {
         directory: '/work/old',
-        workspace_id: '/work/old',
+        workspace_handle: '/work/old',
       },
     })
 
@@ -307,7 +349,7 @@ describe('useWorkspace openProject', () => {
       response: 'success',
       data: {
         directory: '/work/old',
-        workspace_id: '/work/old',
+        workspace_handle: '/work/old',
       },
     })
 
@@ -329,7 +371,7 @@ describe('useWorkspace openProject', () => {
       response: 'success',
       data: {
         directory: '/work/new',
-        workspace_id: '/work/new',
+        workspace_handle: '/work/new',
       },
     })
 
@@ -350,7 +392,7 @@ describe('useWorkspace openProject', () => {
       response: 'success',
       data: {
         directory: '/work/old',
-        workspace_id: '/work/old',
+        workspace_handle: '/work/old',
       },
     })
 
@@ -359,6 +401,161 @@ describe('useWorkspace openProject', () => {
     await workspace.closeProject()
 
     expect(clearMessagesMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not let an in-flight project open commit after the workspace closes', async () => {
+    const workspace = useWorkspace()
+    const oldProject: Project = {
+      id: '/work/old',
+      name: 'old',
+      path: '/work/old',
+      lastOpened: new Date('2026-01-01T00:00:00.000Z'),
+    }
+    const newProject: Project = {
+      id: '/work/new',
+      name: 'new',
+      path: '/work/new',
+      lastOpened: new Date('2026-01-02T00:00:00.000Z'),
+    }
+    loadWorkspaceApiMock.mockResolvedValueOnce({
+      response: 'success',
+      data: {
+        directory: '/work/old',
+        workspace_handle: 'workspace-old',
+      },
+    })
+    await expect(workspace.openProject(oldProject)).resolves.toBe(true)
+
+    let resolveNewWorkspace:
+      | ((value: {
+          response: string
+          data: { directory: string; workspace_handle: string }
+        }) => void)
+      | undefined
+    loadWorkspaceApiMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveNewWorkspace = resolve
+      }),
+    )
+
+    const openNewProject = workspace.openProject(newProject)
+    await vi.waitFor(() => {
+      expect(loadWorkspaceApiMock).toHaveBeenCalledTimes(2)
+    })
+    await workspace.closeProject()
+
+    resolveNewWorkspace?.({
+      response: 'success',
+      data: {
+        directory: '/work/new',
+        workspace_handle: 'workspace-new',
+      },
+    })
+
+    await expect(openNewProject).resolves.toBe(false)
+    expect(workspace.currentProject.value).toBeNull()
+    expect(workspace.workspaceSession.value.state).toBe('idle')
+    expect(workspace.runtimeBackendConnecting.value).toBe(false)
+    expect(activeProjectRoot).toBeNull()
+    expect(settingsData.has('current_project_path')).toBe(false)
+    expect(closeWorkspaceApiMock).toHaveBeenCalledWith('workspace-old')
+    expect(closeWorkspaceApiMock).toHaveBeenCalledWith('workspace-new')
+  })
+
+  it('does not let a delayed close clear a newer project root or persisted path', async () => {
+    const workspace = useWorkspace()
+    const oldProject: Project = {
+      id: '/work/old',
+      name: 'old',
+      path: '/work/old',
+      lastOpened: new Date('2026-01-01T00:00:00.000Z'),
+    }
+    const newProject: Project = {
+      id: '/work/new',
+      name: 'new',
+      path: '/work/new',
+      lastOpened: new Date('2026-01-02T00:00:00.000Z'),
+    }
+    loadWorkspaceApiMock.mockResolvedValueOnce({
+      response: 'success',
+      data: {
+        directory: '/work/old',
+        workspace_handle: 'workspace-old',
+      },
+    })
+    await expect(workspace.openProject(oldProject)).resolves.toBe(true)
+
+    let releaseOldWorkspace: (() => void) | undefined
+    closeWorkspaceApiMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          releaseOldWorkspace = () => resolve({ ok: true })
+        }),
+    )
+    loadWorkspaceApiMock.mockResolvedValueOnce({
+      response: 'success',
+      data: {
+        directory: '/work/new',
+        workspace_handle: 'workspace-new',
+      },
+    })
+
+    const closeOldProject = workspace.closeProject()
+    await vi.waitFor(() => {
+      expect(closeWorkspaceApiMock).toHaveBeenCalledWith('workspace-old')
+    })
+    await expect(workspace.openProject(newProject)).resolves.toBe(true)
+    releaseOldWorkspace?.()
+    await closeOldProject
+
+    expect(workspace.currentProject.value?.path).toBe('/work/new')
+    expect(workspace.workspaceSession.value).toMatchObject({
+      projectRoot: '/work/new',
+      workspaceId: 'workspace-new',
+      state: 'active',
+    })
+    expect(activeProjectRoot).toBe('/work/new')
+    expect(settingsData.get('current_project_path')).toBe('/work/new')
+  })
+
+  it('releases the previous ECC workspace only after a replacement opens', async () => {
+    const workspace = useWorkspace()
+    const oldProject: Project = {
+      id: '/work/old',
+      name: 'old',
+      path: '/work/old',
+      lastOpened: new Date('2026-01-01T00:00:00.000Z'),
+    }
+    const newProject: Project = {
+      id: '/work/new',
+      name: 'new',
+      path: '/work/new',
+      lastOpened: new Date('2026-01-02T00:00:00.000Z'),
+    }
+    loadWorkspaceApiMock
+      .mockResolvedValueOnce({
+        response: 'success',
+        data: {
+          directory: '/work/old',
+          workspace_handle: 'workspace-old',
+        },
+      })
+      .mockResolvedValueOnce({
+        response: 'success',
+        data: {
+          directory: '/work/new',
+          workspace_handle: 'workspace-new',
+        },
+      })
+
+    await expect(workspace.openProject(oldProject)).resolves.toBe(true)
+    expect(closeWorkspaceApiMock).not.toHaveBeenCalled()
+
+    await expect(workspace.openProject(newProject)).resolves.toBe(true)
+
+    expect(closeWorkspaceApiMock).toHaveBeenCalledOnce()
+    expect(closeWorkspaceApiMock).toHaveBeenCalledWith('workspace-old')
+    expect(workspace.workspaceSession.value.workspaceId).toBe('workspace-new')
   })
 
   it('snapshots recent project summary from workspace resources without direct project file reads', async () => {
@@ -927,7 +1124,7 @@ describe('useWorkspace openProject', () => {
         response: 'success',
         data: {
           directory: path,
-          workspace_id: path,
+          workspace_handle: path,
         },
       }
     })
@@ -1052,7 +1249,7 @@ describe('useWorkspace openProject', () => {
         response: 'success',
         data: {
           directory: path,
-          workspace_id: path,
+          workspace_handle: path,
         },
       })
     })
@@ -1061,6 +1258,9 @@ describe('useWorkspace openProject', () => {
     readWorkspaceHomeResourceApiMock.mockResolvedValue(null)
 
     const openProjectA = workspace.openProject(projectA)
+    await vi.waitFor(() => {
+      expect(loadWorkspaceApiMock).toHaveBeenCalledWith('/work/a')
+    })
     const openProjectB = workspace.openProject(projectB)
 
     await vi.waitFor(() => {
@@ -1071,7 +1271,7 @@ describe('useWorkspace openProject', () => {
       response: 'success',
       data: {
         directory: '/work/a',
-        workspace_id: '/work/a',
+        workspace_handle: '/work/a',
       },
     })
 
@@ -1095,6 +1295,9 @@ describe('useWorkspace openProject', () => {
       }),
       expect.anything(),
     ])
+    expect(closeWorkspaceApiMock).toHaveBeenCalledOnce()
+    expect(closeWorkspaceApiMock).toHaveBeenCalledWith('/work/a')
+    expect(closeWorkspaceApiMock).not.toHaveBeenCalledWith('/work/b')
   })
 
   it('keeps the latest project when an older provided-project switch stalls before session creation', async () => {
@@ -1146,7 +1349,7 @@ describe('useWorkspace openProject', () => {
       response: 'success',
       data: {
         directory: path,
-        workspace_id: path,
+        workspace_handle: path,
       },
     }))
 
@@ -1266,7 +1469,7 @@ describe('useWorkspace openProject', () => {
         response: 'success',
         data: {
           directory: path,
-          workspace_id: path,
+          workspace_handle: path,
         },
       }
     })
@@ -1359,7 +1562,7 @@ describe('useWorkspace openProject', () => {
       response: 'success',
       data: {
         directory: path,
-        workspace_id: path,
+        workspace_handle: path,
       },
     }))
     vi.mocked(desktopApi.settings.set).mockImplementation(
@@ -1410,6 +1613,73 @@ describe('useWorkspace openProject', () => {
     ])
   })
 
+  it('does not let a stale switch rollback a newer project root or persisted path', async () => {
+    const workspace = useWorkspace()
+    const oldProject: Project = {
+      id: '/work/old',
+      name: 'old',
+      path: '/work/old',
+      lastOpened: new Date('2026-01-01T00:00:00.000Z'),
+    }
+    const projectA: Project = {
+      id: '/work/a',
+      name: 'a',
+      path: '/work/a',
+      lastOpened: new Date('2026-01-02T00:00:00.000Z'),
+    }
+    const projectB: Project = {
+      id: '/work/b',
+      name: 'b',
+      path: '/work/b',
+      lastOpened: new Date('2026-01-03T00:00:00.000Z'),
+    }
+    loadWorkspaceApiMock.mockImplementation(async (path: string) => ({
+      response: 'success',
+      data: {
+        directory: path,
+        workspace_handle: `workspace-${path.split('/').pop()}`,
+      },
+    }))
+    readWorkspaceFlowResourceApiMock.mockResolvedValue(null)
+    readWorkspaceParametersResourceApiMock.mockResolvedValue(null)
+    readWorkspaceHomeResourceApiMock.mockResolvedValue(null)
+
+    await expect(workspace.openProject(oldProject)).resolves.toBe(true)
+    let releaseProjectAPathWrite: (() => void) | undefined
+    vi.mocked(desktopApi.settings.set).mockImplementation(async (key, value) => {
+      if (key === 'current_project_path' && value === '/work/a') {
+        await new Promise<void>((resolve) => {
+          releaseProjectAPathWrite = () => {
+            settingsData.set(key, value)
+            resolve()
+          }
+        })
+        return
+      }
+      settingsData.set(key, value)
+    })
+
+    const openProjectA = workspace.openProject(projectA)
+    await vi.waitFor(() => {
+      expect(releaseProjectAPathWrite).toBeDefined()
+      expect(activeProjectRoot).toBe('/work/a')
+    })
+
+    const openProjectB = workspace.openProject(projectB)
+    await vi.waitFor(() => {
+      expect(desktopApi.workspace.registerProjectRoot).toHaveBeenCalledWith('/work/b')
+    })
+    releaseProjectAPathWrite?.()
+
+    await expect(openProjectA).resolves.toBe(false)
+    await expect(openProjectB).resolves.toBe(true)
+    expect(workspace.currentProject.value?.path).toBe('/work/b')
+    expect(activeProjectRoot).toBe('/work/b')
+    expect(settingsData.get('current_project_path')).toBe('/work/b')
+    expect(closeWorkspaceApiMock).toHaveBeenCalledWith('workspace-a')
+    expect(closeWorkspaceApiMock).not.toHaveBeenCalledWith('workspace-b')
+  })
+
   it('keeps the active workspace when the selected workspace fails to load', async () => {
     const workspace = useWorkspace()
     const existingProject: Project = {
@@ -1423,7 +1693,7 @@ describe('useWorkspace openProject', () => {
       response: 'success',
       data: {
         directory: '/work/old',
-        workspace_id: '/work/old',
+        workspace_handle: '/work/old',
       },
     })
 
@@ -1448,6 +1718,48 @@ describe('useWorkspace openProject', () => {
     })
   })
 
+  it('keeps the active workspace when a provided project fails to load', async () => {
+    const workspace = useWorkspace()
+    const existingProject: Project = {
+      id: '/work/old',
+      name: 'old',
+      path: '/work/old',
+      lastOpened: new Date('2026-01-01T00:00:00.000Z'),
+    }
+    const candidateProject: Project = {
+      id: '/work/new',
+      name: 'new',
+      path: '/work/new',
+      lastOpened: new Date('2026-01-02T00:00:00.000Z'),
+    }
+    loadWorkspaceApiMock
+      .mockResolvedValueOnce({
+        response: 'success',
+        data: {
+          directory: '/work/old',
+          workspace_handle: 'workspace-old',
+        },
+      })
+      .mockResolvedValueOnce({
+        response: 'error',
+        message: ['failed to open candidate'],
+        data: {},
+      })
+
+    await expect(workspace.openProject(existingProject)).resolves.toBe(true)
+    const oldSession = { ...workspace.workspaceSession.value }
+
+    await expect(workspace.openProject(candidateProject)).resolves.toBe(false)
+
+    expect(workspace.currentProject.value?.path).toBe('/work/old')
+    expect(workspace.workspaceSession.value).toMatchObject({
+      sessionId: oldSession.sessionId,
+      workspaceId: 'workspace-old',
+      state: 'active',
+    })
+    expect(closeWorkspaceApiMock).not.toHaveBeenCalled()
+  })
+
   it('keeps the active workspace when registering the selected workspace fails', async () => {
     const workspace = useWorkspace()
     const existingProject: Project = {
@@ -1461,11 +1773,12 @@ describe('useWorkspace openProject', () => {
       response: 'success',
       data: {
         directory: '/work/old',
-        workspace_id: '/work/old',
+        workspace_handle: '/work/old',
       },
     })
 
     expect(await workspace.openProject(existingProject)).toBe(true)
+    const oldSessionId = workspace.workspaceSession.value.sessionId
 
     vi.mocked(desktopApi.dialog.pickDirectory).mockResolvedValueOnce('/work/new')
     vi.mocked(desktopApi.workspace.registerProjectRoot).mockRejectedValueOnce(
@@ -1475,13 +1788,75 @@ describe('useWorkspace openProject', () => {
       response: 'success',
       data: {
         directory: '/work/new',
-        workspace_id: '/work/new',
+        workspace_handle: '/work/new',
       },
     })
 
     expect(await workspace.openProject()).toBe(false)
     expect(workspace.currentProject.value?.path).toBe('/work/old')
     expect(settingsData.get('current_project_path')).toBe('/work/old')
+    expect(workspace.workspaceSession.value).toMatchObject({
+      sessionId: oldSessionId,
+      workspaceId: '/work/old',
+      state: 'active',
+    })
+    expect(closeWorkspaceApiMock).toHaveBeenCalledOnce()
+    expect(closeWorkspaceApiMock).toHaveBeenCalledWith('/work/new')
+    expect(closeWorkspaceApiMock).not.toHaveBeenCalledWith('/work/old')
+  })
+
+  it('rolls back the candidate when persisting its project path fails', async () => {
+    const workspace = useWorkspace()
+    const existingProject: Project = {
+      id: '/work/old',
+      name: 'old',
+      path: '/work/old',
+      lastOpened: new Date('2026-01-01T00:00:00.000Z'),
+    }
+    const candidateProject: Project = {
+      id: '/work/new',
+      name: 'new',
+      path: '/work/new',
+      lastOpened: new Date('2026-01-02T00:00:00.000Z'),
+    }
+    loadWorkspaceApiMock
+      .mockResolvedValueOnce({
+        response: 'success',
+        data: {
+          directory: '/work/old',
+          workspace_handle: 'workspace-old',
+        },
+      })
+      .mockResolvedValueOnce({
+        response: 'success',
+        data: {
+          directory: '/work/new',
+          workspace_handle: 'workspace-new',
+        },
+      })
+
+    await expect(workspace.openProject(existingProject)).resolves.toBe(true)
+    const oldSession = { ...workspace.workspaceSession.value }
+    vi.mocked(desktopApi.settings.set).mockImplementation(async (key, value) => {
+      if (key === 'current_project_path' && value === '/work/new') {
+        throw new Error('settings unavailable')
+      }
+      settingsData.set(key, value)
+    })
+
+    await expect(workspace.openProject(candidateProject)).resolves.toBe(false)
+
+    expect(workspace.currentProject.value?.path).toBe('/work/old')
+    expect(workspace.workspaceSession.value).toMatchObject({
+      sessionId: oldSession.sessionId,
+      workspaceId: 'workspace-old',
+      state: 'active',
+    })
+    expect(activeProjectRoot).toBe('/work/old')
+    expect(settingsData.get('current_project_path')).toBe('/work/old')
+    expect(closeWorkspaceApiMock).toHaveBeenCalledOnce()
+    expect(closeWorkspaceApiMock).toHaveBeenCalledWith('workspace-new')
+    expect(closeWorkspaceApiMock).not.toHaveBeenCalledWith('workspace-old')
   })
 
   it('checks only desktop bridge availability before workspace operations', async () => {
@@ -1531,7 +1906,7 @@ describe('useWorkspace openProject', () => {
       response: 'success',
       data: {
         directory: '/work/demo',
-        workspace_id: 'workspace-demo',
+        workspace_handle: 'workspace-demo',
       },
       message: [],
     })
@@ -1553,7 +1928,7 @@ describe('useWorkspace openProject', () => {
       response: 'success',
       data: {
         directory: '/work/demo',
-        workspace_id: 'workspace-demo',
+        workspace_handle: 'workspace-demo',
       },
     })
 
@@ -1579,7 +1954,32 @@ describe('useWorkspace openProject', () => {
     await workspace.closeProject()
 
     expect(cleanup).toHaveBeenCalledTimes(1)
+    expect(closeWorkspaceApiMock).toHaveBeenCalledOnce()
+    expect(closeWorkspaceApiMock).toHaveBeenCalledWith('workspace-demo')
     expect(workspace.workspaceSession.value.state).toBe('idle')
+  })
+
+  it('finishes local project cleanup when the ECC workspace close fails', async () => {
+    const workspace = await openWorkspaceAndConnectRuntimeEvents()
+    const closeError = new Error('sidecar unavailable')
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    closeWorkspaceApiMock.mockRejectedValueOnce(closeError)
+
+    try {
+      await expect(workspace.closeProject()).resolves.toBeUndefined()
+
+      expect(closeWorkspaceApiMock).toHaveBeenCalledWith('workspace-demo')
+      expect(warn).toHaveBeenCalledWith(
+        'Failed to close ECC workspace session:',
+        closeError,
+      )
+      expect(workspace.currentProject.value).toBeNull()
+      expect(workspace.workspaceSession.value.state).toBe('idle')
+      expect(desktopApi.workspace.clearProjectRoot).toHaveBeenCalled()
+      expect(settingsData.has('current_project_path')).toBe(false)
+    } finally {
+      warn.mockRestore()
+    }
   })
 
   it('ignores runtime events from an older workspace session after switching', async () => {
@@ -1620,14 +2020,14 @@ describe('useWorkspace openProject', () => {
         response: 'success',
         data: {
           directory: '/work/old',
-          workspace_id: 'workspace-old',
+          workspace_handle: 'workspace-old',
         },
       })
       .mockResolvedValueOnce({
         response: 'success',
         data: {
           directory: '/work/new',
-          workspace_id: 'workspace-new',
+          workspace_handle: 'workspace-new',
         },
       })
 
@@ -1716,6 +2116,26 @@ describe('useWorkspace openProject', () => {
     expect(requestHomeRunArtifactResetMock).toHaveBeenCalledWith('/work/demo')
   })
 
+  it('uses the current project path for RPC rerun start events that only carry a workspace handle', async () => {
+    const workspace = await openWorkspaceAndConnectRuntimeEvents()
+
+    onRuntimeEvent?.({
+      cmd: 'notify',
+      data: {
+        type: 'message',
+        cmd: 'rtl2gds',
+        workspaceId: 'workspace-demo',
+        rerun: true,
+      },
+      message: ['Started rtl2gds'],
+      response: 'success',
+    })
+
+    expect(workspace.runtimeEvents.value).toHaveLength(1)
+    expect(requestHomeRunArtifactResetMock).toHaveBeenCalledWith('/work/demo')
+    expect(requestHomeRunArtifactResetMock).not.toHaveBeenCalledWith('workspace-demo')
+  })
+
   it('keeps the workspace loading overlay visible while a new workspace is being created', async () => {
     const workspace = useWorkspace()
     let resolveCreateWorkspace: ((value: unknown) => void) | undefined
@@ -1749,7 +2169,7 @@ describe('useWorkspace openProject', () => {
       response: 'success',
       data: {
         directory: '/work/new-project',
-        workspace_id: 'workspace-new-project',
+        workspace_handle: 'workspace-new-project',
       },
       message: [],
     })
