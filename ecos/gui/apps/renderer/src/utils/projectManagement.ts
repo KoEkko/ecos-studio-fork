@@ -154,6 +154,7 @@ export interface ProjectWorkspace {
   id: string
   name: string
   workspacePath: string
+  artifactDesignName: string
   status: ProjectWorkspaceStatus
   description: string
   sourceWorkspaceId: string | null
@@ -491,6 +492,11 @@ export function buildProjectManagementProject(
       workspace,
       workspaceFlowStates[workspace.workspace_id] ?? {},
       depth,
+      workspaceArtifactDesignName(
+        workspace,
+        manifest?.base_design,
+        projectArtifactDesignName(project?.name ?? name, topModule),
+      ),
     ),
   )
   const comparisonSummary = manifest
@@ -655,7 +661,9 @@ export function createWorkspaceBranchDraft(
   const sourceOutputType = step === 'Synth' ? 'verilog' : 'def'
   const sourceWorkspacePath =
     sourceWorkspace?.workspacePath ?? joinPath(project.path, sourceWorkspaceId)
-  const designName = projectArtifactDesignName(project)
+  const designName =
+    sourceWorkspace?.artifactDesignName ||
+    projectArtifactDesignName(project.name, project.topModule)
   const sourceOutputPath = sourceStepOutputPath(sourceWorkspacePath, step, designName)
   const originSdc = sourceWorkspaceSdcPath(sourceWorkspacePath, designName)
   const artifactOrigin =
@@ -762,7 +770,9 @@ export function registerWorkspaceInManifest(
     name: input.projectName || manifest.name,
     root_path: normalizePath(input.projectRoot || manifest.root_path),
     updated_at: now,
-    base_design: mergeBaseDesignConfig(manifest.base_design, input.config),
+    base_design: mergeBaseDesignConfig(manifest.base_design, input.config, {
+      includeDesignParameter: !sourceWorkspaceId && !branchFrom,
+    }),
     workspaces,
   }
 }
@@ -841,6 +851,7 @@ function buildProjectWorkspace(
   workspace: ProjectWorkspaceManifest,
   flowStateMap: ProjectWorkspaceFlowStateMap,
   depth = 0,
+  artifactDesignName = '',
 ): ProjectWorkspace {
   const startStep = normalizeFlowStep(workspace.start_step)
   const endStep = normalizeFlowStep(workspace.end_step)
@@ -856,6 +867,7 @@ function buildProjectWorkspace(
     id: workspace.workspace_id,
     name: workspace.name,
     workspacePath: workspace.workspace_path,
+    artifactDesignName,
     status: workspace.status,
     description: workspace.branch_from
       ? `from ${workspace.branch_from.source_workspace_id}/${branchStep}`
@@ -2032,15 +2044,32 @@ function sourceStepArtifactPath(
   )
 }
 
-function projectArtifactDesignName(project: ProjectManagementProject): string {
+function projectArtifactDesignName(name: string, topModule?: string): string {
+  return normalizeArtifactDesignName(topModule) || normalizeArtifactDesignName(name)
+}
+
+function workspaceArtifactDesignName(
+  workspace: ProjectWorkspaceManifest,
+  baseDesign: ProjectManifestBaseDesign | undefined,
+  fallback: string,
+): string {
   return (
-    normalizeArtifactDesignName(project.topModule) ||
-    normalizeArtifactDesignName(project.name)
+    normalizeArtifactDesignName(
+      parameterPatchValues((workspace.parameter_patch ?? {}).design).to,
+    ) ||
+    (workspace.branch_from || workspace.source_workspace_id
+      ? normalizeArtifactDesignName(workspace.name)
+      : '') ||
+    normalizeArtifactDesignName(baseDesign?.parameters?.design) ||
+    fallback ||
+    normalizeArtifactDesignName(workspace.workspace_id)
   )
 }
 
-function normalizeArtifactDesignName(value: string | undefined): string {
-  return (value ?? '').trim().replace(/[\\/]/g, '_').replace(/\s+/g, '_')
+function normalizeArtifactDesignName(value: unknown): string {
+  return typeof value === 'string'
+    ? value.trim().replace(/[\\/]/g, '_').replace(/\s+/g, '_')
+    : ''
 }
 
 function defaultSourceOutputType(step: FlowStep): 'verilog' | 'def' {
@@ -2087,15 +2116,21 @@ function nextManifestWorkspaceId(manifest: ProjectManifest): string {
 function mergeBaseDesignConfig(
   baseDesign: ProjectManifestBaseDesign,
   config: ProjectWorkspaceRegistrationInput['config'],
+  options: { includeDesignParameter?: boolean } = {},
 ): ProjectManifestBaseDesign {
   if (!config) return baseDesign
 
   const parameters = config.parameters ?? {}
+  const baseDesignParameters = Object.fromEntries(
+    Object.entries(parameters).filter(
+      ([key]) => options.includeDesignParameter !== false || key !== 'design',
+    ),
+  )
   const next: ProjectManifestBaseDesign = {
     ...baseDesign,
     parameters: {
       ...baseDesign.parameters,
-      ...parameters,
+      ...baseDesignParameters,
     },
   }
   const pdk = optionalString(config.pdk)

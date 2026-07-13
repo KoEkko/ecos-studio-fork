@@ -106,6 +106,8 @@ const desktopApi: DesktopApi = {
           listener(action as DesktopMenuEventId)
         },
       ),
+    setActionEnabled: (action, enabled) =>
+      invokeDesktop(desktopApiIpcChannels.menuSetActionEnabled, action, enabled),
   },
   system: {
     openExternal: (url) => invokeDesktop(desktopApiIpcChannels.systemOpenExternal, url),
@@ -129,6 +131,7 @@ const desktopApi: DesktopApi = {
       invokeDesktop(desktopApiIpcChannels.dialogPickDirectory, options),
     pickFiles: (options?: DesktopFileDialogOptions) =>
       invokeDesktop(desktopApiIpcChannels.dialogPickFiles, options),
+    saveFile: (options) => invokeDesktop(desktopApiIpcChannels.dialogSaveFile, options),
     pickRtlSources: (options?: DesktopRtlSourceDialogOptions) =>
       invokeDesktop(desktopApiIpcChannels.dialogPickRtlSources, options),
   },
@@ -314,6 +317,10 @@ const desktopApi: DesktopApi = {
       close: (request) => invokeDesktop(desktopApiIpcChannels.eccWorkspaceClose, request),
       create: (request) =>
         invokeDesktop(desktopApiIpcChannels.eccWorkspaceCreate, request),
+      exportSignoff: (request) =>
+        invokeDesktop(desktopApiIpcChannels.eccWorkspaceExportSignoff, request),
+      inspectSignoff: (request) =>
+        invokeDesktop(desktopApiIpcChannels.eccWorkspaceInspectSignoff, request),
       home: (request) => invokeDesktop(desktopApiIpcChannels.eccWorkspaceHome, request),
       info: (request) => invokeDesktop(desktopApiIpcChannels.eccWorkspaceInfo, request),
       open: (request) => invokeDesktop(desktopApiIpcChannels.eccWorkspaceOpen, request),

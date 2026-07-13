@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events'
 import {
   desktopApiEventChannels,
   desktopApiIpcChannels,
+  desktopMenuEventIds,
   type EccRuntimeEvent,
 } from '@ecos-studio/shared'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -13,19 +14,29 @@ interface MockBrowserWindow {
   }
 }
 
-const { fromWebContents, getAllWindows, openExternal, showOpenDialog, statMock } =
-  vi.hoisted(() => ({
-    fromWebContents: vi.fn(),
-    getAllWindows: vi.fn<() => MockBrowserWindow[]>(() => []),
-    openExternal: vi.fn(),
-    showOpenDialog: vi.fn(),
-    statMock: vi.fn(),
-  }))
+const {
+  fromWebContents,
+  getAllWindows,
+  openExternal,
+  showOpenDialog,
+  showSaveDialog,
+  mkdirMock,
+  statMock,
+} = vi.hoisted(() => ({
+  fromWebContents: vi.fn(),
+  getAllWindows: vi.fn<() => MockBrowserWindow[]>(() => []),
+  mkdirMock: vi.fn(),
+  openExternal: vi.fn(),
+  showOpenDialog: vi.fn(),
+  showSaveDialog: vi.fn(),
+  statMock: vi.fn(),
+}))
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>()
   return {
     ...actual,
+    mkdir: mkdirMock,
     stat: statMock,
   }
 })
@@ -37,6 +48,7 @@ vi.mock('electron', () => ({
   },
   dialog: {
     showOpenDialog,
+    showSaveDialog,
   },
   ipcMain: {
     handle: vi.fn(),
@@ -52,6 +64,12 @@ const electronLogger = vi.hoisted(() => ({
 
 vi.mock('../services/logger', () => ({
   electronLogger,
+}))
+
+const setMenuActionEnabled = vi.hoisted(() => vi.fn())
+
+vi.mock('../services/menuService', () => ({
+  setMenuActionEnabled,
 }))
 
 import { registerIpc } from './registerIpc'
@@ -125,6 +143,8 @@ function registerHandlers() {
     eccRuntimeService: {
       closeWorkspace: vi.fn(),
       createWorkspace: vi.fn(),
+      exportSignoff: vi.fn(),
+      inspectSignoff: vi.fn(),
       onEvent: vi.fn((_listener: (event: EccRuntimeEvent) => void) => () => undefined),
       openWorkspace: vi.fn(),
       refreshConfig: vi.fn(),
@@ -183,6 +203,9 @@ describe('registerIpc', () => {
     electronLogger.warn.mockReset()
     openExternal.mockReset()
     showOpenDialog.mockReset()
+    showSaveDialog.mockReset()
+    mkdirMock.mockReset()
+    setMenuActionEnabled.mockReset()
     statMock.mockReset()
     statMock.mockImplementation(async (path: string) => {
       if (path === '/tmp/project') {
@@ -494,6 +517,89 @@ describe('registerIpc', () => {
     )
 
     expect(openExternal).toHaveBeenCalledWith('https://openecos.org')
+  })
+
+  it('shows a Save As dialog for the requesting window and returns its path', async () => {
+    const { handlers } = registerHandlers()
+    const event = { sender: { id: 'web-contents' } }
+    const windowDouble = createWindowDouble()
+    const options = {
+      title: 'Export Signoff Package',
+      defaultPath: '/exports/gcd_signoff_package.tar.gz',
+      filters: [{ name: 'Tarball', extensions: ['tar.gz'] }],
+    }
+    fromWebContents.mockReturnValue(windowDouble)
+    showSaveDialog.mockResolvedValue({
+      canceled: false,
+      filePath: options.defaultPath,
+    })
+
+    await expect(
+      handlers.get(desktopApiIpcChannels.dialogSaveFile)?.(event, options),
+    ).resolves.toBe(options.defaultPath)
+
+    expect(fromWebContents).toHaveBeenCalledWith(event.sender)
+    expect(showSaveDialog).toHaveBeenCalledWith(windowDouble, options)
+  })
+
+  it('creates the requested default directory before showing Save As', async () => {
+    const { handlers } = registerHandlers()
+    const event = { sender: { id: 'web-contents' } }
+    const windowDouble = createWindowDouble()
+    const options = {
+      title: 'Export Signoff Package',
+      defaultPath: '/projects/gcd/signoff/gcd_signoff_package.tar.gz',
+      ensureDirectory: true,
+    }
+    fromWebContents.mockReturnValue(windowDouble)
+    mkdirMock.mockResolvedValue(undefined)
+    showSaveDialog.mockResolvedValue({
+      canceled: false,
+      filePath: options.defaultPath,
+    })
+
+    await expect(
+      handlers.get(desktopApiIpcChannels.dialogSaveFile)?.(event, options),
+    ).resolves.toBe(options.defaultPath)
+
+    expect(mkdirMock).toHaveBeenCalledWith('/projects/gcd/signoff', {
+      recursive: true,
+    })
+    expect(showSaveDialog).toHaveBeenCalledWith(windowDouble, {
+      title: options.title,
+      defaultPath: options.defaultPath,
+    })
+    expect(mkdirMock.mock.invocationCallOrder[0]).toBeLessThan(
+      showSaveDialog.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+    )
+  })
+
+  it('returns null when the Save As dialog is canceled', async () => {
+    const { handlers } = registerHandlers()
+    const event = { sender: { id: 'web-contents' } }
+    fromWebContents.mockReturnValue(createWindowDouble())
+    showSaveDialog.mockResolvedValue({ canceled: true })
+
+    await expect(
+      handlers.get(desktopApiIpcChannels.dialogSaveFile)?.(event, {
+        title: 'Export Signoff Package',
+      }),
+    ).resolves.toBeNull()
+  })
+
+  it('delegates native menu enabled-state updates to the menu service', async () => {
+    const { handlers } = registerHandlers()
+
+    await handlers.get(desktopApiIpcChannels.menuSetActionEnabled)?.(
+      { sender: { id: 'web-contents' } },
+      desktopMenuEventIds.exportSignoffPackage,
+      true,
+    )
+
+    expect(setMenuActionEnabled).toHaveBeenCalledWith(
+      desktopMenuEventIds.exportSignoffPackage,
+      true,
+    )
   })
 
   it('delegates settings, dialog, and workspace calls to the provided services', async () => {
@@ -938,6 +1044,37 @@ describe('registerIpc', () => {
     expect(services.eccRuntimeService.runStep).toHaveBeenCalledWith(request)
   })
 
+  it('exports ECC signoff through the runtime service', async () => {
+    const { handlers, services } = registerHandlers()
+    const event = { sender: { id: 'web-contents' } }
+    const request = {
+      outputPath: '/exports/custom package.tar.gz',
+      workspaceHandle: 'workspace-handle-1',
+    }
+    const result = { outputPath: request.outputPath }
+    services.eccRuntimeService.exportSignoff.mockResolvedValue(result)
+
+    await expect(
+      handlers.get(desktopApiIpcChannels.eccWorkspaceExportSignoff)?.(event, request),
+    ).resolves.toEqual(result)
+
+    expect(services.eccRuntimeService.exportSignoff).toHaveBeenCalledWith(request)
+  })
+
+  it('inspects ECC signoff through the runtime service', async () => {
+    const { handlers, services } = registerHandlers()
+    const event = { sender: { id: 'web-contents' } }
+    const request = { workspaceHandle: 'workspace-handle-1' }
+    const result = { groups: [], risks: [], status: 'ready' }
+    services.eccRuntimeService.inspectSignoff.mockResolvedValue(result)
+
+    await expect(
+      handlers.get(desktopApiIpcChannels.eccWorkspaceInspectSignoff)?.(event, request),
+    ).resolves.toEqual(result)
+
+    expect(services.eccRuntimeService.inspectSignoff).toHaveBeenCalledWith(request)
+  })
+
   it('broadcasts ECC runtime events to live renderer windows', () => {
     const { services } = registerHandlers()
     const webContents = {
@@ -972,6 +1109,71 @@ describe('registerIpc', () => {
     listener?.({ type: 'runtime.ready' })
 
     expect(webContents.send).not.toHaveBeenCalled()
+  })
+
+  it('closes ECC workspace handles when the requesting renderer is destroyed', async () => {
+    const { handlers, services } = registerHandlers()
+    const sender = Object.assign(new EventEmitter(), {
+      isDestroyed: vi.fn(() => false),
+    })
+    const event = { sender }
+    services.eccRuntimeService.openWorkspace.mockResolvedValue({
+      directory: '/work/demo',
+      workspaceHandle: 'workspace-handle-1',
+    })
+
+    await expect(
+      handlers.get(desktopApiIpcChannels.eccWorkspaceOpen)?.(event, {
+        directory: '/work/demo',
+      }),
+    ).resolves.toEqual({
+      directory: '/work/demo',
+      workspaceHandle: 'workspace-handle-1',
+    })
+
+    expect(sender.listenerCount('destroyed')).toBe(1)
+    sender.emit('destroyed')
+    const explicitClose = handlers.get(desktopApiIpcChannels.eccWorkspaceClose)?.(event, {
+      workspaceHandle: 'workspace-handle-1',
+    })
+
+    await vi.waitFor(() => {
+      expect(services.eccRuntimeService.closeWorkspace).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+      })
+    })
+    await explicitClose
+
+    expect(services.eccRuntimeService.closeWorkspace).toHaveBeenCalledTimes(1)
+    expect(sender.listenerCount('destroyed')).toBe(0)
+  })
+
+  it('tracks a workspace handle again after a successful explicit close', async () => {
+    const { handlers, services } = registerHandlers()
+    const sender = Object.assign(new EventEmitter(), {
+      isDestroyed: vi.fn(() => false),
+    })
+    const event = { sender }
+    services.eccRuntimeService.openWorkspace.mockResolvedValue({
+      directory: '/work/demo',
+      workspaceHandle: 'workspace-handle-1',
+    })
+
+    await handlers.get(desktopApiIpcChannels.eccWorkspaceOpen)?.(event, {
+      directory: '/work/demo',
+    })
+    expect(sender.listenerCount('destroyed')).toBe(1)
+
+    await handlers.get(desktopApiIpcChannels.eccWorkspaceClose)?.(event, {
+      workspaceHandle: 'workspace-handle-1',
+    })
+    expect(sender.listenerCount('destroyed')).toBe(0)
+
+    await handlers.get(desktopApiIpcChannels.eccWorkspaceOpen)?.(event, {
+      directory: '/work/demo',
+    })
+
+    expect(sender.listenerCount('destroyed')).toBe(1)
   })
 
   it('creates shell sessions and forwards shell output to the requesting renderer', async () => {

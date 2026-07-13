@@ -11,7 +11,10 @@ import type {
   EccWorkspaceCloseResult,
   EccWorkspaceCreateRequest,
   EccWorkspaceCreateResult,
+  EccWorkspaceExportSignoffRequest,
+  EccWorkspaceExportSignoffResult,
   EccWorkspaceHandleRequest,
+  EccWorkspaceInspectSignoffResult,
   EccWorkspaceHomeResult,
   EccWorkspaceInfoRequest,
   EccWorkspaceInfoResult,
@@ -24,6 +27,7 @@ import type {
 } from '@ecos-studio/shared'
 
 import { normalizeRuntimeError } from './errors'
+import { EccJsonRpcError } from './jsonRpcClient'
 import { WorkspaceSessionRegistry } from './workspaceSessions'
 
 export interface EccRpcRuntimeClient {
@@ -49,6 +53,52 @@ export interface EccRpcRuntimeServiceOptions {
 interface EccWorkspaceSessionResult {
   directory: string
   workspaceId: string
+}
+
+function isUnknownJsonRpcFieldError(error: unknown, field: string): boolean {
+  if (!(error instanceof EccJsonRpcError)) {
+    return false
+  }
+  if (error.code !== -32602) {
+    return false
+  }
+  const data = error.data
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    'message' in data &&
+    data.message === `unknown field: ${field}`
+  )
+}
+
+function hasEntries(
+  value: Record<string, unknown> | undefined,
+): value is Record<string, unknown> {
+  return value !== undefined && Object.keys(value).length > 0
+}
+
+function workspaceCreatePayload(
+  request: EccWorkspaceCreateRequest,
+  options: { includeFlowConfig: boolean; includeSdc: boolean } = {
+    includeFlowConfig: true,
+    includeSdc: true,
+  },
+): Record<string, unknown> {
+  return {
+    directory: request.directory,
+    filelist: request.filelist ?? '',
+    ...(options.includeFlowConfig && hasEntries(request.flowConfig)
+      ? { flowConfig: request.flowConfig }
+      : {}),
+    originDef: request.originDef ?? '',
+    originVerilog: request.originVerilog ?? '',
+    parameters: request.parameters ?? {},
+    pdk: request.pdk ?? '',
+    pdkJson: request.pdkJson ?? null,
+    pdkRoot: request.pdkRoot ?? '',
+    rtlList: request.rtlList ?? [],
+    ...(options.includeSdc ? { sdc: request.sdc ?? '' } : {}),
+  }
 }
 
 type RuntimeOperation<T> = () => Promise<T>
@@ -116,17 +166,32 @@ export class EccRpcRuntimeService {
   createWorkspace(request: EccWorkspaceCreateRequest): Promise<EccWorkspaceCreateResult> {
     return this.enqueue('workspace.create', undefined, async () => {
       const client = await this.ensureStarted()
-      const response = await client.call<EccWorkspaceSessionResult>('workspace.create', {
-        directory: request.directory,
-        filelist: request.filelist ?? '',
-        originDef: request.originDef ?? '',
-        originVerilog: request.originVerilog ?? '',
-        parameters: request.parameters ?? {},
-        pdk: request.pdk ?? '',
-        pdkJson: request.pdkJson ?? null,
-        pdkRoot: request.pdkRoot ?? '',
-        rtlList: request.rtlList ?? [],
-      })
+      const payloadOptions = {
+        includeFlowConfig: true,
+        includeSdc: true,
+      }
+      let response: EccWorkspaceSessionResult | null = null
+      while (!response) {
+        try {
+          response = await client.call<EccWorkspaceSessionResult>(
+            'workspace.create',
+            workspaceCreatePayload(request, payloadOptions),
+          )
+        } catch (error) {
+          if (
+            payloadOptions.includeFlowConfig &&
+            isUnknownJsonRpcFieldError(error, 'flowConfig')
+          ) {
+            payloadOptions.includeFlowConfig = false
+            continue
+          }
+          if (payloadOptions.includeSdc && isUnknownJsonRpcFieldError(error, 'sdc')) {
+            payloadOptions.includeSdc = false
+            continue
+          }
+          throw error
+        }
+      }
       const session = this.sessions.activate(response.directory, response.workspaceId)
       return {
         directory: session.directory,
@@ -241,6 +306,40 @@ export class EccRpcRuntimeService {
     })
   }
 
+  exportSignoff(
+    request: EccWorkspaceExportSignoffRequest,
+  ): Promise<EccWorkspaceExportSignoffResult> {
+    return this.enqueue('workspace.export_signoff', request.workspaceHandle, async () => {
+      const client = await this.ensureStarted()
+      const workspaceId = await this.resolveEccWorkspaceId(request.workspaceHandle)
+      return await client.call<EccWorkspaceExportSignoffResult>(
+        'workspace.export_signoff',
+        {
+          outputPath: request.outputPath,
+          workspaceId,
+        },
+        { timeoutMs: 0 },
+      )
+    })
+  }
+
+  inspectSignoff(
+    request: EccWorkspaceHandleRequest,
+  ): Promise<EccWorkspaceInspectSignoffResult> {
+    return this.enqueue(
+      'workspace.inspect_signoff',
+      request.workspaceHandle,
+      async () => {
+        const client = await this.ensureStarted()
+        const workspaceId = await this.resolveEccWorkspaceId(request.workspaceHandle)
+        return await client.call<EccWorkspaceInspectSignoffResult>(
+          'workspace.inspect_signoff',
+          { workspaceId },
+        )
+      },
+    )
+  }
+
   runFlow(request: EccFlowRunRequest): Promise<EccFlowRunResult> {
     const rerun = Boolean(request.rerun)
     return this.enqueue(
@@ -343,15 +442,16 @@ export class EccRpcRuntimeService {
         operationId,
         workspaceHandle,
       }
-      this.emit({
-        logFile: this.sidecar.logFile ?? undefined,
-        method,
-        operationId,
-        ...metadata,
-        type: 'operation.started',
-        workspaceHandle,
-      })
       try {
+        this.emit({
+          logFile: this.sidecar.logFile ?? undefined,
+          method,
+          operationId,
+          ...metadata,
+          type: 'operation.started',
+          workspaceDirectory: runtimeDirectory ?? undefined,
+          workspaceHandle,
+        })
         const result = await operation()
         this.emit({
           logFile: this.sidecar.logFile ?? undefined,
@@ -359,6 +459,7 @@ export class EccRpcRuntimeService {
           operationId,
           ...metadata,
           type: 'operation.completed',
+          workspaceDirectory: runtimeDirectory ?? undefined,
           workspaceHandle,
         })
         return result
@@ -376,6 +477,7 @@ export class EccRpcRuntimeService {
           operationId,
           ...metadata,
           type: 'operation.failed',
+          workspaceDirectory: runtimeDirectory ?? undefined,
           workspaceHandle,
         })
         throw normalized
@@ -409,6 +511,8 @@ export class EccRpcRuntimeService {
           ? {
               ...event,
               interruptedOperationId: inFlight.operationId,
+              workspaceDirectory:
+                this.runtimeDirectoryForHandle(inFlight.workspaceHandle) ?? undefined,
               workspaceHandle: inFlight.workspaceHandle,
             }
           : event,

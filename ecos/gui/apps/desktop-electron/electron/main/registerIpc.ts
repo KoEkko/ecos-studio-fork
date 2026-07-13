@@ -6,7 +6,8 @@ import {
   type IpcMain,
   type IpcMainInvokeEvent,
 } from 'electron'
-import { stat } from 'node:fs/promises'
+import { mkdir, stat } from 'node:fs/promises'
+import { dirname } from 'node:path'
 import {
   desktopApiEventChannels,
   desktopApiIpcChannels,
@@ -18,11 +19,14 @@ import {
   type EccFlowRunStepRequest,
   type EccRuntimeEvent,
   type EccWorkspaceCreateRequest,
+  type EccWorkspaceExportSignoffRequest,
   type EccWorkspaceHandleRequest,
   type EccWorkspaceInfoRequest,
   type EccWorkspaceOpenRequest,
   type EccWorkspaceSyncConfigRequest,
   type DesktopFileDialogOptions,
+  type DesktopMenuEventId,
+  type DesktopSaveFileDialogOptions,
   type DesktopRtlSourceDialogOptions,
   type PickedRtlSources,
   type DesktopProjectTextFileTail,
@@ -59,6 +63,7 @@ import {
   toggleMaximizeWindow,
 } from '../services/windowService'
 import { electronLogger } from '../services/logger'
+import { setMenuActionEnabled } from '../services/menuService'
 
 export type IpcMainLike = Pick<IpcMain, 'handle'>
 
@@ -178,6 +183,8 @@ export interface DesktopBridgeServices {
   eccRuntimeService: {
     closeWorkspace(request: EccWorkspaceHandleRequest): Promise<unknown>
     createWorkspace(request: EccWorkspaceCreateRequest): Promise<unknown>
+    exportSignoff(request: EccWorkspaceExportSignoffRequest): Promise<unknown>
+    inspectSignoff(request: EccWorkspaceHandleRequest): Promise<unknown>
     onEvent(listener: (event: EccRuntimeEvent) => void): () => void
     openWorkspace(request: EccWorkspaceOpenRequest): Promise<unknown>
     refreshConfig(request: EccWorkspaceHandleRequest): Promise<unknown>
@@ -341,6 +348,20 @@ async function pickFiles(options?: DesktopFileDialogOptions): Promise<string[] |
   return filePaths.length > 0 ? filePaths : null
 }
 
+async function saveFile(
+  event: IpcMainInvokeEvent,
+  options?: DesktopSaveFileDialogOptions,
+): Promise<string | null> {
+  const { ensureDirectory, ...dialogOptions } = options ?? {}
+  if (ensureDirectory && dialogOptions.defaultPath) {
+    await mkdir(dirname(dialogOptions.defaultPath), { recursive: true })
+  }
+
+  const result = await dialog.showSaveDialog(getEventWindow(event), dialogOptions)
+
+  return result.canceled ? null : (result.filePath ?? null)
+}
+
 async function classifyLocalPaths(paths: string[]): Promise<PickedRtlSources> {
   const files: string[] = []
   const directories: string[] = []
@@ -415,6 +436,14 @@ export function registerIpc(
       onDestroyed: () => void
     }
   >()
+  const workspaceHandleSubscriptions = new Map<
+    string,
+    {
+      sender: IpcMainInvokeEvent['sender']
+      onDestroyed: () => void
+    }
+  >()
+  const workspaceHandleClosePromises = new Map<string, Promise<unknown>>()
 
   services.eccRuntimeService.onEvent((payload) => {
     for (const window of BrowserWindow.getAllWindows()) {
@@ -465,6 +494,69 @@ export function registerIpc(
     await services.shellService.kill(sessionId)
   }
 
+  const closeTrackedWorkspaceHandle = async (
+    workspaceHandle: string,
+  ): Promise<unknown> => {
+    const existingClose = workspaceHandleClosePromises.get(workspaceHandle)
+    if (existingClose) {
+      return await existingClose
+    }
+
+    const subscription = workspaceHandleSubscriptions.get(workspaceHandle)
+    if (subscription) {
+      workspaceHandleSubscriptions.delete(workspaceHandle)
+      if (typeof subscription.sender.off === 'function') {
+        subscription.sender.off('destroyed', subscription.onDestroyed)
+      }
+    }
+
+    const closePromise = Promise.resolve().then(() =>
+      services.eccRuntimeService.closeWorkspace({ workspaceHandle }),
+    )
+    const trackedClosePromise = closePromise.finally(() => {
+      workspaceHandleClosePromises.delete(workspaceHandle)
+    })
+    workspaceHandleClosePromises.set(workspaceHandle, trackedClosePromise)
+    return await trackedClosePromise
+  }
+
+  const trackWorkspaceHandle = (
+    sender: IpcMainInvokeEvent['sender'],
+    workspaceHandle: string,
+  ): void => {
+    if (!workspaceHandle || workspaceHandleClosePromises.has(workspaceHandle)) {
+      return
+    }
+
+    const previous = workspaceHandleSubscriptions.get(workspaceHandle)
+    if (previous && typeof previous.sender.off === 'function') {
+      previous.sender.off('destroyed', previous.onDestroyed)
+    }
+
+    const onDestroyed = (): void => {
+      void closeTrackedWorkspaceHandle(workspaceHandle)
+    }
+    workspaceHandleSubscriptions.set(workspaceHandle, {
+      sender,
+      onDestroyed,
+    })
+    if (typeof sender.once === 'function') {
+      sender.once('destroyed', onDestroyed)
+    }
+
+    const isDestroyed =
+      typeof sender.isDestroyed === 'function' ? sender.isDestroyed() : false
+    if (isDestroyed) {
+      onDestroyed()
+    }
+  }
+
+  const workspaceHandleFromResult = (result: unknown): string | null => {
+    if (typeof result !== 'object' || result === null) return null
+    if (!('workspaceHandle' in result)) return null
+    return typeof result.workspaceHandle === 'string' ? result.workspaceHandle : null
+  }
+
   handle(desktopApiIpcChannels.appGetVersions, async () => {
     return await services.appInfoService.getVersions()
   })
@@ -491,6 +583,10 @@ export function registerIpc(
 
   handle(desktopApiIpcChannels.windowIsMaximized, (event) => {
     return isWindowMaximized(getEventWindow(event))
+  })
+
+  handle(desktopApiIpcChannels.menuSetActionEnabled, (_event, action, enabled) => {
+    setMenuActionEnabled(action as DesktopMenuEventId, enabled as boolean)
   })
 
   handle(desktopApiIpcChannels.settingsGet, async (_event, key) => {
@@ -533,6 +629,10 @@ export function registerIpc(
 
   handle(desktopApiIpcChannels.dialogPickRtlSources, async (_event, options) => {
     return await pickRtlSources(options as DesktopRtlSourceDialogOptions | undefined)
+  })
+
+  handle(desktopApiIpcChannels.dialogSaveFile, async (event, options) => {
+    return await saveFile(event, options as DesktopSaveFileDialogOptions | undefined)
   })
 
   handle(desktopApiIpcChannels.workspaceIsProjectDirectory, async (_event, path) => {
@@ -878,22 +978,31 @@ export function registerIpc(
     return await services.eccRuntimeService.rpcShutdown()
   })
 
-  handle(desktopApiIpcChannels.eccWorkspaceCreate, async (_event, request) => {
-    return await services.eccRuntimeService.createWorkspace(
+  handle(desktopApiIpcChannels.eccWorkspaceCreate, async (event, request) => {
+    const result = await services.eccRuntimeService.createWorkspace(
       request as EccWorkspaceCreateRequest,
     )
+    const workspaceHandle = workspaceHandleFromResult(result)
+    if (workspaceHandle) {
+      trackWorkspaceHandle(event.sender, workspaceHandle)
+    }
+    return result
   })
 
-  handle(desktopApiIpcChannels.eccWorkspaceOpen, async (_event, request) => {
-    return await services.eccRuntimeService.openWorkspace(
+  handle(desktopApiIpcChannels.eccWorkspaceOpen, async (event, request) => {
+    const result = await services.eccRuntimeService.openWorkspace(
       request as EccWorkspaceOpenRequest,
     )
+    const workspaceHandle = workspaceHandleFromResult(result)
+    if (workspaceHandle) {
+      trackWorkspaceHandle(event.sender, workspaceHandle)
+    }
+    return result
   })
 
   handle(desktopApiIpcChannels.eccWorkspaceClose, async (_event, request) => {
-    return await services.eccRuntimeService.closeWorkspace(
-      request as EccWorkspaceHandleRequest,
-    )
+    const closeRequest = request as EccWorkspaceHandleRequest
+    return await closeTrackedWorkspaceHandle(closeRequest.workspaceHandle)
   })
 
   handle(desktopApiIpcChannels.eccWorkspaceHome, async (_event, request) => {
@@ -922,6 +1031,18 @@ export function registerIpc(
 
   handle(desktopApiIpcChannels.eccWorkspaceResetFlow, async (_event, request) => {
     return await services.eccRuntimeService.resetFlow(
+      request as EccWorkspaceHandleRequest,
+    )
+  })
+
+  handle(desktopApiIpcChannels.eccWorkspaceExportSignoff, async (_event, request) => {
+    return await services.eccRuntimeService.exportSignoff(
+      request as EccWorkspaceExportSignoffRequest,
+    )
+  })
+
+  handle(desktopApiIpcChannels.eccWorkspaceInspectSignoff, async (_event, request) => {
+    return await services.eccRuntimeService.inspectSignoff(
       request as EccWorkspaceHandleRequest,
     )
   })

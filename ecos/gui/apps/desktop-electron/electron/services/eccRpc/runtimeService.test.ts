@@ -1,4 +1,7 @@
-import type { EccRuntimeEvent } from '@ecos-studio/shared'
+import type {
+  EccRuntimeEvent,
+  EccWorkspaceInspectSignoffResult,
+} from '@ecos-studio/shared'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -6,6 +9,7 @@ import {
   type EccRpcRuntimeClient,
   type EccRpcRuntimeSidecar,
 } from './runtimeService'
+import { EccJsonRpcError } from './jsonRpcClient'
 
 interface RpcCall {
   method: string
@@ -92,6 +96,179 @@ function createService() {
 }
 
 describe('EccRpcRuntimeService', () => {
+  it('forwards the wizard flow range when creating a workspace', async () => {
+    const { client, service } = createService()
+    client.responses.push(
+      { capabilities: [], eccVersion: '0.1.0', version: 1 },
+      { directory: '/work/demo', workspaceId: 'workspace-1' },
+    )
+    const flowConfig = {
+      start_step: 'Synthesis',
+      end_step: 'Harden',
+      steps: ['Synthesis', 'RCX', 'sta', 'Harden'],
+    }
+
+    await service.createWorkspace({
+      directory: '/work/demo',
+      flowConfig,
+      pdkJson: '/pdks/ics55/pdk.json',
+      sdc: '/constraints/top.sdc',
+    })
+
+    expect(client.calls.at(-1)).toEqual({
+      method: 'workspace.create',
+      params: expect.objectContaining({
+        flowConfig,
+        pdkJson: '/pdks/ics55/pdk.json',
+        sdc: '/constraints/top.sdc',
+      }),
+    })
+  })
+
+  it('omits empty flowConfig when creating a workspace', async () => {
+    const { client, service } = createService()
+    client.responses.push(
+      { capabilities: [], eccVersion: '0.1.0', version: 1 },
+      { directory: '/work/demo', workspaceId: 'workspace-1' },
+    )
+
+    await service.createWorkspace({
+      directory: '/work/demo',
+      flowConfig: {},
+      pdkJson: '/pdks/ics55/pdk.json',
+    })
+
+    expect(client.calls.at(-1)).toEqual({
+      method: 'workspace.create',
+      params: expect.not.objectContaining({
+        flowConfig: expect.anything(),
+      }),
+    })
+  })
+
+  it('retries workspace creation without sdc when an older runtime rejects the field', async () => {
+    const { client, service } = createService()
+    client.responses.push(
+      { capabilities: [], eccVersion: '0.1.0a5', version: 1 },
+      new EccJsonRpcError(-32602, 'invalid_request', {
+        message: 'unknown field: sdc',
+      }),
+      { directory: '/work/demo', workspaceId: 'workspace-1' },
+    )
+
+    await expect(
+      service.createWorkspace({
+        directory: '/work/demo',
+        pdkJson: '/pdks/ics55/pdk.json',
+        sdc: '/constraints/top.sdc',
+      }),
+    ).resolves.toEqual({
+      directory: '/work/demo',
+      workspaceHandle: expect.stringMatching(/^workspace-/),
+    })
+
+    expect(client.calls.at(-2)).toEqual({
+      method: 'workspace.create',
+      params: expect.objectContaining({
+        pdkJson: '/pdks/ics55/pdk.json',
+        sdc: '/constraints/top.sdc',
+      }),
+    })
+    expect(client.calls.at(-1)).toEqual({
+      method: 'workspace.create',
+      params: expect.not.objectContaining({
+        sdc: expect.anything(),
+      }),
+    })
+  })
+
+  it('retries workspace creation without flowConfig and sdc for older runtimes', async () => {
+    const { client, service } = createService()
+    client.responses.push(
+      { capabilities: [], eccVersion: '0.1.0a4', version: 1 },
+      new EccJsonRpcError(-32602, 'invalid_request', {
+        message: 'unknown field: flowConfig',
+      }),
+      new EccJsonRpcError(-32602, 'invalid_request', {
+        message: 'unknown field: sdc',
+      }),
+      { directory: '/work/demo', workspaceId: 'workspace-1' },
+    )
+    const flowConfig = {
+      start_step: 'Synthesis',
+      end_step: 'Harden',
+      steps: ['Synthesis', 'RCX', 'sta', 'Harden'],
+    }
+
+    await expect(
+      service.createWorkspace({
+        directory: '/work/demo',
+        flowConfig,
+        pdkJson: '/pdks/ics55/pdk.json',
+        sdc: '/constraints/top.sdc',
+      }),
+    ).resolves.toEqual({
+      directory: '/work/demo',
+      workspaceHandle: expect.stringMatching(/^workspace-/),
+    })
+
+    expect(client.calls.at(-3)).toEqual({
+      method: 'workspace.create',
+      params: expect.objectContaining({
+        flowConfig,
+        sdc: '/constraints/top.sdc',
+      }),
+    })
+    expect(client.calls.at(-2)).toEqual({
+      method: 'workspace.create',
+      params: expect.not.objectContaining({
+        flowConfig: expect.anything(),
+      }),
+    })
+    expect(client.calls.at(-2)?.params).toEqual(
+      expect.objectContaining({
+        sdc: '/constraints/top.sdc',
+      }),
+    )
+    expect(client.calls.at(-1)).toEqual({
+      method: 'workspace.create',
+      params: expect.not.objectContaining({
+        flowConfig: expect.anything(),
+        sdc: expect.anything(),
+      }),
+    })
+  })
+
+  it('retries workspace creation without the default sdc field for older runtimes', async () => {
+    const { client, service } = createService()
+    client.responses.push(
+      { capabilities: [], eccVersion: '0.1.0a5', version: 1 },
+      new EccJsonRpcError(-32602, 'invalid_request', {
+        message: 'unknown field: sdc',
+      }),
+      { directory: '/work/demo', workspaceId: 'workspace-1' },
+    )
+
+    await service.createWorkspace({
+      directory: '/work/demo',
+      pdkJson: '/pdks/ics55/pdk.json',
+    })
+
+    expect(client.calls.at(-2)).toEqual({
+      method: 'workspace.create',
+      params: expect.objectContaining({
+        pdkJson: '/pdks/ics55/pdk.json',
+        sdc: '',
+      }),
+    })
+    expect(client.calls.at(-1)).toEqual({
+      method: 'workspace.create',
+      params: expect.not.objectContaining({
+        sdc: expect.anything(),
+      }),
+    })
+  })
+
   it('lazy-starts the sidecar, performs rpc.hello, and opens workspaces', async () => {
     const { client, events, service, sidecar } = createService()
     client.responses.push(
@@ -141,6 +318,70 @@ describe('EccRpcRuntimeService', () => {
     })
   })
 
+  it('exports signoff through the stored ECC workspace id and preserves the output path', async () => {
+    const { client, service } = createService()
+    client.responses.push(
+      { capabilities: [], eccVersion: '0.1.0', version: 1 },
+      { directory: '/work/demo', workspaceId: 'workspace-1' },
+      { outputPath: '/exports/custom package.tar.gz' },
+    )
+
+    const workspace = await service.openWorkspace({ directory: '/work/demo' })
+    await expect(
+      service.exportSignoff({
+        outputPath: '/exports/custom package.tar.gz',
+        workspaceHandle: workspace.workspaceHandle,
+      }),
+    ).resolves.toEqual({ outputPath: '/exports/custom package.tar.gz' })
+
+    expect(client.calls.at(-1)).toEqual({
+      method: 'workspace.export_signoff',
+      options: { timeoutMs: 0 },
+      params: {
+        outputPath: '/exports/custom package.tar.gz',
+        workspaceId: 'workspace-1',
+      },
+    })
+  })
+
+  it('inspects signoff through the stored ECC workspace id', async () => {
+    const { client, service } = createService()
+    const review: EccWorkspaceInspectSignoffResult = {
+      groups: [],
+      risks: [
+        {
+          details: [
+            {
+              kind: 'resource',
+              label: 'Harden GDS',
+              location: 'Harden_ecc/output/gcd_Harden.gds',
+              reason: 'Required file is missing or empty',
+            },
+          ],
+          severity: 'blocked',
+          summary: '1 required resource missing',
+          title: 'Harden resources missing',
+        },
+      ],
+      status: 'blocked',
+    }
+    client.responses.push(
+      { capabilities: [], eccVersion: '0.1.0', version: 1 },
+      { directory: '/work/demo', workspaceId: 'workspace-1' },
+      review,
+    )
+
+    const workspace = await service.openWorkspace({ directory: '/work/demo' })
+    await expect(
+      service.inspectSignoff({ workspaceHandle: workspace.workspaceHandle }),
+    ).resolves.toEqual(review)
+
+    expect(client.calls.at(-1)).toEqual({
+      method: 'workspace.inspect_signoff',
+      params: { workspaceId: 'workspace-1' },
+    })
+  })
+
   it('emits rerun metadata when a full flow rerun starts', async () => {
     const { client, events, service } = createService()
     client.responses.push(
@@ -160,9 +401,34 @@ describe('EccRpcRuntimeService', () => {
         method: 'flow.run',
         rerun: true,
         type: 'operation.started',
+        workspaceDirectory: '/work/demo',
         workspaceHandle: workspace.workspaceHandle,
       }),
     )
+  })
+
+  it('cleans runtime activity tracking when an operation-started listener throws', async () => {
+    const { client, service } = createService()
+    client.responses.push(
+      { capabilities: [], eccVersion: '0.1.0', version: 1 },
+      { directory: '/work/demo', workspaceId: 'workspace-1' },
+    )
+
+    const workspace = await service.openWorkspace({ directory: '/work/demo' })
+    service.onEvent((event) => {
+      if (event.type === 'operation.started' && event.method === 'flow.run') {
+        throw new Error('listener failed')
+      }
+    })
+
+    await expect(
+      service.runFlow({
+        rerun: false,
+        workspaceHandle: workspace.workspaceHandle,
+      }),
+    ).rejects.toThrow('listener failed')
+
+    expect(service.isWorkspaceRuntimeActive('/work/demo')).toBe(false)
   })
 
   it('serializes all RPC operations through a global queue', async () => {
@@ -244,6 +510,7 @@ describe('EccRpcRuntimeService', () => {
         interruptedOperationId: started?.operationId,
         reason: 'unexpected',
         type: 'runtime.exited',
+        workspaceDirectory: '/work/demo',
         workspaceHandle: workspace.workspaceHandle,
       }),
     )
