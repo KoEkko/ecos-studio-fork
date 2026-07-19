@@ -54,10 +54,10 @@ async function loadDesktopBridge() {
     workspace: {
       readProjectTextFile(path: string): Promise<unknown>
       listProjectDirectory(path: string): Promise<unknown>
-      removeProjectDirectory(path: string): Promise<unknown>
       prepareProjectDirectoryReplacement(path: string): Promise<unknown>
-      restoreProjectDirectoryReplacement(replacement: unknown): Promise<unknown>
-      finalizeProjectDirectoryReplacement(replacement: unknown): Promise<unknown>
+      restoreProjectDirectoryReplacement(replacementId: string): Promise<unknown>
+      finalizeProjectDirectoryReplacement(replacementId: string): Promise<unknown>
+      retainProjectDirectoryReplacement(replacementId: string): Promise<unknown>
     }
   }
 }
@@ -102,8 +102,8 @@ describe('preload desktop bridge contract', () => {
     ipcRenderer.invoke.mockResolvedValueOnce([
       { name: 'top.v', path: '/work/demo/origin/top.v', type: 'file' },
     ])
-    ipcRenderer.invoke.mockResolvedValueOnce(undefined)
     ipcRenderer.invoke.mockResolvedValueOnce({
+      id: 'replacement-demo-1',
       targetPath: '/work/demo',
       backupPath: '/work/.demo.replace-backup',
     })
@@ -117,10 +117,8 @@ describe('preload desktop bridge contract', () => {
     await expect(
       bridge.workspace.listProjectDirectory('/work/demo/origin'),
     ).resolves.toEqual([{ name: 'top.v', path: '/work/demo/origin/top.v', type: 'file' }])
-    await expect(
-      bridge.workspace.removeProjectDirectory('ws_0001'),
-    ).resolves.toBeUndefined()
     const replacement = {
+      id: 'replacement-demo-1',
       targetPath: '/work/demo',
       backupPath: '/work/.demo.replace-backup',
     }
@@ -128,10 +126,13 @@ describe('preload desktop bridge contract', () => {
       bridge.workspace.prepareProjectDirectoryReplacement('/work/demo'),
     ).resolves.toEqual(replacement)
     await expect(
-      bridge.workspace.restoreProjectDirectoryReplacement(replacement),
+      bridge.workspace.restoreProjectDirectoryReplacement(replacement.id),
     ).resolves.toBeUndefined()
     await expect(
-      bridge.workspace.finalizeProjectDirectoryReplacement(replacement),
+      bridge.workspace.finalizeProjectDirectoryReplacement(replacement.id),
+    ).resolves.toBeUndefined()
+    await expect(
+      bridge.workspace.retainProjectDirectoryReplacement(replacement.id),
     ).resolves.toBeUndefined()
 
     expect(ipcRenderer.invoke).toHaveBeenNthCalledWith(
@@ -150,23 +151,23 @@ describe('preload desktop bridge contract', () => {
     )
     expect(ipcRenderer.invoke).toHaveBeenNthCalledWith(
       4,
-      desktopApiIpcChannels.workspaceRemoveProjectDirectory,
-      'ws_0001',
-    )
-    expect(ipcRenderer.invoke).toHaveBeenNthCalledWith(
-      5,
       desktopApiIpcChannels.workspacePrepareProjectDirectoryReplacement,
       '/work/demo',
     )
     expect(ipcRenderer.invoke).toHaveBeenNthCalledWith(
-      6,
+      5,
       desktopApiIpcChannels.workspaceRestoreProjectDirectoryReplacement,
-      replacement,
+      replacement.id,
+    )
+    expect(ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      6,
+      desktopApiIpcChannels.workspaceFinalizeProjectDirectoryReplacement,
+      replacement.id,
     )
     expect(ipcRenderer.invoke).toHaveBeenNthCalledWith(
       7,
-      desktopApiIpcChannels.workspaceFinalizeProjectDirectoryReplacement,
-      replacement,
+      desktopApiIpcChannels.workspaceRetainProjectDirectoryReplacement,
+      replacement.id,
     )
   })
 

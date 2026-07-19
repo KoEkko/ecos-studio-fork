@@ -19,6 +19,10 @@ import type {
 import type { RemoteContentApi } from './remoteContent.ts'
 import type { EccRuntimeApi } from './eccRuntime.ts'
 import type {
+  ProjectManifestMutationRequest,
+  ProjectManifestMutationResult,
+} from '../utils/projectManifest.ts'
+import type {
   DesktopEventUnsubscribe,
   DesktopMenuEventId,
   DesktopProjectFileChangedEvent,
@@ -140,6 +144,7 @@ export interface LayoutViewerOpenResult {
 }
 
 export interface WorkspaceDirectoryReplacement {
+  id: string
   targetPath: string
   backupPath: string
 }
@@ -174,6 +179,11 @@ export interface DesktopApi {
     delete(key: string): Promise<void>
   }
   remoteContent: RemoteContentApi
+  projectManifest: {
+    mutate(
+      request: ProjectManifestMutationRequest,
+    ): Promise<ProjectManifestMutationResult>
+  }
   dialog: {
     pickDirectory(options?: DesktopDirectoryDialogOptions): Promise<string | null>
     pickFiles(options?: DesktopFileDialogOptions): Promise<string[] | null>
@@ -207,16 +217,12 @@ export interface DesktopApi {
     readProjectBinaryFile(path: string): Promise<Uint8Array>
     writeProjectTextFile(path: string, content: string): Promise<void>
     listProjectDirectory(path: string): Promise<DesktopProjectDirectoryEntry[]>
-    removeProjectDirectory(path: string): Promise<void>
     prepareProjectDirectoryReplacement(
       path: string,
     ): Promise<WorkspaceDirectoryReplacement | null>
-    restoreProjectDirectoryReplacement(
-      replacement: WorkspaceDirectoryReplacement,
-    ): Promise<void>
-    finalizeProjectDirectoryReplacement(
-      replacement: WorkspaceDirectoryReplacement,
-    ): Promise<void>
+    restoreProjectDirectoryReplacement(replacementId: string): Promise<void>
+    finalizeProjectDirectoryReplacement(replacementId: string): Promise<void>
+    retainProjectDirectoryReplacement(replacementId: string): Promise<void>
     scanPdkDirectory(path: string): Promise<ScannedPdkDirectory>
     scanRtlDirectory(path: string): Promise<ScannedRtlDirectory>
     listDesignFiles(): Promise<WorkspaceDesignFileEntry[]>
