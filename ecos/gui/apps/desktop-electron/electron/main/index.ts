@@ -16,6 +16,7 @@ import { LayoutViewerService } from '../services/layoutViewerService'
 import { configureElectronLoggerFile, electronLogger } from '../services/logger'
 import { registerApplicationMenu } from '../services/menuService'
 import { ProjectScopeService } from '../services/projectScopeService'
+import { ProjectManifestService } from '../services/projectManifestService'
 import { RemoteContentService } from '../services/remoteContentService'
 import { ResourceManagerService } from '../services/resourceManagerService'
 import { SettingsStore } from '../services/settingsStore'
@@ -25,10 +26,13 @@ import { WorkspaceResourceService } from '../services/workspaceResourceService'
 import { WorkspaceService } from '../services/workspaceService'
 
 let ipcRegistered = false
+let workspaceReplacementRecoveryComplete = false
+let workspaceReplacementRecovery: Promise<void> | null = null
 let services: {
   appInfoService: AppInfoService
   eccRuntimeService: EccRpcRuntimeService
   remoteContentService: RemoteContentService
+  projectManifestService: ProjectManifestService
   settingsStore: SettingsStore
   resourceManagerService: ResourceManagerService
   layoutViewerService: LayoutViewerService
@@ -122,8 +126,13 @@ function getDesktopServices() {
   })
   const workspaceService = new WorkspaceService({
     projectScopeProvider: projectScopeService,
+    replacementJournalDirectory: join(app.getPath('userData'), 'workspace-replacements'),
     runtimeMutationGuard: eccRuntimeService,
   })
+  const projectManifestService = new ProjectManifestService(
+    projectScopeService,
+    workspaceService,
+  )
   const shellService = new ShellPtyService({
     env: runtimeEnv,
     envProvider: runtimeEnvProvider,
@@ -141,6 +150,7 @@ function getDesktopServices() {
     appInfoService,
     eccRuntimeService,
     remoteContentService,
+    projectManifestService,
     resourceManagerService,
     layoutViewerService,
     settingsStore,
@@ -154,12 +164,22 @@ function getDesktopServices() {
 
 async function launchMainWindow(): Promise<void> {
   const desktopServices = getDesktopServices()
+  if (!workspaceReplacementRecoveryComplete) {
+    workspaceReplacementRecovery ??= desktopServices.workspaceService
+      .recoverProjectDirectoryReplacements()
+      .catch((error) => {
+        electronLogger.error('[desktop] Failed to recover workspace replacements', error)
+      })
+    await workspaceReplacementRecovery
+    workspaceReplacementRecoveryComplete = true
+  }
 
   if (!ipcRegistered) {
     registerIpc(undefined, {
       appInfoService: desktopServices.appInfoService,
       eccRuntimeService: desktopServices.eccRuntimeService,
       remoteContentService: desktopServices.remoteContentService,
+      projectManifestService: desktopServices.projectManifestService,
       resourceManagerService: desktopServices.resourceManagerService,
       layoutViewerService: desktopServices.layoutViewerService,
       settingsStore: desktopServices.settingsStore,

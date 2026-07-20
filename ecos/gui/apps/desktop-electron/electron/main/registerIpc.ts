@@ -29,6 +29,8 @@ import {
   type DesktopSaveFileDialogOptions,
   type DesktopRtlSourceDialogOptions,
   type PickedRtlSources,
+  type ProjectManifestMutationRequest,
+  type ProjectManifestMutationResult,
   type DesktopProjectTextFileTail,
   type DesktopProjectTextFileUpdate,
   type DesktopSettingsValue,
@@ -78,6 +80,10 @@ interface DesktopBridgeErrorResult {
   ok: false
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 export interface DesktopBridgeServices {
   appInfoService: {
     getVersions(): Promise<VersionInfo>
@@ -93,6 +99,11 @@ export interface DesktopBridgeServices {
     listFiles(request: RemoteContentListFilesRequest): Promise<RemoteContentFile[]>
     readTextFile(request: RemoteContentReadTextFileRequest): Promise<string>
     readJsonFile<T = unknown>(request: RemoteContentReadJsonFileRequest): Promise<T>
+  }
+  projectManifestService: {
+    mutate(
+      request: ProjectManifestMutationRequest,
+    ): Promise<ProjectManifestMutationResult>
   }
   workspaceService: {
     clearProjectRoot(): Promise<void>
@@ -130,16 +141,12 @@ export interface DesktopBridgeServices {
     removeDesignFile(
       filelistEntry: string,
     ): Promise<import('@ecos-studio/shared').WorkspaceDesignFileEntry | null>
-    removeProjectDirectory(path: string): Promise<void>
     prepareProjectDirectoryReplacement(
       path: string,
     ): Promise<WorkspaceDirectoryReplacement | null>
-    restoreProjectDirectoryReplacement(
-      replacement: WorkspaceDirectoryReplacement,
-    ): Promise<void>
-    finalizeProjectDirectoryReplacement(
-      replacement: WorkspaceDirectoryReplacement,
-    ): Promise<void>
+    restoreProjectDirectoryReplacement(replacementId: string): Promise<void>
+    finalizeProjectDirectoryReplacement(replacementId: string): Promise<void>
+    retainProjectDirectoryReplacement(replacementId: string): Promise<void>
     unwatchProjectFile(subscriptionId: string): Promise<void>
     unsubscribeProjectLogTail(subscriptionId: string): Promise<void>
     watchProjectFile(
@@ -619,6 +626,20 @@ export function registerIpc(
     )
   })
 
+  handle(desktopApiIpcChannels.projectManifestMutate, async (_event, request) => {
+    if (!isRecord(request))
+      throw new Error('Project manifest mutation request must be an object')
+    if (typeof request.projectRoot !== 'string') {
+      throw new Error('Project manifest mutation projectRoot must be a string')
+    }
+    if (!isRecord(request.mutation) || typeof request.mutation.type !== 'string') {
+      throw new Error('Project manifest mutation must include a type')
+    }
+    return await services.projectManifestService.mutate(
+      request as unknown as ProjectManifestMutationRequest,
+    )
+  })
+
   handle(desktopApiIpcChannels.dialogPickDirectory, async (_event, options) => {
     return await pickDirectory(options as DesktopDirectoryDialogOptions | undefined)
   })
@@ -756,10 +777,6 @@ export function registerIpc(
     return await services.workspaceService.listProjectDirectory(path as string)
   })
 
-  handle(desktopApiIpcChannels.workspaceRemoveProjectDirectory, async (_event, path) => {
-    await services.workspaceService.removeProjectDirectory(path as string)
-  })
-
   handle(
     desktopApiIpcChannels.workspacePrepareProjectDirectoryReplacement,
     async (_event, path) => {
@@ -771,19 +788,31 @@ export function registerIpc(
 
   handle(
     desktopApiIpcChannels.workspaceRestoreProjectDirectoryReplacement,
-    async (_event, replacement) => {
-      await services.workspaceService.restoreProjectDirectoryReplacement(
-        replacement as WorkspaceDirectoryReplacement,
-      )
+    async (_event, replacementId) => {
+      if (typeof replacementId !== 'string') {
+        throw new Error('Workspace replacement id must be a string')
+      }
+      await services.workspaceService.restoreProjectDirectoryReplacement(replacementId)
     },
   )
 
   handle(
     desktopApiIpcChannels.workspaceFinalizeProjectDirectoryReplacement,
-    async (_event, replacement) => {
-      await services.workspaceService.finalizeProjectDirectoryReplacement(
-        replacement as WorkspaceDirectoryReplacement,
-      )
+    async (_event, replacementId) => {
+      if (typeof replacementId !== 'string') {
+        throw new Error('Workspace replacement id must be a string')
+      }
+      await services.workspaceService.finalizeProjectDirectoryReplacement(replacementId)
+    },
+  )
+
+  handle(
+    desktopApiIpcChannels.workspaceRetainProjectDirectoryReplacement,
+    async (_event, replacementId) => {
+      if (typeof replacementId !== 'string') {
+        throw new Error('Workspace replacement id must be a string')
+      }
+      await services.workspaceService.retainProjectDirectoryReplacement(replacementId)
     },
   )
 
