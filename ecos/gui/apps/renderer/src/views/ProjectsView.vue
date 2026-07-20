@@ -432,8 +432,8 @@
           <h2 id="delete-workspace-title">Delete Workspace</h2>
         </header>
         <p class="modal-help">
-          Delete {{ pendingDeleteWorkspaceId }} from project.json and remove its workspace
-          folder. Keep workspace data is unchecked by default.
+          Remove {{ pendingDeleteWorkspaceId }} from project.json. Keep workspace data is
+          checked by default.
         </p>
         <label class="workspace-delete-option">
           <input v-model="keepWorkspaceDataOnDelete" type="checkbox" />
@@ -564,7 +564,7 @@ const hasOpenedStepAnalysis = ref(false)
 const branchDraft = ref<BranchDraft | null>(null)
 const popoverWorkspaceId = ref('')
 const pendingDeleteWorkspaceId = ref<string | null>(null)
-const keepWorkspaceDataOnDelete = ref(false)
+const keepWorkspaceDataOnDelete = ref(true)
 const pendingDeleteProject = ref<Project | null>(null)
 const isDialogMaximized = ref(false)
 const projectHistory = ref<Project[]>([])
@@ -1022,12 +1022,12 @@ async function createWorkspaceForProject(project: ProjectManagementProject) {
 
 function requestDeleteWorkspace(workspaceId: string) {
   pendingDeleteWorkspaceId.value = workspaceId
-  keepWorkspaceDataOnDelete.value = false
+  keepWorkspaceDataOnDelete.value = true
 }
 
 function closeDeleteWorkspaceDialog() {
   pendingDeleteWorkspaceId.value = null
-  keepWorkspaceDataOnDelete.value = false
+  keepWorkspaceDataOnDelete.value = true
 }
 
 async function confirmDeleteWorkspace() {
