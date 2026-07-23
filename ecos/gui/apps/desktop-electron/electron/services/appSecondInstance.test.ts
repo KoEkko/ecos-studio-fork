@@ -1,8 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import {
-  extractWorkspacePathFromArgv,
-  handleSecondInstance,
-} from './appSecondInstance'
+import { extractWorkspacePathFromArgv, handleSecondInstance } from './appSecondInstance'
 
 describe('extractWorkspacePathFromArgv', () => {
   it('returns the last absolute path-like argument after the executable', () => {

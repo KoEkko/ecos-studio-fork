@@ -43,10 +43,7 @@ export interface CreateMainWindowOptions {
   openWorkspacePath?: string
 }
 
-function resolveHashRoute(
-  initialRoute = '/',
-  openWorkspacePath?: string,
-): string {
+function resolveHashRoute(initialRoute = '/', openWorkspacePath?: string): string {
   const trimmed = initialRoute.trim() || '/'
   const withLeadingSlash = trimmed.startsWith('/') ? trimmed : `/${trimmed}`
   if (!openWorkspacePath?.trim()) {

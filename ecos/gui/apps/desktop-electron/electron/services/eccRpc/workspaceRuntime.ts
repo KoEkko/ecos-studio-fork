@@ -538,9 +538,7 @@ export class EccWorkspaceRuntime {
             }
           : {
               ...event,
-              ...(this.boundDirectory
-                ? { workspaceDirectory: this.boundDirectory }
-                : {}),
+              ...(this.boundDirectory ? { workspaceDirectory: this.boundDirectory } : {}),
             },
       )
       return
@@ -548,9 +546,7 @@ export class EccWorkspaceRuntime {
     if (event.type === 'runtime.stderr') {
       this.emit({
         ...event,
-        ...(this.boundDirectory
-          ? { workspaceDirectory: this.boundDirectory }
-          : {}),
+        ...(this.boundDirectory ? { workspaceDirectory: this.boundDirectory } : {}),
       })
       return
     }

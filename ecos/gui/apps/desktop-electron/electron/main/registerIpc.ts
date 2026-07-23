@@ -294,8 +294,7 @@ function summarizeIpcError(channel: string, args: unknown[], error: unknown): st
 
 function wrapIpcHandler(channel: string, handler: IpcHandler): IpcHandler {
   return async (event, ...args): Promise<unknown | DesktopBridgeErrorResult> => {
-    const windowId =
-      typeof event?.sender?.id === 'number' ? event.sender.id : undefined
+    const windowId = typeof event?.sender?.id === 'number' ? event.sender.id : undefined
     const run = async (): Promise<unknown | DesktopBridgeErrorResult> => {
       try {
         return await handler(event, ...args)
@@ -753,7 +752,10 @@ export function registerIpc(
         caller as WorkspaceWindowLike,
       )
       // Claim the path immediately so a concurrent open in another window focuses us.
-      const claimed = workspaceWindowRegistry.register(path, caller as WorkspaceWindowLike)
+      const claimed = workspaceWindowRegistry.register(
+        path,
+        caller as WorkspaceWindowLike,
+      )
       if (previousPath && previousPath !== claimed) {
         return { action: 'proceed', previousPath }
       }
@@ -876,16 +878,15 @@ export function registerIpc(
 
   handle(desktopApiIpcChannels.workspaceClearProjectRoot, async (event) => {
     const sender = event.sender
-    for (const [subscriptionId, subscription] of [
-      ...projectFileWatchSubscriptions.entries(),
-    ]) {
+    for (const [
+      subscriptionId,
+      subscription,
+    ] of projectFileWatchSubscriptions.entries()) {
       if (subscription.sender === sender) {
         await unwatchProjectFile(subscriptionId)
       }
     }
-    for (const [subscriptionId, subscription] of [
-      ...projectLogTailSubscriptions.entries(),
-    ]) {
+    for (const [subscriptionId, subscription] of projectLogTailSubscriptions.entries()) {
       if (subscription.sender === sender) {
         await unsubscribeProjectLogTail(subscriptionId)
       }

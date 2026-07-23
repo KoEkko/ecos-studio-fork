@@ -244,9 +244,7 @@ if (gotSingleInstanceLock) {
         handleSecondInstance(argv, {
           isWorkspacePath: async (path) => {
             try {
-              return await getDesktopServices().workspaceService.isProjectDirectory(
-                path,
-              )
+              return await getDesktopServices().workspaceService.isProjectDirectory(path)
             } catch {
               return false
             }

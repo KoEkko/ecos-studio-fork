@@ -4,10 +4,12 @@ import {
   normalizeWorkspacePath,
 } from './workspaceWindowRegistry'
 
-function createWindowDouble(overrides: Partial<{
-  destroyed: boolean
-  minimized: boolean
-}> = {}) {
+function createWindowDouble(
+  overrides: Partial<{
+    destroyed: boolean
+    minimized: boolean
+  }> = {},
+) {
   const state = {
     destroyed: overrides.destroyed ?? false,
     minimized: overrides.minimized ?? false,

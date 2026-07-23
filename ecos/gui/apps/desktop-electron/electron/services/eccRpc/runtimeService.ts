@@ -26,9 +26,7 @@ import type {
 } from '@ecos-studio/shared'
 
 import { normalizeWorkspacePath } from '../workspacePath'
-import {
-  WorkspaceSessionNotFoundError,
-} from './workspaceSessions'
+import { WorkspaceSessionNotFoundError } from './workspaceSessions'
 import {
   EccWorkspaceRuntime,
   type EccRpcRuntimeClient,
@@ -130,9 +128,7 @@ export class EccRpcRuntimeService {
     return this.runtimeForHandle(request.workspaceHandle).workspaceHome(request)
   }
 
-  async workspaceInfo(
-    request: EccWorkspaceInfoRequest,
-  ): Promise<EccWorkspaceInfoResult> {
+  async workspaceInfo(request: EccWorkspaceInfoRequest): Promise<EccWorkspaceInfoResult> {
     return this.runtimeForHandle(request.workspaceHandle).workspaceInfo(request)
   }
 

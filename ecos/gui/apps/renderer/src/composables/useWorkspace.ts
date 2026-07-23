@@ -564,10 +564,7 @@ export function useWorkspace() {
       return false
     }
   }
-  const openProject = async (
-    project?: Project,
-    options: { quiet?: boolean } = {},
-  ) => {
+  const openProject = async (project?: Project, options: { quiet?: boolean } = {}) => {
     const quiet = Boolean(options.quiet)
     const openProjectRequestId = ++openProjectRequestSequence
     const isLatestOpenProjectRequest = () =>
@@ -726,10 +723,7 @@ export function useWorkspace() {
 
         currentProject.value = loadedProject
         messageStore.clearMessages()
-        if (
-          claimedAffinityPath &&
-          claimedAffinityPath !== canonicalProjectRoot
-        ) {
+        if (claimedAffinityPath && claimedAffinityPath !== canonicalProjectRoot) {
           await unbindWorkspaceWindow(claimedAffinityPath)
         }
         await bindWorkspaceWindow(canonicalProjectRoot)
@@ -898,8 +892,7 @@ export function useWorkspace() {
         }
         if (claimedCreatePath !== selectedPath) {
           await unbindWorkspaceWindow(claimedCreatePath)
-          const replacementAffinity =
-            await resolveWorkspaceWindowAffinity(selectedPath)
+          const replacementAffinity = await resolveWorkspaceWindowAffinity(selectedPath)
           if (replacementAffinity.action === 'focused') {
             claimedCreatePath = null
             previousCreatePath = null

@@ -95,7 +95,8 @@ export function setMenuActionEnabled(
     state.set(action, enabled)
 
     const focused = BrowserWindow.getFocusedWindow()
-    const targetId = focused?.webContents.id ?? BrowserWindow.getAllWindows()[0]?.webContents.id
+    const targetId =
+      focused?.webContents.id ?? BrowserWindow.getAllWindows()[0]?.webContents.id
     if (targetId === windowId) {
       applyMenuItemEnabled(action, enabled)
     }

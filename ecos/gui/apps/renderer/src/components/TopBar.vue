@@ -363,7 +363,9 @@ const handleClickOutside = (e: MouseEvent) => {
 function isEditableKeyboardTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
   const tag = target.tagName
-  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable
+  return (
+    tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable
+  )
 }
 
 /** Escape 关闭菜单；File 快捷键与菜单文案一致（⇧⌘N / ⌘N / ⌘O） */
