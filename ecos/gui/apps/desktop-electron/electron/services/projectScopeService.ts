@@ -1,6 +1,7 @@
 import { readdir, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, win32 } from 'node:path'
 import type { PdkDetectedFiles, ScannedPdkDirectory } from '@ecos-studio/shared'
+import { requireWindowScopeId } from './windowScopeContext'
 
 const REQUIRED_PROJECT_FILES = ['flow.json', 'parameters.json']
 const PDK_RESOURCE_FILE_EXTENSIONS = ['.lef', '.lib', '.liberty']
@@ -144,41 +145,48 @@ function getPathLeafName(path: string): string | null {
 }
 
 export class ProjectScopeService {
-  private activeProjectRoot: string | null = null
+  private readonly rootsByWindowId = new Map<number, string>()
 
   async resolveProjectRoot(path: string): Promise<string> {
     return await canonicalizeExistingDirectory(path)
   }
 
   async getProjectRoot(): Promise<string> {
-    if (!this.activeProjectRoot) {
+    const root = this.rootsByWindowId.get(requireWindowScopeId())
+    if (!root) {
       throw new Error('Project root is not registered')
     }
 
-    return this.activeProjectRoot
+    return root
   }
 
   async registerProjectRoot(path: string): Promise<string> {
+    const windowId = requireWindowScopeId()
     const canonicalPath = await this.resolveProjectRoot(path)
-    this.activeProjectRoot = canonicalPath
+    this.rootsByWindowId.set(windowId, canonicalPath)
     return canonicalPath
   }
 
   async clearProjectRoot(): Promise<void> {
-    this.activeProjectRoot = null
+    this.rootsByWindowId.delete(requireWindowScopeId())
+  }
+
+  clearWindow(windowId: number): void {
+    this.rootsByWindowId.delete(windowId)
   }
 
   async requestProjectPathAccess(path: string): Promise<string> {
-    if (!this.activeProjectRoot) {
+    const activeProjectRoot = this.rootsByWindowId.get(requireWindowScopeId())
+    if (!activeProjectRoot) {
       throw new Error('Project root is not registered')
     }
 
     const canonicalPath = await canonicalizePotentialPathWithinRoot(
       path,
-      this.activeProjectRoot,
+      activeProjectRoot,
     )
 
-    if (!isWithinRoot(canonicalPath, this.activeProjectRoot)) {
+    if (!isWithinRoot(canonicalPath, activeProjectRoot)) {
       throw new Error(
         `Refusing to grant access outside current project root: ${canonicalPath}`,
       )
