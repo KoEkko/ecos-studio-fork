@@ -153,9 +153,10 @@ export function metricValueClass(state: ProjectMetricPoint['state']): string {
 }
 
 export type MetricTableSortDirection = 'asc' | 'desc'
-export type MetricTableSortKey = 'workspace' | ProjectMetricId
+/** Dashboard metric ids, workspace column, or step-compare metric ids. */
+export type MetricTableSortKey = 'workspace' | ProjectMetricId | (string & {})
 
-const ASCENDING_FIRST_SORT_KEYS = new Set<MetricTableSortKey>([
+const ASCENDING_FIRST_SORT_KEYS = new Set<string>([
   'workspace',
   'drc',
   'runtime',
@@ -170,7 +171,7 @@ export interface MetricTableSortState {
 export interface SortableWorkspaceMetricRow {
   workspaceId: string
   cells: ReadonlyArray<{
-    metric: { id: MetricTableSortKey }
+    metric: { id: string }
     point: Pick<ProjectMetricPoint, 'value'>
   }>
 }
