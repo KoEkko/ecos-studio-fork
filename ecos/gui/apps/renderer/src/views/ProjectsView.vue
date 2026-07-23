@@ -308,7 +308,9 @@
                 <template v-else>
                   <i class="ri-folder-chart-line" aria-hidden="true"></i>
                   <strong>No projects yet</strong>
-                  <span>Import an existing project or create a new one to get started.</span>
+                  <span
+                    >Import an existing project or create a new one to get started.</span
+                  >
                   <div class="empty-state-actions">
                     <button
                       type="button"

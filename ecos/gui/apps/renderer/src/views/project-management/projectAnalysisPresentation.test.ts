@@ -214,10 +214,12 @@ describe('project analysis presentation', () => {
     expect(
       nextMetricSortState({ key: 'frequency', direction: 'desc' }, 'frequency'),
     ).toEqual({ key: 'frequency', direction: 'asc' })
-    expect(metricSortAriaValue({ key: 'frequency', direction: 'desc' }, 'frequency')).toBe(
-      'descending',
+    expect(
+      metricSortAriaValue({ key: 'frequency', direction: 'desc' }, 'frequency'),
+    ).toBe('descending')
+    expect(metricSortAriaValue({ key: 'frequency', direction: 'desc' }, 'wns')).toBe(
+      'none',
     )
-    expect(metricSortAriaValue({ key: 'frequency', direction: 'desc' }, 'wns')).toBe('none')
     expect(
       sortWorkspaceMetricRows(
         [
@@ -263,8 +265,8 @@ describe('project analysis presentation', () => {
     const runtimePoints = [point('ws_a', 32, '32 s'), point('ws_b', 48, '48 s')]
     expect(metricHasComparableData({ points: [pendingMetricPoint('ws_a')] })).toBe(false)
     expect(metricHasComparableData({ points: runtimePoints })).toBe(true)
-    expect(dashboardMetricColumnsTemplate([{ points: runtimePoints }, { points: [] }])).toBe(
-      'minmax(148px, 0.9fr) minmax(100px, 1fr) minmax(88px, 1fr)',
-    )
+    expect(
+      dashboardMetricColumnsTemplate([{ points: runtimePoints }, { points: [] }]),
+    ).toBe('minmax(148px, 0.9fr) minmax(100px, 1fr) minmax(88px, 1fr)')
   })
 })

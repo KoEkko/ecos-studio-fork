@@ -70,7 +70,7 @@ describe('ProjectsView project management surface', () => {
     expect(analysisSource).not.toContain('is-best-empty')
     expect(analysisSource).toContain('class="dashboard-card dashboard-run-state-card"')
     expect(analysisSource).toContain('class="dashboard-card dashboard-best-card"')
-    expect(analysisSource).toContain("class=\"{ 'is-empty': !hasBestFrequencyData }\"")
+    expect(analysisSource).toContain('class="{ \'is-empty\': !hasBestFrequencyData }"')
     expect(analysisSource).toContain('best-empty-hint')
     expect(analysisSource).toContain('No frequency data yet')
     expect(analysisSource).toContain('aria-label="Best Frequency workspace"')
@@ -415,7 +415,9 @@ describe('ProjectsView project management surface', () => {
     expect(analysisSource).toContain('comparison')
     expect(analysisSource).not.toContain('metricCompareClass')
     expect(analysisSource).toContain('dashboardMetricColumnsTemplate')
-    expect(analysisSurfaceSource).toContain('.dashboard-key-header,\n.step-compare-header {')
+    expect(analysisSurfaceSource).toContain(
+      '.dashboard-key-header,\n.step-compare-header {',
+    )
     expect(analysisSurfaceSource).not.toMatch(
       /\.dashboard-key-header,\s*\n\.step-compare-header\s*\{[^}]*text-transform:\s*uppercase/,
     )

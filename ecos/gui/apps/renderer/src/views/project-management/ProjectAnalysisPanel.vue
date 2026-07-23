@@ -218,8 +218,7 @@
       <i class="ri-line-chart-line" aria-hidden="true"></i>
       <strong>No project data available</strong>
       <span
-        >Import a project or create one, then add a workspace to populate
-        analysis.</span
+        >Import a project or create one, then add a workspace to populate analysis.</span
       >
       <div class="empty-state-actions">
         <button
