@@ -59,16 +59,22 @@
 
       <header class="manager-header">
         <div>
-          <p class="manager-eyebrow">ECOS Studio</p>
           <h1 id="project-manager-title">Project Management</h1>
         </div>
       </header>
 
       <div class="manager-grid">
         <aside class="manager-sidebar" aria-label="Projects">
-          <div class="project-list-panel" aria-label="Project list panel">
-            <div class="project-list-title">
-              <h2>Projects</h2>
+          <div class="project-list-panel" aria-label="Projects">
+            <div class="project-list-toolbar">
+              <div class="resource-search sidebar-search">
+                <i class="ri-search-line"></i>
+                <input
+                  v-model="searchQuery"
+                  type="text"
+                  placeholder="Search project or workspace"
+                />
+              </div>
               <div class="project-list-actions">
                 <button
                   type="button"
@@ -77,7 +83,7 @@
                   aria-label="Import Project"
                   @click="importProject"
                 >
-                  <i class="circle-glyph file"></i>
+                  <i class="ri-file-add-line"></i>
                 </button>
                 <button
                   type="button"
@@ -86,17 +92,9 @@
                   aria-label="New Project"
                   @click="openNewProjectDialog"
                 >
-                  <i class="circle-glyph add"></i>
+                  <i class="ri-add-line"></i>
                 </button>
               </div>
-            </div>
-            <div class="resource-search sidebar-search">
-              <i class="ri-search-line"></i>
-              <input
-                v-model="searchQuery"
-                type="text"
-                placeholder="Search project or workspace"
-              />
             </div>
 
             <div
@@ -131,30 +129,30 @@
                   <span class="project-tree-actions">
                     <button
                       type="button"
-                      class="circle-action primary"
-                      title="Import or open workspace"
-                      :aria-label="`Import or open workspace for ${project.model.name}`"
-                      @click.stop="importWorkspaceIntoProject(project.model)"
-                    >
-                      <i class="circle-glyph file"></i>
-                    </button>
-                    <button
-                      type="button"
-                      class="circle-action primary"
+                      class="circle-action primary row-action-primary"
                       title="New workspace"
                       :aria-label="`New workspace in ${project.model.name}`"
                       @click.stop="createWorkspaceForProject(project.model)"
                     >
-                      <i class="circle-glyph add"></i>
+                      <i class="ri-add-line"></i>
                     </button>
                     <button
                       type="button"
-                      class="circle-action danger"
+                      class="circle-action row-action-secondary"
+                      title="Import or open workspace"
+                      :aria-label="`Import or open workspace for ${project.model.name}`"
+                      @click.stop="importWorkspaceIntoProject(project.model)"
+                    >
+                      <i class="ri-file-add-line"></i>
+                    </button>
+                    <button
+                      type="button"
+                      class="circle-action danger row-action-secondary"
                       title="Remove from Project Management"
                       :aria-label="`Remove ${project.model.name} from Project Management`"
                       @click.stop="requestDeleteProject(project.source)"
                     >
-                      <i class="circle-glyph remove"></i>
+                      <i class="ri-subtract-line"></i>
                     </button>
                   </span>
                 </div>
@@ -176,6 +174,7 @@
                   >
                     <div
                       class="workspace-tree-row"
+                      :class="{ selected: workspace.id === selectedWorkspaceId }"
                       @click="selectWorkspace(workspace.id)"
                     >
                       <span class="workspace-tree-copy">
@@ -197,30 +196,30 @@
                       <span class="workspace-tree-actions">
                         <button
                           type="button"
-                          class="circle-action primary"
+                          class="circle-action primary row-action-primary"
                           title="Open workspace"
                           :aria-label="`Open workspace ${workspace.id}`"
                           @click.stop="openWorkspace(workspace)"
                         >
-                          <i class="circle-glyph open"></i>
+                          <i class="ri-arrow-right-up-line"></i>
                         </button>
                         <button
                           type="button"
-                          class="circle-action primary workspace-flow-trigger"
+                          class="circle-action row-action-secondary workspace-flow-trigger"
                           title="Create workspace from step output"
                           :aria-label="`Create workspace from ${workspace.id}`"
                           @click.stop="toggleWorkspaceFlowPopover(workspace.id)"
                         >
-                          <i class="circle-glyph add"></i>
+                          <i class="ri-add-line"></i>
                         </button>
                         <button
                           type="button"
-                          class="circle-action danger"
+                          class="circle-action danger row-action-secondary"
                           title="Delete workspace"
                           :aria-label="`Delete workspace ${workspace.id}`"
                           @click.stop="requestDeleteWorkspace(workspace.id)"
                         >
-                          <i class="circle-glyph remove"></i>
+                          <i class="ri-subtract-line"></i>
                         </button>
                       </span>
                     </div>
@@ -259,7 +258,7 @@
                         <span>{{ cell.step }}</span>
                         <em :class="stepStatusClass(cell.status)">{{ cell.label }}</em>
                         <span v-if="cell.canCreateWorkspace" class="popover-step-add">
-                          <i class="circle-glyph add"></i>
+                          <i class="ri-add-line"></i>
                         </span>
                       </button>
                     </div>
@@ -270,12 +269,63 @@
                   v-else-if="project.model.id === selectedProjectId"
                   class="workspace-tree-empty"
                 >
-                  No project data available
+                  <strong>No workspaces yet</strong>
+                  <span>Create a workspace or import one into this project.</span>
+                  <div class="empty-state-actions">
+                    <button
+                      type="button"
+                      class="empty-state-action primary"
+                      @click="createWorkspaceForProject(project.model)"
+                    >
+                      New workspace
+                    </button>
+                    <button
+                      type="button"
+                      class="empty-state-action"
+                      @click="importWorkspaceIntoProject(project.model)"
+                    >
+                      Import workspace
+                    </button>
+                  </div>
                 </div>
               </article>
 
               <div v-if="projectCards.length === 0" class="empty-state">
-                No matching projects.
+                <template v-if="searchQuery.trim()">
+                  <i class="ri-search-line" aria-hidden="true"></i>
+                  <strong>No matching projects</strong>
+                  <span>Try another name, or clear the search to see all projects.</span>
+                  <div class="empty-state-actions">
+                    <button
+                      type="button"
+                      class="empty-state-action"
+                      @click="searchQuery = ''"
+                    >
+                      Clear search
+                    </button>
+                  </div>
+                </template>
+                <template v-else>
+                  <i class="ri-folder-chart-line" aria-hidden="true"></i>
+                  <strong>No projects yet</strong>
+                  <span>Import an existing project or create a new one to get started.</span>
+                  <div class="empty-state-actions">
+                    <button
+                      type="button"
+                      class="empty-state-action primary"
+                      @click="importProject"
+                    >
+                      Import Project
+                    </button>
+                    <button
+                      type="button"
+                      class="empty-state-action"
+                      @click="openNewProjectDialog"
+                    >
+                      New Project
+                    </button>
+                  </div>
+                </template>
               </div>
             </div>
           </div>
@@ -293,6 +343,8 @@
               @select-workspace="selectWorkspace"
               @export-report="exportQorTrendReport"
               @set-baseline="setQorBaseline"
+              @import-project="importProject"
+              @new-project="openNewProjectDialog"
             />
           </div>
         </main>

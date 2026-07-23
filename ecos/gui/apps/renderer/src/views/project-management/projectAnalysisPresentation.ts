@@ -152,19 +152,108 @@ export function metricValueClass(state: ProjectMetricPoint['state']): string {
   return classes[state]
 }
 
-export function metricInlineWidth(
-  point: ProjectMetricPoint,
-  points: readonly ProjectMetricPoint[] = [],
+export type MetricTableSortDirection = 'asc' | 'desc'
+export type MetricTableSortKey = 'workspace' | ProjectMetricId
+
+const ASCENDING_FIRST_SORT_KEYS = new Set<MetricTableSortKey>([
+  'workspace',
+  'drc',
+  'runtime',
+  'memory',
+])
+
+export interface MetricTableSortState {
+  key: MetricTableSortKey
+  direction: MetricTableSortDirection
+}
+
+export interface SortableWorkspaceMetricRow {
+  workspaceId: string
+  cells: ReadonlyArray<{
+    metric: { id: MetricTableSortKey }
+    point: Pick<ProjectMetricPoint, 'value'>
+  }>
+}
+
+/** First-click direction: lower-is-better metrics ascend, others descend. */
+export function initialMetricSortDirection(
+  key: MetricTableSortKey,
+): MetricTableSortDirection {
+  return ASCENDING_FIRST_SORT_KEYS.has(key) ? 'asc' : 'desc'
+}
+
+export function nextMetricSortState(
+  current: MetricTableSortState | null,
+  key: MetricTableSortKey,
+): MetricTableSortState {
+  if (!current || current.key !== key) {
+    return { key, direction: initialMetricSortDirection(key) }
+  }
+  return {
+    key,
+    direction: current.direction === 'asc' ? 'desc' : 'asc',
+  }
+}
+
+export function metricSortAriaValue(
+  sort: MetricTableSortState | null,
+  key: MetricTableSortKey,
+): 'ascending' | 'descending' | 'none' {
+  if (!sort || sort.key !== key) return 'none'
+  return sort.direction === 'asc' ? 'ascending' : 'descending'
+}
+
+export function sortWorkspaceMetricRows<T extends SortableWorkspaceMetricRow>(
+  rows: readonly T[],
+  sort: MetricTableSortState | null,
+): T[] {
+  if (!sort) return [...rows]
+
+  return [...rows].sort((left, right) => {
+    if (sort.key === 'workspace') {
+      const cmp = left.workspaceId.localeCompare(right.workspaceId)
+      return sort.direction === 'asc' ? cmp : -cmp
+    }
+
+    const leftValue =
+      left.cells.find((cell) => cell.metric.id === sort.key)?.point.value ?? null
+    const rightValue =
+      right.cells.find((cell) => cell.metric.id === sort.key)?.point.value ?? null
+    return compareNullableNumbers(leftValue, rightValue, sort.direction)
+  })
+}
+
+function compareNullableNumbers(
+  left: number | null,
+  right: number | null,
+  direction: MetricTableSortDirection,
 ): number {
-  if (point.value === null) return 28
+  if (left === null && right === null) return 0
+  if (left === null) return 1
+  if (right === null) return -1
+  const cmp = left - right
+  return direction === 'asc' ? cmp : -cmp
+}
 
-  const values = points
-    .map((item) => Math.abs(item.value ?? 0))
-    .filter((value) => value > 0)
-  const maxValue = Math.max(...values, 0)
-  if (maxValue === 0) return 8
+export function dashboardPillClass(count: number, tone: 'success' | 'info'): string {
+  return count > 0 ? `dashboard-pill ${tone}` : 'dashboard-pill is-zero'
+}
 
-  return Math.max(8, Math.min(100, (Math.abs(point.value) / maxValue) * 100))
+export function metricHasComparableData(
+  metric: Pick<ProjectMetricRow, 'points'>,
+): boolean {
+  return metric.points.some((point) => point.value !== null)
+}
+
+export function dashboardMetricColumnsTemplate(
+  metrics: readonly Pick<ProjectMetricRow, 'points'>[],
+): string {
+  // Keep every metric column; only tighten the floor for all-empty columns.
+  // Use fixed floors (not sub-1fr) so the table can overflow and scroll again.
+  const columns = metrics.map((metric) =>
+    metricHasComparableData(metric) ? 'minmax(100px, 1fr)' : 'minmax(88px, 1fr)',
+  )
+  return `minmax(148px, 0.9fr) ${columns.join(' ')}`
 }
 
 export function runStateSliceClass(state: ProjectRunStateSlice['state']): string {

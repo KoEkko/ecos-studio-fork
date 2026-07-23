@@ -20,7 +20,10 @@ const analysisSurfaceSource = `${analysisSource}\n${analysisStyles}`
 describe('ProjectsView project management surface', () => {
   it('renders the project tree and project analysis surface instead of the old flow matrix', () => {
     expect(source).toContain('ProjectAnalysisPanel')
-    expect(analysisSource).toContain('Project Analysis')
+    expect(analysisSource).toContain('aria-label="Analysis"')
+    expect(analysisSource).toContain('analysis-subtitle')
+    expect(analysisSource).not.toContain('>Analysis</h3>')
+    expect(analysisSource).not.toContain('Key Metric Snapshot')
     expect(analysisSource).toContain('Dashboard')
     expect(analysisSource).toContain('Step Analysis')
     expect(source).toContain('class="project-workspace-tree"')
@@ -51,8 +54,8 @@ describe('ProjectsView project management surface', () => {
       'Workspace lineage tree with row actions + Project Analysis dashboard',
     )
     expect(source).not.toContain('<p>Workspace lineage tree')
-    expect(source).toContain('class="project-list-title"')
-    expect(source).toContain('<h2>Projects</h2>')
+    expect(source).toContain('class="project-list-toolbar"')
+    expect(source).not.toContain('<h2>Projects</h2>')
     expect(source).toContain('class="project-list-actions"')
     expect(projectSurfaceSource).toContain(
       'grid-template-columns: minmax(330px, 390px) minmax(780px, 1fr);',
@@ -63,10 +66,38 @@ describe('ProjectsView project management surface', () => {
     expect(projectSurfaceSource).toContain('left: calc(100% + 14px);')
     expect(source).toContain('class="resource-row project-tree-row mockup-project-row"')
     expect(analysisSource).toContain('class="analysis-panel mockup-analysis-panel"')
+    expect(analysisSource).toContain('class="dashboard-summary-strip"')
+    expect(analysisSource).not.toContain('is-best-empty')
     expect(analysisSource).toContain('class="dashboard-card dashboard-run-state-card"')
     expect(analysisSource).toContain('class="dashboard-card dashboard-best-card"')
+    expect(analysisSource).toContain("class=\"{ 'is-empty': !hasBestFrequencyData }\"")
+    expect(analysisSource).toContain('best-empty-hint')
+    expect(analysisSource).toContain('No frequency data yet')
+    expect(analysisSource).toContain('aria-label="Best Frequency workspace"')
+    expect(analysisSource).not.toContain('dashboard-best-inline-empty')
+    expect(analysisSource).not.toContain('class="run-state-header"')
+    expect(analysisSource).not.toContain('>Run state</span>')
+    expect(analysisSource).toContain('aria-label="Run state"')
+    expect(analysisSource).toContain('class="run-state-main"')
     expect(analysisSource).toContain(
       'class="dashboard-card dashboard-chart-card dashboard-key-metric-card"',
+    )
+    expect(analysisSource).not.toContain('metricCompareClass')
+    expect(analysisSource).toContain('dashboardMetricColumnsTemplate')
+    expect(analysisStyles).toContain('.dashboard-summary-strip {')
+    expect(analysisStyles).toContain('.best-empty-hint')
+    expect(analysisStyles).not.toContain('.dashboard-summary-strip.is-best-empty')
+    expect(analysisStyles).toContain('position: sticky;')
+    expect(analysisStyles).toMatch(
+      /\.dashboard-key-header,\s*\n\.step-compare-header\s*\{[\s\S]*?background:[\s\S]*?\}/,
+    )
+    expect(analysisStyles).not.toMatch(
+      /\.dashboard-key-header,\s*\n\.step-compare-header\s*\{[^}]*text-transform:\s*uppercase/,
+    )
+    expect(analysisStyles).not.toContain('.compare-best')
+    expect(projectStyles).toContain('.workspace-tree-row.selected')
+    expect(source).toContain(
+      ':class="{ selected: workspace.id === selectedWorkspaceId }"',
     )
   })
 
@@ -123,28 +154,34 @@ describe('ProjectsView project management surface', () => {
     expect(rowSource).toContain('@click.stop="importWorkspaceIntoProject(project.model)"')
     expect(rowSource).toContain('@click.stop="createWorkspaceForProject(project.model)"')
     expect(rowSource).toContain('@click.stop="requestDeleteProject(project.source)"')
-    expect(rowSource).toContain('class="circle-action primary"')
+    expect(rowSource).toContain('class="circle-action primary row-action-primary"')
+    expect(rowSource).toContain('row-action-secondary')
     expect(rowSource).not.toContain('file-action-button')
-    expect(rowSource).toContain('circle-glyph file')
-    expect(rowSource).not.toContain('ri-folder-open-line')
-    expect(rowSource).not.toContain('ri-folder-add-line')
+    expect(rowSource).toContain('ri-add-line')
+    expect(rowSource).toContain('ri-file-add-line')
+    expect(rowSource).toContain('ri-subtract-line')
+    expect(rowSource).not.toContain('circle-glyph')
+    expect(projectStyles).toContain('.project-tree-actions .row-action-secondary')
+    expect(projectStyles).toContain('.project-tree-row:hover .row-action-secondary')
   })
 
   it('moves Import Project and New Project into the Projects list header as icon-only circle buttons', () => {
-    const titleStart = source.indexOf('class="project-list-title"')
-    const titleEnd = source.indexOf('</div>', titleStart)
-    const headerSource = source.slice(titleStart, titleEnd + 6)
+    const titleStart = source.indexOf('class="project-list-toolbar"')
+    const titleEnd = source.indexOf('</div>\n            <div', titleStart)
+    const headerSource = source.slice(
+      titleStart,
+      titleEnd > titleStart ? titleEnd : titleStart + 800,
+    )
 
     expect(source).not.toContain('class="manager-header-actions"')
     expect(headerSource).toContain('class="project-list-actions"')
-    expect(headerSource).toContain('class="circle-action primary header-action-button"')
     expect(headerSource).toContain('class="circle-action primary header-action-button"')
     expect(headerSource).toContain('title="Import Project"')
     expect(headerSource).toContain('aria-label="Import Project"')
     expect(headerSource).toContain('title="New Project"')
     expect(headerSource).toContain('aria-label="New Project"')
-    expect(headerSource).toContain('circle-glyph file')
-    expect(headerSource).toContain('circle-glyph add')
+    expect(headerSource).toContain('ri-file-add-line')
+    expect(headerSource).toContain('ri-add-line')
     expect(headerSource).not.toContain('<span>Import</span>')
     expect(headerSource).not.toContain('<span>New Project</span>')
   })
@@ -165,16 +202,16 @@ describe('ProjectsView project management surface', () => {
     expect(rowSource).toContain('@click.stop="toggleWorkspaceFlowPopover(workspace.id)"')
     expect(rowSource).toContain('@click.stop="requestDeleteWorkspace(workspace.id)"')
     expect(rowSource).toContain('circle-action')
-    expect(rowSource).toContain('class="circle-action primary"')
+    expect(rowSource).toContain('class="circle-action primary row-action-primary"')
+    expect(rowSource).toContain('row-action-secondary workspace-flow-trigger')
     expect(rowSource).not.toContain('file-action-button')
+    expect(projectStyles).toContain('.workspace-tree-row:hover .row-action-secondary')
   })
 
-  it('uses an up-right arrow glyph for opening workspace rows', () => {
-    expect(source).toContain('<i class="circle-glyph open"></i>')
-    expect(projectStyles).toMatch(
-      /\.circle-glyph\.open::before\s*\{[\s\S]*rotate\(-45deg\)/,
-    )
-    expect(projectStyles).toMatch(/\.circle-glyph\.open::after\s*\{[\s\S]*rotate\(0deg\)/)
+  it('uses an up-right arrow icon for opening workspace rows', () => {
+    expect(source).toContain('<i class="ri-arrow-right-up-line"></i>')
+    expect(projectStyles).toContain('.circle-action i')
+    expect(projectStyles).not.toContain('.circle-glyph')
   })
 
   it('shows a near-row flow step popover for successful source steps', () => {
@@ -274,6 +311,14 @@ describe('ProjectsView project management surface', () => {
   it('renders an empty state instead of generated demo workspace data', () => {
     expect(analysisSource).toContain('No project data available')
     expect(analysisSource).toContain('hasProjectData')
+    expect(analysisSource).toContain("emit('import-project')")
+    expect(analysisSource).toContain("emit('new-project')")
+    expect(source).toContain('@import-project="importProject"')
+    expect(source).toContain('@new-project="openNewProjectDialog"')
+    expect(source).toContain('No projects yet')
+    expect(source).toContain('No matching projects')
+    expect(source).toContain('No workspaces yet')
+    expect(source).toContain('Clear search')
     expect(source).not.toContain('gcd_backend')
     expect(source).not.toContain('iter_0001')
   })
@@ -326,14 +371,27 @@ describe('ProjectsView project management surface', () => {
     expect(analysisSource).toContain('flowMetricSummary')
     expect(analysisSource).toContain('dashboardMetricRows')
     expect(analysisSource).toContain('dashboardWorkspaceMetricRows')
+    expect(analysisSource).toContain('displayedDashboardWorkspaceRows')
+    expect(analysisSource).toContain('toggleMetricSort')
+    expect(analysisSource).toContain("toggleMetricSort('dashboard'")
     expect(analysisSource).toContain('dashboard-key-metric-table')
-    expect(analysisSource).toContain('Die Area')
-    expect(analysisSource).toContain('Core Util')
-    expect(analysisSource).toContain('Frequency [MHz]')
     expect(analysisSource).toContain('ProjectQorTrendPanel')
     expect(analysisSource).toContain('project.qorTrendSummary')
     expect(analysisSource).toContain('@export-report="exportReport"')
     expect(analysisSource).toContain('@set-baseline="setBaseline"')
+    expect(analysisSource).toContain('{{ metric.label }}')
+    expect(analysisSource).not.toContain('metric-range')
+    expect(analysisSource).not.toContain('metricShowsRangeTick')
+    expect(analysisStyles).toMatch(
+      /\.dashboard-key-metric-cell,\s*\n\.step-compare-metric-cell\s*\{[\s\S]*?text-align:\s*center/,
+    )
+    expect(analysisStyles).toMatch(
+      /\.dashboard-key-workspace-cell,\s*\n\.step-compare-workspace-cell\s*\{[\s\S]*?text-align:\s*left/,
+    )
+    expect(analysisSource).toContain('best-card-header')
+    expect(analysisSource).toContain('>Best Frequency</span>')
+    expect(analysisSource).not.toContain('Best Frequency Workspace')
+    expect(analysisSource).not.toContain('frequency best workspace PPA')
     expect(presentationSource).toContain('runtimePoints')
     expect(presentationSource).toContain('memoryPoints')
     expect(analysisSource).not.toContain('Top Blocking Steps')
@@ -342,22 +400,30 @@ describe('ProjectsView project management surface', () => {
     expect(analysisSource).toContain(':workspace-summaries="project.workspaceSummaries"')
     expect(analysisSource).toContain(':steps="project.stepCompareSummaries"')
     expect(analysisSurfaceSource).toContain('.analysis-dashboard-v3 {')
-    expect(analysisSurfaceSource).toContain('.dashboard-summary-grid {')
-    expect(analysisSurfaceSource).toContain('grid-template-rows: 252px;')
+    expect(analysisSurfaceSource).toContain('.dashboard-summary-strip {')
     expect(analysisSurfaceSource).toContain('flex: 0 0 498px;')
-    expect(analysisSurfaceSource).toContain(
-      '.dashboard-summary-grid > .dashboard-best-card',
-    )
     expect(analysisSurfaceSource).toContain('.best-ppa-grid {')
-    expect(analysisSurfaceSource).toContain('overflow-y: auto;')
-    expect(analysisSurfaceSource).toContain('overscroll-behavior: contain;')
-    expect(analysisSource).toContain('class="dashboard-summary-grid"')
-    expect(analysisSource.indexOf('class="dashboard-summary-grid"')).toBeLessThan(
+    expect(analysisSource).toContain('class="dashboard-summary-strip"')
+    expect(analysisSource.indexOf('class="dashboard-summary-strip"')).toBeLessThan(
       analysisSource.indexOf('<ProjectQorTrendPanel'),
     )
     expect(analysisSource.indexOf('<ProjectQorTrendPanel')).toBeLessThan(
-      analysisSource.indexOf('Key Metric Snapshot'),
+      analysisSource.indexOf('dashboard-key-metric-table'),
     )
+    expect(analysisSource).toContain('analysisSubtitle')
+    expect(analysisSource).toContain('key metrics')
+    expect(analysisSource).toContain('comparison')
+    expect(analysisSource).not.toContain('metricCompareClass')
+    expect(analysisSource).toContain('dashboardMetricColumnsTemplate')
+    expect(analysisSurfaceSource).toContain('.dashboard-key-header,\n.step-compare-header {')
+    expect(analysisSurfaceSource).not.toMatch(
+      /\.dashboard-key-header,\s*\n\.step-compare-header\s*\{[^}]*text-transform:\s*uppercase/,
+    )
+    expect(analysisSurfaceSource).not.toContain('.step-compare-metric-cell.compare-best')
+    expect(analysisSource).not.toContain('align-self: stretch;')
+    expect(analysisSource).not.toContain('step-compare-metric-card')
+    expect(analysisSource).not.toContain('step-compare-metric-chart')
+    expect(analysisSource).not.toContain('class="step-compare-point"')
     expect(source).toContain('const hasOpenedStepAnalysis = ref(false)')
     expect(source).toContain('handleAnalysisTabSelection')
     expect(source).toContain('exportQorTrendReport')
@@ -369,16 +435,14 @@ describe('ProjectsView project management surface', () => {
   })
 
   it('keeps only Dashboard and Step Analysis tabs on the right side of the project analysis header', () => {
-    const analysisStart = analysisSource.indexOf(
-      'class="panel-title-row analysis-heading"',
-    )
+    const analysisStart = analysisSource.indexOf('class="analysis-heading"')
     const analysisEnd = analysisSource.indexOf(
       '</div>',
-      analysisSource.indexOf('class="analysis-header-actions"', analysisStart),
+      analysisSource.indexOf('class="analysis-tabs"', analysisStart),
     )
     const analysisHeaderSource = analysisSource.slice(analysisStart, analysisEnd + 6)
 
-    expect(analysisHeaderSource).toContain('class="analysis-header-actions"')
+    expect(analysisHeaderSource).toContain('class="analysis-subtitle"')
     expect(analysisHeaderSource).toContain('class="analysis-tabs"')
     expect(analysisHeaderSource).toContain('Dashboard')
     expect(analysisHeaderSource).toContain('Step Analysis')
@@ -387,8 +451,8 @@ describe('ProjectsView project management surface', () => {
     expect(source).not.toContain('openBackendDesign')
     expect(analysisSurfaceSource).toContain('.analysis-heading {')
     expect(analysisSurfaceSource).toContain('justify-content: space-between;')
-    expect(analysisSurfaceSource).toContain('.analysis-header-actions {')
-    expect(analysisSurfaceSource).toContain('margin-left: auto;')
+    expect(analysisSurfaceSource).toContain('.analysis-subtitle {')
+    expect(analysisSurfaceSource).not.toContain('.analysis-header-actions {')
   })
 
   it('keeps the workspace flow popover inside the project manager bounds', () => {

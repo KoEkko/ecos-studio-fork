@@ -201,10 +201,10 @@
 .manager-header {
   display: flex;
   flex: 0 0 auto;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 14px;
-  min-height: 54px;
+  min-height: 44px;
   padding: 0 156px 12px 0;
   margin: 0 -24px 14px;
   padding-left: 24px;
@@ -261,17 +261,15 @@
 .manager-sidebar,
 .manager-table-panel {
   min-height: 0;
-  border: 1px solid var(--border-color);
   border-radius: 12px;
-  background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bg-primary) 78%, transparent);
 }
 
 .manager-sidebar {
   display: flex;
   flex-direction: column;
-  padding: 20px;
+  padding: 18px 16px;
   overflow: visible;
+  border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
   background: var(--project-list-bg);
 }
 
@@ -293,18 +291,16 @@
   overflow: visible;
 }
 
-.project-list-title {
+.project-list-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
+  min-width: 0;
 }
 
-.project-list-title h2 {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: 20px;
-  font-weight: 850;
+.project-list-toolbar .sidebar-search {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .project-list-actions {
@@ -370,18 +366,18 @@
 }
 
 .project-workspace-tree.selected {
-  padding: 10px 10px 14px 14px;
+  padding: 8px 8px 12px 12px;
   overflow: visible;
-  border: 1px solid color-mix(in srgb, var(--accent-color) 24%, var(--border-color));
+  border: 0;
   border-radius: 10px;
   background: var(--project-tree-bg);
-  box-shadow: 0 10px 18px rgba(17, 24, 39, 0.06);
+  box-shadow: none;
 }
 
 .project-workspace-tree.selected::before {
   position: absolute;
   inset: 0 auto 0 0;
-  width: 5px;
+  width: 3px;
   border-radius: 10px 0 0 10px;
   background: var(--accent-color);
   content: '';
@@ -401,7 +397,61 @@
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 5px;
+  gap: 0;
+  min-width: 24px;
+}
+
+.project-tree-actions .circle-action + .circle-action,
+.workspace-tree-actions .circle-action + .circle-action {
+  margin-left: 5px;
+}
+
+/* Keep the primary row action visible; reveal the rest on hover/focus. */
+.project-tree-actions .row-action-secondary,
+.workspace-tree-actions .row-action-secondary {
+  width: 0;
+  min-width: 0;
+  margin-left: 0;
+  border-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transform: none;
+}
+
+.project-tree-row:hover .row-action-secondary,
+.project-tree-row:focus-within .row-action-secondary,
+.workspace-tree-row:hover .row-action-secondary,
+.workspace-tree-row:focus-within .row-action-secondary,
+.workspace-tree-item:has(.workspace-flow-popover) .row-action-secondary,
+.project-tree-actions .row-action-secondary:focus-visible,
+.workspace-tree-actions .row-action-secondary:focus-visible {
+  width: 24px;
+  min-width: 24px;
+  margin-left: 5px;
+  border-width: 1px;
+  opacity: 1;
+  overflow: visible;
+  pointer-events: auto;
+}
+
+.circle-action.danger.row-action-secondary {
+  color: color-mix(in srgb, var(--text-secondary) 82%, var(--danger-color));
+  border-color: color-mix(in srgb, var(--border-color) 88%, transparent);
+  background: color-mix(in srgb, var(--bg-primary) 70%, var(--bg-secondary));
+}
+
+@media (hover: none) {
+  .project-tree-actions .row-action-secondary,
+  .workspace-tree-actions .row-action-secondary {
+    width: 24px;
+    min-width: 24px;
+    margin-left: 5px;
+    border-width: 1px;
+    opacity: 1;
+    overflow: visible;
+    pointer-events: auto;
+  }
 }
 
 .header-action-button {
@@ -409,9 +459,8 @@
   height: 30px;
 }
 
-.header-action-button .circle-glyph {
-  width: 13px;
-  height: 13px;
+.header-action-button i {
+  font-size: 15px;
 }
 
 .resource-row {
@@ -441,8 +490,8 @@
 }
 
 .project-workspace-tree.selected .project-tree-row.selected {
-  border-color: color-mix(in srgb, var(--accent-color) 38%, transparent);
-  background: color-mix(in srgb, var(--accent-color) 12%, var(--bg-primary));
+  border-color: transparent;
+  background: color-mix(in srgb, var(--accent-color) 10%, var(--bg-primary));
 }
 
 .row-remove-btn {
@@ -543,31 +592,37 @@
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 8px;
-  min-height: 64px;
+  min-height: 58px;
   padding: 8px 10px;
-  border: 1px solid color-mix(in srgb, var(--border-color) 86%, transparent);
+  border: 0;
   border-radius: 8px;
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--bg-primary) 74%, var(--bg-secondary));
+  background: color-mix(in srgb, var(--bg-primary) 68%, transparent);
   cursor: pointer;
   transition:
-    border-color 0.15s ease,
-    background 0.15s ease;
+    background 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .workspace-tree-item.flow-hint-failed .workspace-tree-row {
-  border-color: color-mix(in srgb, var(--danger-color) 22%, var(--border-color));
   background: color-mix(in srgb, var(--danger-color) 7%, var(--bg-primary));
 }
 
 .workspace-tree-item.flow-hint-running .workspace-tree-row {
-  border-color: color-mix(in srgb, var(--warn-color) 26%, var(--border-color));
   background: color-mix(in srgb, var(--warn-color) 7%, var(--bg-primary));
 }
 
 .workspace-tree-row:hover {
-  border-color: color-mix(in srgb, var(--accent-color) 42%, transparent);
   background: color-mix(in srgb, var(--accent-color) 7%, var(--bg-primary));
+}
+
+.workspace-tree-row.selected {
+  background: color-mix(in srgb, var(--accent-color) 12%, var(--bg-primary));
+  box-shadow: inset 3px 0 0 var(--accent-color);
+}
+
+.workspace-tree-row.selected:hover {
+  background: color-mix(in srgb, var(--accent-color) 14%, var(--bg-primary));
 }
 
 .workspace-tree-copy {
@@ -672,75 +727,9 @@
   background: var(--danger-bg);
 }
 
-.circle-glyph {
-  position: relative;
-  display: block;
-  width: 12px;
-  height: 12px;
-  color: currentColor;
-}
-
-.circle-glyph::before,
-.circle-glyph::after {
-  position: absolute;
-  content: '';
-}
-
-.circle-glyph.add::before,
-.circle-glyph.add::after,
-.circle-glyph.remove::before {
-  top: 50%;
-  left: 50%;
-  width: 10px;
-  height: 2px;
-  border-radius: 2px;
-  background: currentColor;
-  transform: translate(-50%, -50%);
-}
-
-.circle-glyph.add::before {
-  transform: translate(-50%, -50%) rotate(90deg);
-}
-
-.circle-glyph.open::before {
-  top: 5px;
-  left: 1px;
-  width: 10px;
-  height: 2px;
-  border-radius: 2px;
-  background: currentColor;
-  transform: rotate(-45deg);
-  transform-origin: center;
-}
-
-.circle-glyph.open::after {
-  top: 1px;
-  right: 1px;
-  width: 6px;
-  height: 6px;
-  border-top: 2px solid currentColor;
-  border-right: 2px solid currentColor;
-  transform: rotate(0deg);
-}
-
-.circle-glyph.file::before {
-  top: 1px;
-  left: 2px;
-  width: 8px;
-  height: 10px;
-  border: 1.8px solid currentColor;
-  border-radius: 2px;
-  clip-path: polygon(0 0, 68% 0, 100% 32%, 100% 100%, 0 100%);
-}
-
-.circle-glyph.file::after {
-  top: 1px;
-  right: 2px;
-  width: 3px;
-  height: 3px;
-  border-top: 1.8px solid currentColor;
-  border-right: 1.8px solid currentColor;
-  transform: rotate(0deg);
+.circle-action i {
+  font-size: 13px;
+  line-height: 1;
 }
 
 .workspace-flow-popover {
@@ -841,13 +830,31 @@
   background: var(--accent-color);
 }
 
+.popover-step-add i {
+  font-size: 13px;
+  line-height: 1;
+}
+
 .workspace-tree-empty {
+  display: grid;
+  gap: 6px;
   margin-left: 12px;
-  padding: 12px;
-  border: 1px dashed var(--border-color);
+  padding: 14px 12px;
+  border: 1px dashed color-mix(in srgb, var(--border-color) 88%, transparent);
   border-radius: 8px;
   color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-primary) 55%, transparent);
   font-size: 12px;
+}
+
+.workspace-tree-empty strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.workspace-tree-empty span {
+  line-height: 1.4;
 }
 
 .resource-copy {
@@ -876,9 +883,11 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  padding: 24px;
+  padding: 8px 4px 4px 8px;
   overflow: hidden;
-  background: var(--bg-primary);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .manager-toolbar {
@@ -1310,12 +1319,69 @@
 }
 
 .empty-state {
-  padding: 18px 10px;
-  border: 1px dashed var(--border-color);
-  border-radius: 8px;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 22px 14px;
+  border: 1px dashed color-mix(in srgb, var(--border-color) 88%, transparent);
+  border-radius: 10px;
   color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-primary) 55%, transparent);
   font-size: 12px;
   text-align: center;
+}
+
+.empty-state i {
+  color: var(--accent-color);
+  font-size: 22px;
+}
+
+.empty-state strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.empty-state span {
+  max-width: 240px;
+  line-height: 1.4;
+}
+
+.empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.empty-state-action {
+  min-height: 28px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
+  border-radius: 8px;
+  padding: 0 12px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-primary) 82%, transparent);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.empty-state-action:hover {
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--accent-color) 42%, transparent);
+  background: color-mix(in srgb, var(--accent-color) 8%, var(--bg-primary));
+}
+
+.empty-state-action.primary {
+  color: #fff;
+  border-color: color-mix(in srgb, var(--accent-color) 70%, transparent);
+  background: var(--accent-color);
+}
+
+.empty-state-action.primary:hover {
+  color: #fff;
+  background: color-mix(in srgb, var(--accent-color) 88%, var(--text-primary));
 }
 
 .project-modal-scrim {
