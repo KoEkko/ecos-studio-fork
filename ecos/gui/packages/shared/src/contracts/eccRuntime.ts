@@ -153,11 +153,13 @@ export interface EccRuntimeError {
 export type EccRuntimeEvent =
   | {
       type: 'runtime.ready'
+      workspaceDirectory?: string
     }
   | {
       logFile?: string
       text: string
       type: 'runtime.stderr'
+      workspaceDirectory?: string
     }
   | {
       code: number | null
