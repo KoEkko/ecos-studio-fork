@@ -172,7 +172,7 @@
             <em>Actual: {{ findingValueLabel(finding) }}</em>
             <small>{{ finding.detail }}</small>
           </button>
-          <details class="finding-detail-info">
+          <details v-if="findingHasDetailInfo(finding)" class="finding-detail-info">
             <summary>Detail info</summary>
             <dl>
               <div>
@@ -203,7 +203,7 @@
                 <dt>Evidence</dt>
                 <dd>{{ finding.evidence }}</dd>
               </div>
-              <div>
+              <div v-if="finding.detail">
                 <dt>Diagnosis</dt>
                 <dd>{{ finding.detail }}</dd>
               </div>
@@ -594,6 +594,13 @@ function stageFindingsForWorkspace(summary: ProjectWorkspaceSummary): StageFindi
   return findings
 }
 
+function findingHasDetailInfo(finding: StageFinding): boolean {
+  const hasEvidence = Boolean(finding.evidence?.trim())
+  const hasCondition = Boolean(finding.condition?.trim())
+  const hasExpected = finding.expected !== undefined && finding.expected !== null
+  return hasEvidence || hasCondition || hasExpected
+}
+
 function findingSeverityRank(finding: StageFinding): number {
   return { critical: 0, warning: 1, info: 2 }[finding.severity]
 }
@@ -846,7 +853,7 @@ function stringValue(value: unknown): string | null {
 <style scoped>
 .stage-workbench {
   display: grid;
-  grid-template-columns: 116px minmax(0, 1fr) minmax(176px, 0.28fr);
+  grid-template-columns: 116px minmax(0, 1fr) minmax(220px, 0.32fr);
   height: 100%;
   min-height: 0;
   border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
@@ -861,6 +868,10 @@ function stringValue(value: unknown): string | null {
   min-height: 0;
   padding: 10px 8px;
   background: color-mix(in srgb, var(--bg-primary) 65%, transparent);
+}
+
+.findings-rail {
+  padding: 12px 12px;
 }
 
 .stage-rail {
@@ -1130,11 +1141,12 @@ function stringValue(value: unknown): string | null {
 
 .stage-detail-list {
   display: grid;
-  align-content: start;
+  align-content: stretch;
   grid-auto-flow: row;
-  grid-auto-rows: 176px;
+  grid-auto-rows: minmax(0, 1fr);
   gap: 8px;
   min-height: 0;
+  height: 100%;
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-gutter: stable;
@@ -1144,9 +1156,8 @@ function stringValue(value: unknown): string | null {
   display: grid;
   grid-template-rows: 28px minmax(0, 1fr);
   box-sizing: border-box;
-  height: 176px;
-  min-height: 176px;
-  max-height: 176px;
+  min-height: 0;
+  height: 100%;
   gap: 6px;
   border-top: 1px solid color-mix(in srgb, var(--border-color) 66%, transparent);
   padding-top: 6px;
@@ -1214,10 +1225,12 @@ function stringValue(value: unknown): string | null {
 
 .detail-table-wrap {
   min-height: 0;
+  height: 100%;
   overflow: auto;
   scrollbar-gutter: stable;
   border: 1px solid color-mix(in srgb, var(--border-color) 68%, transparent);
   border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-secondary) 28%, var(--bg-primary));
 }
 
 table {
@@ -1249,16 +1262,16 @@ th {
 
 .findings-rail {
   display: grid;
-  grid-template-rows: 28px minmax(0, 1fr);
-  gap: 8px;
+  grid-template-rows: 32px minmax(0, 1fr);
+  gap: 10px;
   border-left: 1px solid color-mix(in srgb, var(--border-color) 76%, transparent);
   overflow: hidden;
 }
 
 .findings-rail header {
   box-sizing: border-box;
-  height: 28px;
-  min-height: 28px;
+  height: 32px;
+  min-height: 32px;
   margin: 0;
   font-size: 12px;
   font-weight: 760;
@@ -1268,11 +1281,11 @@ th {
   display: grid;
   align-content: start;
   grid-auto-flow: row;
-  grid-auto-rows: minmax(108px, max-content);
-  gap: 6px;
+  grid-auto-rows: minmax(132px, max-content);
+  gap: 10px;
   margin: 0;
   min-height: 0;
-  padding: 0;
+  padding: 0 2px 0 0;
   overflow-y: auto;
   scrollbar-gutter: stable;
   list-style: none;
@@ -1288,10 +1301,20 @@ th {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  min-height: 108px;
-  border-left: 2px solid var(--text-secondary);
-  background: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
-  overflow: hidden;
+  min-height: 132px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+  border-left: 3px solid var(--text-secondary);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-secondary) 48%, var(--bg-primary));
+  overflow: clip;
+}
+
+.findings-rail li:not(:has(.finding-detail-info)) {
+  min-height: 0;
+}
+
+.findings-rail li:has(.finding-detail-info[open]) {
+  min-height: 0;
 }
 
 .findings-rail li.critical {
@@ -1303,15 +1326,13 @@ th {
 
 .findings-rail .finding-select {
   display: grid;
-  grid-template-rows: 12px 14px 13px minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   width: 100%;
   box-sizing: border-box;
-  height: 78px;
-  min-height: 78px;
-  max-height: 78px;
-  gap: 3px;
+  min-height: 96px;
+  gap: 5px;
   border: 0;
-  padding: 7px 8px;
+  padding: 12px 12px 10px;
   color: var(--text-secondary);
   background: transparent;
   cursor: pointer;
@@ -1324,14 +1345,16 @@ th {
 }
 .findings-rail .finding-select span {
   overflow: hidden;
-  font-size: 10px;
+  font-size: 11px;
+  font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .findings-rail .finding-select strong {
   color: var(--text-primary);
   overflow: hidden;
-  font-size: 11px;
+  font-size: 12px;
+  line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1339,7 +1362,7 @@ th {
   color: var(--warning-color);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   overflow: hidden;
-  font-size: 10px;
+  font-size: 11px;
   font-style: normal;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1350,64 +1373,86 @@ th {
 .findings-rail .finding-select small {
   display: -webkit-box;
   overflow: hidden;
-  font-size: 10px;
-  line-height: 1.25;
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.4;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
 }
 
 .finding-detail-info {
+  flex: 0 0 auto;
   box-sizing: border-box;
-  height: 30px;
-  min-height: 30px;
-  max-height: 30px;
   border-top: 1px solid color-mix(in srgb, var(--border-color) 54%, transparent);
   color: var(--text-secondary);
-  font-size: 10px;
-  overflow: hidden;
+  font-size: 11px;
 }
 
 .finding-detail-info[open] {
-  height: 150px;
-  min-height: 150px;
-  max-height: 150px;
-  background: var(--bg-secondary);
-  overflow-y: auto;
-  scrollbar-gutter: stable;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: color-mix(in srgb, var(--bg-secondary) 70%, var(--bg-primary));
 }
 
 .finding-detail-info summary {
   box-sizing: border-box;
-  height: 29px;
-  min-height: 29px;
-  padding: 6px 8px;
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 10px 12px;
   color: var(--success-color);
   cursor: pointer;
+  font-size: 12px;
   font-weight: 760;
+  list-style: none;
+}
+
+.finding-detail-info summary::-webkit-details-marker {
+  display: none;
+}
+
+.finding-detail-info summary::before {
+  content: '▸ ';
+}
+
+.finding-detail-info[open] summary::before {
+  content: '▾ ';
 }
 
 .finding-detail-info dl {
   display: grid;
-  gap: 4px;
+  gap: 12px;
   margin: 0;
-  padding: 0 8px 8px;
+  max-height: min(52vh, 420px);
+  padding: 0 12px 14px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .finding-detail-info dl div {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
-  gap: 6px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3px;
 }
 
 .finding-detail-info dt {
   color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 780;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
 .finding-detail-info dd {
   min-width: 0;
   margin: 0;
   color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.5;
   overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .stage-empty {

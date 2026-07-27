@@ -1,25 +1,36 @@
 <template>
   <section class="analysis-panel mockup-analysis-panel" aria-label="Analysis">
     <div class="analysis-heading">
-      <p id="project-analysis-subtitle" class="analysis-subtitle">
-        {{ analysisSubtitle }}
-      </p>
+      <div class="analysis-title-group">
+        <p id="project-analysis-subtitle" class="analysis-subtitle">
+          {{ analysisSubtitle }}
+        </p>
+        <p v-if="analysisContext" class="analysis-context">
+          {{ analysisContext }}
+        </p>
+      </div>
       <div class="analysis-tabs" role="tablist" aria-label="Analysis views">
         <button
+          id="analysis-tab-dashboard"
           type="button"
           role="tab"
           :aria-selected="selectedAnalysisTab === 'dashboard'"
+          aria-controls="analysis-dashboard-panel"
           :class="{ selected: selectedAnalysisTab === 'dashboard' }"
           @click="selectAnalysisTab('dashboard')"
+          @keydown="handleAnalysisTabKeydown($event, 'dashboard')"
         >
           Dashboard
         </button>
         <button
+          id="analysis-tab-step"
           type="button"
           role="tab"
           :aria-selected="selectedAnalysisTab === 'step'"
+          aria-controls="analysis-step-panel"
           :class="{ selected: selectedAnalysisTab === 'step' }"
           @click="selectAnalysisTab('step')"
+          @keydown="handleAnalysisTabKeydown($event, 'step')"
         >
           Step Analysis
         </button>
@@ -28,10 +39,14 @@
 
     <div
       v-if="hasProjectData && selectedAnalysisTab === 'dashboard'"
+      id="analysis-dashboard-panel"
+      role="tabpanel"
+      aria-labelledby="analysis-tab-dashboard"
       class="analysis-dashboard-v3"
     >
       <div class="dashboard-summary-strip" aria-label="Project summary">
         <section class="dashboard-card dashboard-run-state-card" aria-label="Run state">
+          <span class="dashboard-card-label">Workspace Run State</span>
           <div class="run-state-main">
             <div class="run-state-layout">
               <div
@@ -203,16 +218,23 @@
       </section>
     </div>
 
-    <ProjectStepAnalysisPanel
+    <div
       v-else-if="hasProjectData"
-      :steps="project.stepCompareSummaries"
-      :workspace-summaries="project.workspaceSummaries"
-      :qor-trend-summary="project.qorTrendSummary"
-      :selected-step="selectedStep"
-      :selected-workspace-id="selectedWorkspaceId"
-      @select-step="selectStep"
-      @select-workspace="selectWorkspace"
-    />
+      id="analysis-step-panel"
+      role="tabpanel"
+      aria-labelledby="analysis-tab-step"
+      class="analysis-step-panel"
+    >
+      <ProjectStepAnalysisPanel
+        :steps="project.stepCompareSummaries"
+        :workspace-summaries="project.workspaceSummaries"
+        :qor-trend-summary="project.qorTrendSummary"
+        :selected-step="selectedStep"
+        :selected-workspace-id="selectedWorkspaceId"
+        @select-step="selectStep"
+        @select-workspace="selectWorkspace"
+      />
+    </div>
 
     <div v-else class="metrics-empty-state">
       <i class="ri-line-chart-line" aria-hidden="true"></i>
@@ -294,6 +316,20 @@ const analysisSubtitle = computed(() => {
   }
   return `${workspaceLabel} · ${props.selectedStep} comparison`
 })
+const selectedWorkspace = computed(() =>
+  props.project.workspaces.find(
+    (workspace) => workspace.id === props.selectedWorkspaceId,
+  ),
+)
+const analysisContext = computed(() => {
+  const workspaceId = selectedWorkspace.value?.id
+  if (!workspaceId) return ''
+  const baselineId = props.project.qorTrendSummary.baselineWorkspaceId
+  if (!baselineId || baselineId === workspaceId) {
+    return `${props.project.name} / ${workspaceId} is the QoR reference workspace`
+  }
+  return `${props.project.name} / ${workspaceId} compared with ${baselineId}`
+})
 const dashboardMetricRows = computed(() =>
   buildDashboardMetricRows(
     props.project.metricsRows,
@@ -333,16 +369,31 @@ function sortIconClass(direction: MetricTableSortDirection): string {
   return direction === 'asc' ? 'ri-arrow-up-s-line' : 'ri-arrow-down-s-line'
 }
 
-function toggleMetricSort(
-  target: 'dashboard' | 'step',
-  key: MetricTableSortKey,
-): void {
+function toggleMetricSort(target: 'dashboard' | 'step', key: MetricTableSortKey): void {
   if (target !== 'dashboard') return
   dashboardSort.value = nextMetricSortState(dashboardSort.value, key)
 }
 
 function selectAnalysisTab(tab: AnalysisTab): void {
   emit('select-analysis-tab', tab)
+}
+
+function handleAnalysisTabKeydown(event: KeyboardEvent, currentTab: AnalysisTab): void {
+  const tabs: AnalysisTab[] = ['dashboard', 'step']
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+
+  event.preventDefault()
+  const currentIndex = tabs.indexOf(currentTab)
+  const nextIndex =
+    event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? tabs.length - 1
+        : (currentIndex + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) %
+          tabs.length
+  const nextTab = tabs[nextIndex]
+  selectAnalysisTab(nextTab)
+  document.getElementById(`analysis-tab-${nextTab}`)?.focus()
 }
 
 function selectStep(step: FlowStep): void {

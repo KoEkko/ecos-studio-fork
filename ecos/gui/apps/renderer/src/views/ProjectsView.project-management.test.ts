@@ -60,8 +60,8 @@ describe('ProjectsView project management surface', () => {
     expect(projectSurfaceSource).toContain(
       'grid-template-columns: minmax(330px, 390px) minmax(780px, 1fr);',
     )
-    expect(projectSurfaceSource).toContain('.manager-scrim {')
-    expect(projectSurfaceSource).toContain('display: none;')
+    expect(projectSurfaceSource).not.toContain('.manager-scrim {')
+    expect(projectSurfaceSource).not.toContain('.blurred-home {')
     expect(projectSurfaceSource).toContain('.workspace-flow-popover::before')
     expect(projectSurfaceSource).toContain('left: calc(100% + 14px);')
     expect(source).toContain('class="resource-row project-tree-row mockup-project-row"')
@@ -139,7 +139,7 @@ describe('ProjectsView project management surface', () => {
     expect(projectStyles).toContain('.manager-dialog.maximized')
   })
 
-  it('puts project-level workspace actions on each project item using circle icons', () => {
+  it('keeps project actions beside, not inside, the project selection button', () => {
     const projectRowStart = source.indexOf(
       'class="resource-row project-tree-row mockup-project-row"',
     )
@@ -151,9 +151,12 @@ describe('ProjectsView project management surface', () => {
     expect(rowSource).toContain('title="Import or open workspace"')
     expect(rowSource).toContain('title="New workspace"')
     expect(rowSource).toContain('title="Remove from Project Management"')
-    expect(rowSource).toContain('@click.stop="importWorkspaceIntoProject(project.model)"')
-    expect(rowSource).toContain('@click.stop="createWorkspaceForProject(project.model)"')
-    expect(rowSource).toContain('@click.stop="requestDeleteProject(project.source)"')
+    expect(source).toContain('class="project-tree-row-shell"')
+    expect(rowSource).toContain('type="button"')
+    expect(rowSource).toContain(':aria-pressed="project.model.id === selectedProjectId"')
+    expect(rowSource).toContain('@click="importWorkspaceIntoProject(project.model)"')
+    expect(rowSource).toContain('@click="createWorkspaceForProject(project.model)"')
+    expect(rowSource).toContain('@click="requestDeleteProject(project.source)"')
     expect(rowSource).toContain('class="circle-action primary row-action-primary"')
     expect(rowSource).toContain('row-action-secondary')
     expect(rowSource).not.toContain('file-action-button')
@@ -161,11 +164,11 @@ describe('ProjectsView project management surface', () => {
     expect(rowSource).toContain('ri-file-add-line')
     expect(rowSource).toContain('ri-subtract-line')
     expect(rowSource).not.toContain('circle-glyph')
-    expect(projectStyles).toContain('.project-tree-actions .row-action-secondary')
-    expect(projectStyles).toContain('.project-tree-row:hover .row-action-secondary')
+    expect(projectStyles).toContain('.project-tree-row-shell')
+    expect(projectStyles).not.toContain('.project-tree-row:hover .row-action-secondary')
   })
 
-  it('moves Import Project and New Project into the Projects list header as icon-only circle buttons', () => {
+  it('keeps explicit Import and New Project commands in the Projects list header', () => {
     const titleStart = source.indexOf('class="project-list-toolbar"')
     const titleEnd = source.indexOf('</div>\n            <div', titleStart)
     const headerSource = source.slice(
@@ -175,18 +178,16 @@ describe('ProjectsView project management surface', () => {
 
     expect(source).not.toContain('class="manager-header-actions"')
     expect(headerSource).toContain('class="project-list-actions"')
-    expect(headerSource).toContain('class="circle-action primary header-action-button"')
-    expect(headerSource).toContain('title="Import Project"')
-    expect(headerSource).toContain('aria-label="Import Project"')
-    expect(headerSource).toContain('title="New Project"')
-    expect(headerSource).toContain('aria-label="New Project"')
+    expect(headerSource).toContain('class="project-toolbar-action"')
+    expect(headerSource).toContain('class="project-toolbar-action primary"')
+    expect(headerSource).toContain('<span>Import</span>')
+    expect(headerSource).toContain('<span>New project</span>')
     expect(headerSource).toContain('ri-file-add-line')
     expect(headerSource).toContain('ri-add-line')
-    expect(headerSource).not.toContain('<span>Import</span>')
-    expect(headerSource).not.toContain('<span>New Project</span>')
+    expect(source).toContain('aria-label="Search projects or workspaces"')
   })
 
-  it('renders workspace tree rows with flow status hints and row-level circle actions', () => {
+  it('renders keyboard-reachable workspace selection and separate row actions', () => {
     expect(source).toContain('v-for="workspace in project.model.workspaces"')
     expect(source).toContain('workspaceDepthStyle(workspace)')
     expect(source).toContain('workspace.flowStatusHint.label')
@@ -198,14 +199,32 @@ describe('ProjectsView project management surface', () => {
     expect(rowSource).toContain('title="Open workspace"')
     expect(rowSource).toContain('title="Create workspace from step output"')
     expect(rowSource).toContain('title="Delete workspace"')
-    expect(rowSource).toContain('@click.stop="openWorkspace(workspace)"')
-    expect(rowSource).toContain('@click.stop="toggleWorkspaceFlowPopover(workspace.id)"')
-    expect(rowSource).toContain('@click.stop="requestDeleteWorkspace(workspace.id)"')
+    expect(rowSource).toContain('class="workspace-tree-row-shell"')
+    expect(rowSource).toContain(':aria-pressed="workspace.id === selectedWorkspaceId"')
+    expect(rowSource).toContain('@click="selectWorkspace(workspace.id)"')
+    expect(rowSource).toContain('@click="openWorkspace(workspace)"')
+    expect(rowSource).toContain('@click="toggleWorkspaceFlowPopover(workspace.id)"')
+    expect(rowSource).toContain('@click="requestDeleteWorkspace(workspace.id)"')
     expect(rowSource).toContain('circle-action')
     expect(rowSource).toContain('class="circle-action primary row-action-primary"')
     expect(rowSource).toContain('row-action-secondary workspace-flow-trigger')
     expect(rowSource).not.toContain('file-action-button')
-    expect(projectStyles).toContain('.workspace-tree-row:hover .row-action-secondary')
+    expect(projectStyles).toContain('.workspace-tree-row-shell')
+    expect(projectStyles).not.toContain('.workspace-tree-row:hover .row-action-secondary')
+  })
+
+  it('preserves project navigation at narrow desktop widths and removes side-stripe selection', () => {
+    const narrowStyles = projectStyles.slice(
+      projectStyles.indexOf('@media (max-width: 900px)'),
+    )
+
+    expect(narrowStyles).toContain(
+      'grid-template-rows: minmax(180px, 34vh) minmax(0, 1fr);',
+    )
+    expect(narrowStyles).toContain('.manager-sidebar {')
+    expect(narrowStyles).not.toContain('.manager-sidebar {\n    display: none;')
+    expect(projectStyles).not.toContain('.project-workspace-tree.selected::before')
+    expect(projectStyles).not.toContain('box-shadow: inset 3px 0 0 var(--accent-color);')
   })
 
   it('uses an up-right arrow icon for opening workspace rows', () => {
@@ -264,6 +283,8 @@ describe('ProjectsView project management surface', () => {
     expect(normalizedSource).toContain(
       'The project folder and project.json on disk will be kept',
     )
+    expect(source).toContain('writeFailureDetail')
+    expect(source).toContain('Check project path access, then retry.')
   })
 
   it('searches both projects and their workspaces', () => {
@@ -401,7 +422,11 @@ describe('ProjectsView project management surface', () => {
     expect(analysisSource).toContain(':steps="project.stepCompareSummaries"')
     expect(analysisSurfaceSource).toContain('.analysis-dashboard-v3 {')
     expect(analysisSurfaceSource).toContain('.dashboard-summary-strip {')
-    expect(analysisSurfaceSource).toContain('flex: 0 0 498px;')
+    expect(analysisSurfaceSource).toContain('overflow-y: auto;')
+    expect(analysisSurfaceSource).toContain(
+      '.analysis-dashboard-v3 > .qor-overview-panel {',
+    )
+    expect(analysisSurfaceSource).not.toContain('height: min(680px, 62vh);')
     expect(analysisSurfaceSource).toContain('.best-ppa-grid {')
     expect(analysisSource).toContain('class="dashboard-summary-strip"')
     expect(analysisSource.indexOf('class="dashboard-summary-strip"')).toBeLessThan(
@@ -455,6 +480,15 @@ describe('ProjectsView project management surface', () => {
     expect(analysisSurfaceSource).toContain('justify-content: space-between;')
     expect(analysisSurfaceSource).toContain('.analysis-subtitle {')
     expect(analysisSurfaceSource).not.toContain('.analysis-header-actions {')
+  })
+
+  it('connects analysis tabs to their panels and supports keyboard tab movement', () => {
+    expect(analysisSource).toContain('id="analysis-tab-dashboard"')
+    expect(analysisSource).toContain('aria-controls="analysis-dashboard-panel"')
+    expect(analysisSource).toContain('id="analysis-dashboard-panel"')
+    expect(analysisSource).toContain('role="tabpanel"')
+    expect(analysisSource).toContain('handleAnalysisTabKeydown')
+    expect(analysisSource).toContain('analysis-context')
   })
 
   it('keeps the workspace flow popover inside the project manager bounds', () => {

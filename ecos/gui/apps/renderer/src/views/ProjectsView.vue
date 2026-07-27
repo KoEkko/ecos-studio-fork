@@ -1,25 +1,5 @@
 <template>
   <div class="resource-manager-view">
-    <div class="blurred-home" aria-hidden="true">
-      <div class="blurred-brand">
-        <i class="ri-folder-chart-line"></i>
-        <span>Project Management</span>
-      </div>
-      <div class="blurred-cards">
-        <div class="blurred-card is-active"></div>
-        <div class="blurred-card"></div>
-        <div class="blurred-card"></div>
-      </div>
-      <div class="blurred-lines">
-        <div></div>
-        <div></div>
-        <div></div>
-        <div></div>
-      </div>
-    </div>
-
-    <div class="manager-scrim" aria-hidden="true"></div>
-
     <section
       class="manager-dialog"
       :class="{ maximized: isDialogMaximized }"
@@ -72,27 +52,26 @@
                 <input
                   v-model="searchQuery"
                   type="text"
+                  aria-label="Search projects or workspaces"
                   placeholder="Search project or workspace"
                 />
               </div>
               <div class="project-list-actions">
                 <button
                   type="button"
-                  class="circle-action primary header-action-button"
-                  title="Import Project"
-                  aria-label="Import Project"
+                  class="project-toolbar-action"
                   @click="importProject"
                 >
-                  <i class="ri-file-add-line"></i>
+                  <i class="ri-file-add-line" aria-hidden="true"></i>
+                  <span>Import</span>
                 </button>
                 <button
                   type="button"
-                  class="circle-action primary header-action-button"
-                  title="New Project"
-                  aria-label="New Project"
+                  class="project-toolbar-action primary"
                   @click="openNewProjectDialog"
                 >
-                  <i class="ri-add-line"></i>
+                  <i class="ri-add-line" aria-hidden="true"></i>
+                  <span>New project</span>
                 </button>
               </div>
             </div>
@@ -108,31 +87,34 @@
                 class="project-workspace-tree"
                 :class="{ selected: project.model.id === selectedProjectId }"
               >
-                <div
-                  role="button"
-                  tabindex="0"
-                  class="resource-row project-tree-row mockup-project-row"
-                  :class="{ selected: project.model.id === selectedProjectId }"
-                  @click="selectProject(project.model.id)"
-                  @keydown.enter.prevent="selectProject(project.model.id)"
-                  @keydown.space.prevent="selectProject(project.model.id)"
-                >
-                  <span class="resource-icon">
-                    <i class="ri-layout-grid-line"></i>
-                  </span>
-                  <span class="resource-copy">
-                    <strong>{{ project.model.name }}</strong>
-                    <small>{{
-                      workspaceCountLabel(project.model.workspaces.length)
-                    }}</small>
-                  </span>
-                  <span class="project-tree-actions">
+                <div class="project-tree-row-shell">
+                  <button
+                    type="button"
+                    class="resource-row project-tree-row mockup-project-row"
+                    :class="{ selected: project.model.id === selectedProjectId }"
+                    :aria-pressed="project.model.id === selectedProjectId"
+                    @click="selectProject(project.model.id)"
+                  >
+                    <span class="resource-icon">
+                      <i class="ri-layout-grid-line" aria-hidden="true"></i>
+                    </span>
+                    <span class="resource-copy">
+                      <strong>{{ project.model.name }}</strong>
+                      <small>{{
+                        workspaceCountLabel(project.model.workspaces.length)
+                      }}</small>
+                    </span>
+                  </button>
+                  <div
+                    class="project-tree-actions"
+                    :aria-label="`Actions for ${project.model.name}`"
+                  >
                     <button
                       type="button"
                       class="circle-action primary row-action-primary"
                       title="New workspace"
                       :aria-label="`New workspace in ${project.model.name}`"
-                      @click.stop="createWorkspaceForProject(project.model)"
+                      @click="createWorkspaceForProject(project.model)"
                     >
                       <i class="ri-add-line"></i>
                     </button>
@@ -141,7 +123,7 @@
                       class="circle-action row-action-secondary"
                       title="Import or open workspace"
                       :aria-label="`Import or open workspace for ${project.model.name}`"
-                      @click.stop="importWorkspaceIntoProject(project.model)"
+                      @click="importWorkspaceIntoProject(project.model)"
                     >
                       <i class="ri-file-add-line"></i>
                     </button>
@@ -150,11 +132,11 @@
                       class="circle-action danger row-action-secondary"
                       title="Remove from Project Management"
                       :aria-label="`Remove ${project.model.name} from Project Management`"
-                      @click.stop="requestDeleteProject(project.source)"
+                      @click="requestDeleteProject(project.source)"
                     >
                       <i class="ri-subtract-line"></i>
                     </button>
-                  </span>
+                  </div>
                 </div>
 
                 <div
@@ -172,34 +154,41 @@
                     :class="flowStatusHintClass(workspace.flowStatusHint.state)"
                     :style="workspaceDepthStyle(workspace)"
                   >
-                    <div
-                      class="workspace-tree-row"
-                      :class="{ selected: workspace.id === selectedWorkspaceId }"
-                      @click="selectWorkspace(workspace.id)"
-                    >
-                      <span class="workspace-tree-copy">
-                        <strong>{{ workspace.id }}</strong>
-                        <small
-                          >{{ workspace.startStep }} -> {{ workspace.endStep }}</small
-                        >
-                        <em v-if="workspace.sourceWorkspaceId"
-                          >from {{ workspace.sourceWorkspaceId }} /
-                          {{ workspace.branchStep }}</em
-                        >
-                      </span>
-                      <span
-                        class="workspace-flow-hint"
-                        :class="flowStatusHintClass(workspace.flowStatusHint.state)"
+                    <div class="workspace-tree-row-shell">
+                      <button
+                        type="button"
+                        class="workspace-tree-row"
+                        :class="{ selected: workspace.id === selectedWorkspaceId }"
+                        :aria-pressed="workspace.id === selectedWorkspaceId"
+                        @click="selectWorkspace(workspace.id)"
                       >
-                        {{ workspace.flowStatusHint.label }}
-                      </span>
-                      <span class="workspace-tree-actions">
+                        <span class="workspace-tree-copy">
+                          <strong>{{ workspace.id }}</strong>
+                          <small
+                            >{{ workspace.startStep }} -> {{ workspace.endStep }}</small
+                          >
+                          <em v-if="workspace.sourceWorkspaceId"
+                            >from {{ workspace.sourceWorkspaceId }} /
+                            {{ workspace.branchStep }}</em
+                          >
+                        </span>
+                        <span
+                          class="workspace-flow-hint"
+                          :class="flowStatusHintClass(workspace.flowStatusHint.state)"
+                        >
+                          {{ workspace.flowStatusHint.label }}
+                        </span>
+                      </button>
+                      <div
+                        class="workspace-tree-actions"
+                        :aria-label="`Actions for ${workspace.id}`"
+                      >
                         <button
                           type="button"
                           class="circle-action primary row-action-primary"
                           title="Open workspace"
                           :aria-label="`Open workspace ${workspace.id}`"
-                          @click.stop="openWorkspace(workspace)"
+                          @click="openWorkspace(workspace)"
                         >
                           <i class="ri-arrow-right-up-line"></i>
                         </button>
@@ -208,7 +197,7 @@
                           class="circle-action row-action-secondary workspace-flow-trigger"
                           title="Create workspace from step output"
                           :aria-label="`Create workspace from ${workspace.id}`"
-                          @click.stop="toggleWorkspaceFlowPopover(workspace.id)"
+                          @click="toggleWorkspaceFlowPopover(workspace.id)"
                         >
                           <i class="ri-add-line"></i>
                         </button>
@@ -217,11 +206,11 @@
                           class="circle-action danger row-action-secondary"
                           title="Delete workspace"
                           :aria-label="`Delete workspace ${workspace.id}`"
-                          @click.stop="requestDeleteWorkspace(workspace.id)"
+                          @click="requestDeleteWorkspace(workspace.id)"
                         >
                           <i class="ri-subtract-line"></i>
                         </button>
-                      </span>
+                      </div>
                     </div>
 
                     <div
@@ -793,6 +782,11 @@ function selectProject(projectId: string) {
   popoverWorkspaceId.value = ''
 }
 
+function writeFailureDetail(fileName: string, error: unknown): string {
+  const reason = error instanceof Error && error.message ? ` ${error.message}` : ''
+  return `${fileName} could not be updated. Check project path access, then retry.${reason}`
+}
+
 function selectWorkspace(workspaceId: string) {
   selectedWorkspaceId.value = workspaceId
   branchDraft.value = null
@@ -844,7 +838,7 @@ async function exportQorTrendReport() {
     showToast({
       severity: 'warn',
       summary: 'QoR report not exported',
-      detail: 'qor_trend.json could not be written.',
+      detail: writeFailureDetail('qor_trend.json', error),
     })
   }
 }
@@ -881,7 +875,7 @@ async function setQorBaseline(payload: { workspaceId: string }) {
     showToast({
       severity: 'warn',
       summary: 'QoR baseline not updated',
-      detail: 'project.json could not be updated.',
+      detail: writeFailureDetail('project.json', error),
     })
   }
 }
@@ -1125,7 +1119,7 @@ async function importWorkspaceIntoProject(project: ProjectManagementProject) {
     showToast({
       severity: 'warn',
       summary: 'Workspace not imported',
-      detail: 'project.json could not be updated.',
+      detail: writeFailureDetail('project.json', error),
     })
   }
 }

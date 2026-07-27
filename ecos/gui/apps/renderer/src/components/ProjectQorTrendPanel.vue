@@ -1,25 +1,56 @@
 <template>
   <div class="qor-overview-panel" aria-label="QoR Overview">
-    <header class="qor-overview-header">
+    <div v-if="baselineChangePending" class="qor-baseline-confirmation" role="status">
+      <span>
+        Use <strong>{{ baselineChangePending }}</strong> as the QoR baseline for this
+        project?
+      </span>
       <div>
-        <h4>QoR Overview</h4>
-        <p>Overall workspace score and QoR deltas.</p>
-      </div>
-      <div class="qor-header-tags">
-        <button
-          type="button"
-          class="qor-baseline-button"
-          title="Set selected workspace as QoR baseline"
-          aria-label="Set selected workspace as QoR baseline"
-          :disabled="!canSetSelectedWorkspaceAsBaseline"
-          @click="setSelectedWorkspaceAsBaseline"
-        >
-          <i class="ri-flag-line" aria-hidden="true"></i>
-          <span>Set Baseline</span>
+        <button type="button" class="qor-inline-action" @click="cancelBaselineChange">
+          Cancel
         </button>
         <button
           type="button"
-          class="qor-export-button"
+          class="qor-inline-action primary"
+          @click="confirmBaselineChange"
+        >
+          Confirm baseline
+        </button>
+      </div>
+    </div>
+
+    <div class="qor-panel-toolbar">
+      <div class="qor-toolbar-leading">
+        <p v-if="!selectedWorkspaceIsBaseline" class="qor-selection-context">
+          <span>Comparing</span>
+          <strong>{{ selectedWorkspace?.workspaceId ?? 'No workspace' }}</strong>
+          <span>with baseline</span>
+          <strong>{{ baselineLabel }}</strong>
+        </p>
+        <div class="qor-toolbar-meta">
+          <span class="qor-meta-chip">Baseline: {{ baselineLabel }}</span>
+          <span class="qor-meta-chip" :class="`qor-signoff-${selectedSignoffStatus}`">
+            Signoff: {{ selectedSignoffStatus }}
+          </span>
+        </div>
+      </div>
+      <div class="qor-toolbar-actions">
+        <div class="qor-baseline-action">
+          <button
+            type="button"
+            class="qor-toolbar-button"
+            title="Set selected workspace as the project QoR baseline"
+            aria-label="Set selected workspace as the project QoR baseline"
+            :disabled="!canSetSelectedWorkspaceAsBaseline"
+            @click="requestSetSelectedWorkspaceAsBaseline"
+          >
+            <i class="ri-flag-line" aria-hidden="true"></i>
+            <span>Set Baseline</span>
+          </button>
+        </div>
+        <button
+          type="button"
+          class="qor-toolbar-button"
           title="Export QoR report"
           aria-label="Export QoR report"
           @click="exportReport"
@@ -27,12 +58,8 @@
           <i class="ri-download-line" aria-hidden="true"></i>
           <span>Export</span>
         </button>
-        <span class="qor-baseline-tag">Baseline: {{ baselineLabel }}</span>
-        <span class="qor-baseline-tag" :class="`qor-signoff-${selectedSignoffStatus}`">
-          Signoff: {{ selectedSignoffStatus }}
-        </span>
       </div>
-    </header>
+    </div>
 
     <div class="qor-main-grid">
       <section class="qor-trend-card qor-chart-card">
@@ -45,7 +72,12 @@
             </strong>
             <strong v-else class="qor-best-score-chip muted">NR</strong>
           </div>
-          <small>{{ qorTrendSummary.trendPoints.length }} workspaces</small>
+          <div class="qor-section-meta">
+            <small>{{ qorTrendSummary.trendPoints.length }} workspaces</small>
+            <em class="qor-score-context" :class="selectedScoreClass">{{
+              selectedScoreContext
+            }}</em>
+          </div>
         </div>
         <div
           ref="chartViewport"
@@ -56,14 +88,8 @@
             class="qor-score-chart"
             :viewBox="chartViewBox"
             role="img"
-            aria-label="Overall QoR score trend from 0 to 100"
+            aria-label="Overall QoR score by workspace from 0 to 100"
           >
-            <defs>
-              <linearGradient :id="scoreAreaGradientId" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="currentColor" stop-opacity="0.2" />
-                <stop offset="100%" stop-color="currentColor" stop-opacity="0.02" />
-              </linearGradient>
-            </defs>
             <rect
               class="qor-chart-plot-bg"
               :x="chartLeft"
@@ -106,26 +132,24 @@
               :y1="chartBottom"
               :y2="chartBottom"
             />
-            <path
-              v-for="(path, index) in scoreAreaPaths"
-              :key="`score-area-${index}`"
-              class="qor-score-area"
-              :d="path"
-              :fill="`url(#${scoreAreaGradientId})`"
-            />
-            <polyline
-              v-for="(segment, index) in scorePolylines"
-              :key="`score-segment-${index}`"
-              class="qor-score-polyline"
-              :points="segment"
-              fill="none"
-            />
-            <g v-for="point in scoreChartPoints" :key="point.workspaceId">
+            <g
+              v-for="point in scoreChartPoints"
+              :key="point.workspaceId"
+              class="qor-lollipop"
+              :class="{
+                rated: !point.isNotRated,
+                best: point.isBest && !point.isNotRated,
+                selected: point.workspaceId === selectedWorkspace?.workspaceId,
+                baseline: point.workspaceId === qorTrendSummary.baselineWorkspaceId,
+              }"
+            >
               <line
                 class="qor-chart-stem"
                 :class="{
                   rated: !point.isNotRated,
                   best: point.isBest && !point.isNotRated,
+                  selected: point.workspaceId === selectedWorkspace?.workspaceId,
+                  baseline: point.workspaceId === qorTrendSummary.baselineWorkspaceId,
                 }"
                 :x1="point.x"
                 :x2="point.x"
@@ -135,17 +159,24 @@
               <circle
                 v-if="!point.isNotRated"
                 class="qor-chart-point"
-                :class="{ best: point.isBest }"
+                :class="{
+                  best: point.isBest,
+                  selected: point.workspaceId === selectedWorkspace?.workspaceId,
+                  baseline: point.workspaceId === qorTrendSummary.baselineWorkspaceId,
+                }"
                 :cx="point.x"
                 :cy="point.y"
-                r="1.45"
+                :r="point.workspaceId === selectedWorkspace?.workspaceId ? 2.4 : 1.85"
               >
-                <title>{{ `${point.label}: ${formatScore(point.score)}` }}</title>
+                <title>{{ chartPointDescription(point) }}</title>
               </circle>
               <text
                 v-if="!point.isNotRated"
                 class="qor-chart-value-label"
-                :class="{ best: point.isBest }"
+                :class="{
+                  best: point.isBest,
+                  selected: point.workspaceId === selectedWorkspace?.workspaceId,
+                }"
                 :x="point.x"
                 :y="point.y - 5.2"
                 text-anchor="middle"
@@ -193,166 +224,345 @@
           </svg>
         </div>
         <div class="qor-chart-legend" aria-hidden="true">
-          <span><i class="legend-best"></i>Best</span>
-          <span><i class="legend-pass"></i>Pass 60</span>
+          <span><i class="legend-selected"></i>Selected</span>
+          <span><i class="legend-baseline"></i>Baseline</span>
+          <span><i class="legend-pass"></i>Analysis target 60</span>
           <span><i class="legend-nr"></i>Not rated</span>
         </div>
+        <details class="qor-chart-data">
+          <summary>Score data</summary>
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Workspace</th>
+                <th scope="col">QoR score</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="point in scoreChartPoints"
+                :key="`score-data-${point.workspaceId}`"
+              >
+                <th scope="row">{{ point.label }}</th>
+                <td>{{ formatScore(point.score) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </details>
       </section>
 
       <section class="qor-trend-card qor-delta-card">
-        <div class="qor-delta-layout">
-          <div
-            id="qor-tabpanel"
-            class="qor-delta-list-panel"
-            role="tabpanel"
-            :aria-labelledby="`qor-tab-${activeDeltaTab}`"
+        <div class="qor-delta-tabs" role="tablist" aria-label="QoR findings">
+          <button
+            v-for="tab in deltaTabs"
+            :id="`qor-tab-${tab.id}`"
+            :key="tab.id"
+            type="button"
+            role="tab"
+            class="qor-delta-tab"
+            :class="{ selected: activeDeltaTab === tab.id }"
+            :aria-selected="activeDeltaTab === tab.id"
+            aria-controls="qor-tabpanel"
+            @click="activeDeltaTab = tab.id"
+            @keydown="handleDeltaTabKeydown($event, tab.id)"
           >
-            <div class="qor-delta-list-header">
-              <span>{{ activeListTitle }}</span>
-              <small>{{ activeListContext }}</small>
-            </div>
-            <template v-if="activeDeltaTab !== 'timing'">
-              <ul
-                v-if="activeDeltaItems.length > 0"
-                class="qor-delta-list qor-scroll-list"
-              >
-                <li v-for="item in activeDeltaItems" :key="qorListItemKey(item)">
-                  <span>{{ item.displayName }}</span>
-                  <strong :class="qorListItemClass(item)">
-                    {{ formatQorListItemBadge(item) }}
-                  </strong>
-                  <small>{{ formatQorListItemDetail(item) }}</small>
-                </li>
-              </ul>
-              <p v-else class="qor-empty-note">{{ activeDeltaEmptyMessage }}</p>
-            </template>
-            <template v-else>
-              <ul
-                v-if="timingWorkItemCount > 0"
-                class="qor-delta-list qor-scroll-list qor-timing-issue-list"
-              >
-                <li
-                  v-for="issue in visibleTimingIssues"
-                  :key="issue.issueId"
-                  class="qor-timing-issue"
-                >
-                  <button
-                    type="button"
-                    :class="{ selected: issue.workspaceId === selectedWorkspaceId }"
-                    @click="selectTimingIssueWorkspace(issue.workspaceId)"
-                  >
-                    <span class="qor-timing-issue-kind">
-                      {{ issue.analysisType.toUpperCase() }}
-                      <em :class="timingTriageClass(issue)">
-                        {{ timingTriageLabel(issue) }}
-                      </em>
-                    </span>
-                    <strong :class="`qor-risk-${issue.severity}`">
-                      {{ formatTimingSlack(issue.slackNs) }}
-                    </strong>
-                    <small>{{ issue.workspaceName }} · {{ issue.corner }}</small>
-                    <small>{{ issue.pathGroup }} · {{ issue.checkType }}</small>
-                    <small v-if="formatTimingTriage(issue)">
-                      {{ formatTimingTriage(issue) }}
-                    </small>
-                    <small v-if="formatTimingPhysicalContext(issue)">
-                      {{ formatTimingPhysicalContext(issue) }}
-                    </small>
-                    <small v-if="formatTimingReviewHints(issue)">
-                      {{ formatTimingReviewHints(issue) }}
-                    </small>
-                    <small v-if="formatTimingClockDelays(issue)">
-                      {{ formatTimingClockDelays(issue) }}
-                    </small>
-                  </button>
-                </li>
-                <li
-                  v-for="triage in clearedTimingTriage"
-                  :key="`cleared-${triage.workspaceId}-${triage.issueId}`"
-                  class="qor-timing-issue qor-timing-cleared"
-                >
-                  <button
-                    type="button"
-                    :class="{ selected: triage.workspaceId === selectedWorkspaceId }"
-                    @click="selectTimingIssueWorkspace(triage.workspaceId)"
-                  >
-                    <span class="qor-timing-issue-kind">
-                      {{ triage.analysisType.toUpperCase() }}
-                      <em class="qor-timing-triage-improved">CLEARED</em>
-                    </span>
-                    <strong class="qor-timing-triage-improved">RESOLVED</strong>
-                    <small
-                      >{{ triage.workspaceName }} · vs
-                      {{ triage.baselineWorkspaceName }}</small
-                    >
-                    <small
-                      >{{ triage.corner }} · {{ triage.pathGroup }} ·
-                      {{ triage.checkType }}</small
-                    >
-                  </button>
-                </li>
-                <li
-                  v-for="coverage in qorTrendSummary.timingClosure.coverage"
-                  :key="`coverage-${coverage.workspaceId}`"
-                  class="qor-timing-issue qor-timing-coverage"
-                >
-                  <button
-                    type="button"
-                    :class="{ selected: coverage.workspaceId === selectedWorkspaceId }"
-                    @click="selectTimingIssueWorkspace(coverage.workspaceId)"
-                  >
-                    <span class="qor-timing-issue-kind">
-                      COVERAGE
-                      <em>INCOMPLETE</em>
-                    </span>
-                    <strong class="qor-risk-warning">
-                      {{ formatMissingCornerCount(coverage.missingCornerCount) }}
-                    </strong>
-                    <small
-                      >{{ coverage.workspaceName }} · structured STA results
-                      missing</small
-                    >
-                    <small>{{
-                      formatAvailableArtifactCount(coverage.availableArtifactCount)
-                    }}</small>
-                  </button>
-                </li>
-              </ul>
-              <p v-else class="qor-empty-note">{{ timingEmptyMessage }}</p>
-            </template>
+            <span>{{ tab.label }}</span>
+            <strong v-if="tabCount(tab.id) > 0">{{ tabCount(tab.id) }}</strong>
+          </button>
+        </div>
+        <div
+          id="qor-tabpanel"
+          class="qor-delta-list-panel"
+          role="tabpanel"
+          :aria-labelledby="`qor-tab-${activeDeltaTab}`"
+        >
+          <div class="qor-delta-list-header">
+            <span>{{ activeListTitle }}</span>
+            <small>{{ activeListContext }}</small>
           </div>
-
-          <div
-            class="qor-delta-edge-rail"
-            role="tablist"
-            aria-label="QoR dashboard lists"
-            aria-orientation="vertical"
-          >
-            <button
-              v-for="tab in deltaTabs"
-              :id="`qor-tab-${tab.id}`"
-              :key="tab.id"
-              type="button"
-              role="tab"
-              class="qor-vertical-tab"
-              :class="{ selected: activeDeltaTab === tab.id }"
-              :aria-selected="activeDeltaTab === tab.id"
-              aria-controls="qor-tabpanel"
-              :aria-label="tabAriaLabel(tab.id)"
-              :title="tabAriaLabel(tab.id)"
-              @click="activeDeltaTab = tab.id"
+          <template v-if="isDeltaCompareTab">
+            <div
+              v-if="activeDeltaCompareItems.length > 0"
+              class="qor-delta-table-wrap qor-scroll-list"
             >
-              <span class="qor-vertical-tab-abbreviation">{{ tab.abbreviation }}</span>
-              <span class="qor-vertical-tab-full-label">{{ tab.label }}</span>
-              <span
-                v-if="tab.id === 'timing' && timingWorkItemCount > 0"
-                class="qor-vertical-tab-badge"
+              <table
+                class="qor-delta-table"
+                :class="{
+                  'is-regressions': activeDeltaTab === 'regressions',
+                  'is-improvements': activeDeltaTab === 'improvements',
+                }"
               >
-                {{ timingWorkItemCount }}
-              </span>
-              <span class="qor-vertical-tab-tooltip" role="tooltip">{{ tab.label }}</span>
-            </button>
-          </div>
+                <thead>
+                  <tr>
+                    <th scope="col">Metric</th>
+                    <th scope="col">{{ deltaBaselineColumnLabel }}</th>
+                    <th scope="col">{{ deltaCurrentColumnLabel }}</th>
+                    <th scope="col">Δ</th>
+                    <th scope="col">Δ%</th>
+                    <th scope="col" aria-hidden="true">
+                      <span class="sr-only">Magnitude</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="item in activeDeltaCompareItems"
+                    :key="deltaCompareRowKey(item)"
+                  >
+                    <th scope="row">
+                      <span class="qor-delta-metric-name">{{ item.displayName }}</span>
+                      <span
+                        v-if="isProjectQorRegression(item)"
+                        class="qor-delta-priority"
+                        >{{ item.priority }}</span
+                      >
+                    </th>
+                    <td>{{ formatMetricValue(item.baselineValue) }}</td>
+                    <td>{{ formatMetricValue(item.currentValue) }}</td>
+                    <td>{{ formatAbsoluteDelta(item.absoluteDelta) }}</td>
+                    <td>{{ formatDelta(item.relativeDeltaPct) }}</td>
+                    <td aria-hidden="true">
+                      <span
+                        class="qor-delta-bar"
+                        :style="{ width: `${deltaBarWidth(item.relativeDeltaPct)}%` }"
+                      ></span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p v-else class="qor-empty-note">{{ activeDeltaEmptyMessage }}</p>
+          </template>
+          <template v-else-if="activeDeltaTab === 'risks'">
+            <div
+              v-if="activeRiskItems.length > 0"
+              class="qor-delta-table-wrap qor-scroll-list"
+            >
+              <table class="qor-delta-table qor-risk-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Risk</th>
+                    <th scope="col">Severity</th>
+                    <th scope="col">Step</th>
+                    <th scope="col">Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in activeRiskItems" :key="qorListItemKey(item)">
+                    <th scope="row">
+                      <span class="qor-delta-metric-name">{{ item.displayName }}</span>
+                    </th>
+                    <td>
+                      <span class="qor-severity-pill" :class="qorListItemClass(item)">
+                        {{ item.severity.toUpperCase() }}
+                      </span>
+                    </td>
+                    <td>{{ item.step }}</td>
+                    <td class="qor-cell-wrap">
+                      {{ item.message
+                      }}<template v-if="item.value !== null">
+                        · {{ item.value }}</template
+                      >
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p v-else class="qor-empty-note">{{ activeRiskEmptyMessage }}</p>
+          </template>
+          <template v-else>
+            <div v-if="hasSelectedTimingContent" class="qor-timing-panel qor-scroll-list">
+              <div class="qor-timing-summary" aria-label="Timing summary">
+                <span
+                  v-if="selectedTimingSummary.critical > 0"
+                  class="qor-summary-chip critical"
+                >
+                  {{ selectedTimingSummary.critical }} critical
+                </span>
+                <span
+                  v-if="selectedTimingSummary.warning > 0"
+                  class="qor-summary-chip warning"
+                >
+                  {{ selectedTimingSummary.warning }} warning
+                </span>
+                <span
+                  v-if="selectedTimingSummary.coverage > 0"
+                  class="qor-summary-chip coverage"
+                >
+                  {{ selectedTimingSummary.coverage }} coverage gap{{
+                    selectedTimingSummary.coverage === 1 ? '' : 's'
+                  }}
+                </span>
+                <span
+                  v-if="selectedTimingSummary.cleared > 0"
+                  class="qor-summary-chip cleared"
+                >
+                  {{ selectedTimingSummary.cleared }} cleared
+                </span>
+              </div>
+
+              <div
+                v-if="filteredVisibleTimingIssues.length > 0"
+                class="qor-delta-table-wrap"
+              >
+                <table class="qor-delta-table qor-timing-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Type</th>
+                      <th scope="col">Corner</th>
+                      <th scope="col">Path</th>
+                      <th scope="col">Slack</th>
+                      <th scope="col">Triage</th>
+                      <th scope="col" aria-hidden="true">
+                        <span class="sr-only">Details</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template
+                      v-for="issue in filteredVisibleTimingIssues"
+                      :key="issue.issueId"
+                    >
+                      <tr
+                        class="qor-timing-row"
+                        :class="{
+                          selected: issue.workspaceId === selectedWorkspaceId,
+                          expanded: expandedTimingIssueId === issue.issueId,
+                        }"
+                        @click="selectTimingIssueWorkspace(issue.workspaceId)"
+                      >
+                        <th scope="row">{{ issue.analysisType.toUpperCase() }}</th>
+                        <td>{{ issue.corner }}</td>
+                        <td class="qor-cell-wrap">
+                          {{ issue.pathGroup }} · {{ issue.checkType }}
+                        </td>
+                        <td :class="`qor-risk-${issue.severity}`">
+                          {{ formatTimingSlack(issue.slackNs) }}
+                        </td>
+                        <td>
+                          <span class="qor-triage-pill" :class="timingTriageClass(issue)">
+                            {{ timingTriageLabel(issue) }}
+                          </span>
+                        </td>
+                        <td>
+                          <button
+                            v-if="timingIssueHasDetails(issue)"
+                            type="button"
+                            class="qor-row-expand"
+                            :aria-expanded="expandedTimingIssueId === issue.issueId"
+                            :aria-label="
+                              expandedTimingIssueId === issue.issueId
+                                ? 'Collapse timing details'
+                                : 'Expand timing details'
+                            "
+                            @click.stop="toggleTimingIssueExpand(issue.issueId)"
+                          >
+                            <i
+                              :class="
+                                expandedTimingIssueId === issue.issueId
+                                  ? 'ri-arrow-up-s-line'
+                                  : 'ri-arrow-down-s-line'
+                              "
+                              aria-hidden="true"
+                            ></i>
+                          </button>
+                        </td>
+                      </tr>
+                      <tr
+                        v-if="expandedTimingIssueId === issue.issueId"
+                        class="qor-timing-detail-row"
+                      >
+                        <td colspan="6">
+                          <ul class="qor-timing-detail-list">
+                            <li v-for="detail in timingIssueDetails(issue)" :key="detail">
+                              {{ detail }}
+                            </li>
+                          </ul>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+
+              <div
+                v-if="filteredClearedTimingTriage.length > 0"
+                class="qor-timing-subsection"
+              >
+                <h5 class="qor-subsection-title">Cleared</h5>
+                <div class="qor-delta-table-wrap">
+                  <table class="qor-delta-table qor-timing-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Type</th>
+                        <th scope="col">Corner</th>
+                        <th scope="col">Path</th>
+                        <th scope="col">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr
+                        v-for="triage in filteredClearedTimingTriage"
+                        :key="`cleared-${triage.workspaceId}-${triage.issueId}`"
+                        class="qor-timing-row"
+                        :class="{ selected: triage.workspaceId === selectedWorkspaceId }"
+                        @click="selectTimingIssueWorkspace(triage.workspaceId)"
+                      >
+                        <th scope="row">{{ triage.analysisType.toUpperCase() }}</th>
+                        <td>{{ triage.corner }}</td>
+                        <td class="qor-cell-wrap">
+                          {{ triage.pathGroup }} · {{ triage.checkType }}
+                        </td>
+                        <td>
+                          <span class="qor-triage-pill qor-timing-triage-improved">
+                            RESOLVED vs {{ triage.baselineWorkspaceName }}
+                          </span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div v-if="filteredTimingCoverage.length > 0" class="qor-timing-subsection">
+                <h5 class="qor-subsection-title">Coverage</h5>
+                <div class="qor-delta-table-wrap">
+                  <table class="qor-delta-table qor-timing-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Status</th>
+                        <th scope="col">Missing</th>
+                        <th scope="col">Details</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr
+                        v-for="coverage in filteredTimingCoverage"
+                        :key="`coverage-${coverage.workspaceId}`"
+                        class="qor-timing-row"
+                        :class="{
+                          selected: coverage.workspaceId === selectedWorkspaceId,
+                        }"
+                        @click="selectTimingIssueWorkspace(coverage.workspaceId)"
+                      >
+                        <th scope="row">INCOMPLETE</th>
+                        <td>
+                          {{ formatMissingCornerCount(coverage.missingCornerCount) }}
+                        </td>
+                        <td class="qor-cell-wrap">
+                          Structured STA results missing ·
+                          {{
+                            formatAvailableArtifactCount(coverage.availableArtifactCount)
+                          }}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            <p v-else class="qor-empty-note">{{ timingEmptyMessage }}</p>
+          </template>
         </div>
       </section>
     </div>
@@ -360,7 +570,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { ProjectQorTrendSummary } from '@/utils/projectQorTrend'
 
 const props = defineProps<{
@@ -380,31 +590,23 @@ const chartRight = 8
 const chartTop = 10
 const chartBottom = 68
 const chartNotRatedY = 56
-const scoreAreaGradientId = useId().replace(/:/g, '')
 type QorDashboardTab = 'improvements' | 'regressions' | 'risks' | 'timing'
 
 const deltaTabs: Array<{
   id: QorDashboardTab
-  abbreviation: string
   label: string
 }> = [
-  { id: 'improvements', abbreviation: 'IMP', label: 'Top Improvements' },
-  { id: 'regressions', abbreviation: 'REG', label: 'Top Regressions' },
-  { id: 'risks', abbreviation: 'RISK', label: 'Analysis Risks' },
-  { id: 'timing', abbreviation: 'STA', label: 'Timing Closure' },
+  { id: 'timing', label: 'Timing' },
+  { id: 'risks', label: 'Risks' },
+  { id: 'regressions', label: 'Regressions' },
+  { id: 'improvements', label: 'Improvements' },
 ]
 
-const activeDeltaTab = ref<QorDashboardTab>(
-  props.qorTrendSummary.timingClosure.issues.length > 0 ||
-    props.qorTrendSummary.timingClosure.coverage.length > 0 ||
-    props.qorTrendSummary.timingClosure.triage.some(
-      (triage) => triage.state === 'cleared',
-    )
-    ? 'timing'
-    : 'improvements',
-)
+const activeDeltaTab = ref<QorDashboardTab>(initialDeltaTab())
+const baselineChangePending = ref<string | null>(null)
 const chartViewport = ref<HTMLElement | null>(null)
 const chartViewportSize = ref({ width: 0, height: 0 })
+const expandedTimingIssueId = ref<string | null>(null)
 let chartResizeObserver: ResizeObserver | null = null
 
 onMounted(() => {
@@ -454,10 +656,34 @@ const selectedWorkspace = computed(() => {
 const selectedSignoffStatus = computed(
   () => selectedWorkspace.value?.signoffReadiness.status ?? 'unavailable',
 )
+const selectedScore = computed(
+  () =>
+    props.qorTrendSummary.trendPoints.find(
+      (point) => point.workspaceId === selectedWorkspace.value?.workspaceId,
+    )?.score ?? null,
+)
+const selectedScoreContext = computed(() => {
+  if (selectedScore.value === null) return 'QoR score unavailable'
+  const targetState =
+    selectedScore.value >= 60 ? 'meets analysis target' : 'below analysis target'
+  return `QoR ${formatScore(selectedScore.value)} · ${targetState}`
+})
+const selectedScoreClass = computed(() =>
+  selectedScore.value === null
+    ? 'is-unavailable'
+    : selectedScore.value >= 60
+      ? 'is-pass'
+      : 'is-below',
+)
 
 const canSetSelectedWorkspaceAsBaseline = computed(() => {
   const workspaceId = selectedWorkspace.value?.workspaceId
   return Boolean(workspaceId && workspaceId !== props.qorTrendSummary.baselineWorkspaceId)
+})
+
+const selectedWorkspaceIsBaseline = computed(() => {
+  const workspaceId = selectedWorkspace.value?.workspaceId
+  return Boolean(workspaceId && workspaceId === props.qorTrendSummary.baselineWorkspaceId)
 })
 
 const chartCoordinateWidth = computed(() => {
@@ -486,61 +712,48 @@ const scoreChartPoints = computed(() => {
   }))
 })
 
-const scorePolylines = computed(() => {
-  const segments: string[] = []
-  let activeSegment: string[] = []
-  for (const point of scoreChartPoints.value) {
-    if (point.isNotRated) {
-      if (activeSegment.length >= 2) segments.push(activeSegment.join(' '))
-      activeSegment = []
-      continue
-    }
-    activeSegment.push(`${Number(point.x.toFixed(2))},${Number(point.y.toFixed(2))}`)
-  }
-  if (activeSegment.length >= 2) segments.push(activeSegment.join(' '))
-  return segments
+const activeDeltaCompareItems = computed(() => {
+  const workspaceId = selectedWorkspace.value?.workspaceId
+  if (!workspaceId || selectedWorkspaceIsBaseline.value) return []
+
+  const source =
+    activeDeltaTab.value === 'improvements'
+      ? props.qorTrendSummary.improvements
+      : activeDeltaTab.value === 'regressions'
+        ? props.qorTrendSummary.regressions
+        : []
+
+  return source.filter((item) => item.workspaceId === workspaceId)
 })
 
-const scoreAreaPaths = computed(() => {
-  const paths: string[] = []
-  let activeSegment: Array<{ x: number; y: number }> = []
-
-  const flushSegment = () => {
-    if (activeSegment.length < 2) {
-      activeSegment = []
-      return
-    }
-    const first = activeSegment[0]
-    const last = activeSegment[activeSegment.length - 1]
-    const topEdge = activeSegment
-      .map((point) => `L ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
-      .join(' ')
-    paths.push(
-      [
-        `M ${first.x.toFixed(2)} ${chartBottom}`,
-        topEdge,
-        `L ${last.x.toFixed(2)} ${chartBottom}`,
-        'Z',
-      ].join(' '),
-    )
-    activeSegment = []
-  }
-
-  for (const point of scoreChartPoints.value) {
-    if (point.isNotRated) {
-      flushSegment()
-      continue
-    }
-    activeSegment.push({ x: point.x, y: point.y })
-  }
-  flushSegment()
-  return paths
+const activeRiskItems = computed(() => {
+  const workspaceId = selectedWorkspace.value?.workspaceId
+  if (!workspaceId || activeDeltaTab.value !== 'risks') return []
+  return props.qorTrendSummary.risks.filter((item) => item.workspaceId === workspaceId)
 })
 
-const activeDeltaItems = computed(() => {
-  if (activeDeltaTab.value === 'improvements') return props.qorTrendSummary.improvements
-  if (activeDeltaTab.value === 'regressions') return props.qorTrendSummary.regressions
-  return activeDeltaTab.value === 'risks' ? props.qorTrendSummary.risks : []
+const selectedWorkspaceRiskCount = computed(() => {
+  const workspaceId = selectedWorkspace.value?.workspaceId
+  if (!workspaceId) return 0
+  return props.qorTrendSummary.risks.filter((item) => item.workspaceId === workspaceId)
+    .length
+})
+
+const isDeltaCompareTab = computed(
+  () => activeDeltaTab.value === 'regressions' || activeDeltaTab.value === 'improvements',
+)
+
+const deltaBaselineColumnLabel = computed(() => baselineLabel.value)
+
+const deltaCurrentColumnLabel = computed(
+  () => selectedWorkspace.value?.workspaceId ?? 'Current',
+)
+
+const maxDeltaBarPct = computed(() => {
+  const magnitudes = activeDeltaCompareItems.value
+    .map((item) => Math.abs(item.relativeDeltaPct ?? 0))
+    .filter((value) => value > 0)
+  return magnitudes.length > 0 ? Math.max(...magnitudes) : 1
 })
 
 const activeListTitle = computed(() => {
@@ -550,19 +763,53 @@ const activeListTitle = computed(() => {
 })
 
 const activeListContext = computed(() => {
-  if (activeDeltaTab.value === 'risks') return 'Structured analysis and data quality'
-  if (activeDeltaTab.value === 'timing') {
-    return `${timingWorkItemCount.value} structured timing work item${
-      timingWorkItemCount.value === 1 ? '' : 's'
-    }`
+  const workspaceId = selectedWorkspace.value?.workspaceId
+  if (activeDeltaTab.value === 'risks') {
+    if (!workspaceId) return 'Select a workspace to review structured risks.'
+    return `${selectedWorkspaceRiskCount.value} structured risk${
+      selectedWorkspaceRiskCount.value === 1 ? '' : 's'
+    } for ${workspaceId}`
   }
-  return `Compared with ${baselineLabel.value}`
+  if (activeDeltaTab.value === 'timing') {
+    if (!workspaceId) return 'Select a workspace to review timing results.'
+    return `${filteredTimingWorkItemCount.value} timing work item${
+      filteredTimingWorkItemCount.value === 1 ? '' : 's'
+    } for ${workspaceId}`
+  }
+  if (selectedWorkspaceIsBaseline.value) {
+    return 'Select another workspace to compare against this baseline.'
+  }
+  if (!workspaceId) return 'Select a workspace to compare against the baseline.'
+  return `Metric deltas for ${workspaceId} vs baseline ${baselineLabel.value}`
+})
+
+const activeRiskEmptyMessage = computed(() => {
+  if (!selectedWorkspace.value?.workspaceId) {
+    return 'Select a workspace to review structured risks.'
+  }
+  return 'No structured analysis risks detected for the selected workspace.'
 })
 
 const activeDeltaEmptyMessage = computed(() => {
-  if (activeDeltaTab.value === 'improvements') return 'No top improvements detected.'
-  if (activeDeltaTab.value === 'regressions') return 'No top regressions detected.'
-  return 'No structured analysis risks detected.'
+  if (activeDeltaTab.value === 'improvements') {
+    if (!selectedWorkspace.value?.workspaceId) {
+      return 'Select a workspace to compare against the baseline.'
+    }
+    if (selectedWorkspaceIsBaseline.value) {
+      return 'The selected workspace is the QoR baseline.'
+    }
+    return 'No improvements detected for the selected workspace.'
+  }
+  if (activeDeltaTab.value === 'regressions') {
+    if (!selectedWorkspace.value?.workspaceId) {
+      return 'Select a workspace to compare against the baseline.'
+    }
+    if (selectedWorkspaceIsBaseline.value) {
+      return 'The selected workspace is the QoR baseline.'
+    }
+    return 'No regressions detected for the selected workspace.'
+  }
+  return activeRiskEmptyMessage.value
 })
 
 const currentTriageIssueKeys = computed(
@@ -593,15 +840,52 @@ const clearedTimingTriage = computed(() =>
   ),
 )
 const timingIssueCount = computed(() => visibleTimingIssues.value.length)
-const timingWorkItemCount = computed(
+const projectTimingWorkItemCount = computed(
   () =>
     timingIssueCount.value +
     clearedTimingTriage.value.length +
     props.qorTrendSummary.timingClosure.coverage.length,
 )
 
+function filterTimingItemsBySelectedWorkspace<T extends { workspaceId: string }>(
+  items: T[],
+): T[] {
+  const workspaceId = selectedWorkspace.value?.workspaceId
+  if (!workspaceId) return []
+  return items.filter((item) => item.workspaceId === workspaceId)
+}
+
+const filteredVisibleTimingIssues = computed(() =>
+  filterTimingItemsBySelectedWorkspace(visibleTimingIssues.value),
+)
+const filteredClearedTimingTriage = computed(() =>
+  filterTimingItemsBySelectedWorkspace(clearedTimingTriage.value),
+)
+const filteredTimingCoverage = computed(() =>
+  filterTimingItemsBySelectedWorkspace(props.qorTrendSummary.timingClosure.coverage),
+)
+const filteredTimingWorkItemCount = computed(
+  () =>
+    filteredVisibleTimingIssues.value.length +
+    filteredClearedTimingTriage.value.length +
+    filteredTimingCoverage.value.length,
+)
+const hasSelectedTimingContent = computed(() => filteredTimingWorkItemCount.value > 0)
+const selectedTimingSummary = computed(() => ({
+  critical: filteredVisibleTimingIssues.value.filter(
+    (issue) => issue.severity === 'critical',
+  ).length,
+  warning: filteredVisibleTimingIssues.value.filter(
+    (issue) => issue.severity === 'warning',
+  ).length,
+  coverage: filteredTimingCoverage.value.length,
+  cleared: filteredClearedTimingTriage.value.length,
+}))
+
 const timingEmptyMessage = computed(() => {
   const summary = props.qorTrendSummary.timingClosure
+  const workspaceId = selectedWorkspace.value?.workspaceId
+  if (!workspaceId) return 'Select a workspace to review timing results.'
   const unavailableOrIncomplete =
     summary.unavailableWorkspaceCount + summary.incompleteWorkspaceCount
   if (
@@ -610,14 +894,25 @@ const timingEmptyMessage = computed(() => {
   ) {
     return 'STA timing analysis is unavailable for this project.'
   }
-  if (unavailableOrIncomplete > 0) {
-    return `STA timing analysis is incomplete; ${unavailableOrIncomplete} workspace(s) need a valid analysis result.`
+  if (unavailableOrIncomplete > 0 && filteredTimingWorkItemCount.value === 0) {
+    return `STA timing analysis is incomplete for ${workspaceId}.`
   }
-  return 'All available STA timing analyses are clean.'
+  return 'All available STA timing analyses are clean for the selected workspace.'
 })
 
 watch(
-  () => timingWorkItemCount.value,
+  () => props.selectedWorkspaceId,
+  () => {
+    expandedTimingIssueId.value = null
+  },
+)
+
+watch(activeDeltaTab, () => {
+  expandedTimingIssueId.value = null
+})
+
+watch(
+  () => projectTimingWorkItemCount.value,
   (workItemCount, previousWorkItemCount) => {
     if (
       previousWorkItemCount === 0 &&
@@ -645,10 +940,61 @@ function exportReport() {
   emit('export-report')
 }
 
-function setSelectedWorkspaceAsBaseline() {
+function initialDeltaTab(): QorDashboardTab {
+  const workspaceId = props.selectedWorkspaceId
+  if (!workspaceId) return 'improvements'
+
+  const hasTimingForWorkspace =
+    props.qorTrendSummary.timingClosure.issues.some(
+      (issue) => issue.workspaceId === workspaceId,
+    ) ||
+    props.qorTrendSummary.timingClosure.coverage.some(
+      (coverage) => coverage.workspaceId === workspaceId,
+    ) ||
+    props.qorTrendSummary.timingClosure.triage.some(
+      (triage) => triage.workspaceId === workspaceId && triage.state === 'cleared',
+    )
+  if (hasTimingForWorkspace) return 'timing'
+
+  if (
+    props.qorTrendSummary.risks.some(
+      (item) => item.workspaceId === workspaceId && item.severity !== 'info',
+    )
+  ) {
+    return 'risks'
+  }
+
+  const isBaseline = workspaceId === props.qorTrendSummary.baselineWorkspaceId
+  if (
+    !isBaseline &&
+    props.qorTrendSummary.regressions.some((item) => item.workspaceId === workspaceId)
+  ) {
+    return 'regressions'
+  }
+  if (
+    !isBaseline &&
+    props.qorTrendSummary.improvements.some((item) => item.workspaceId === workspaceId)
+  ) {
+    return 'improvements'
+  }
+  return 'improvements'
+}
+
+function requestSetSelectedWorkspaceAsBaseline() {
   const workspaceId = selectedWorkspace.value?.workspaceId
   if (!workspaceId || workspaceId === props.qorTrendSummary.baselineWorkspaceId) return
+  baselineChangePending.value = workspaceId
+}
+
+function cancelBaselineChange() {
+  baselineChangePending.value = null
+}
+
+function confirmBaselineChange() {
+  const workspaceId = baselineChangePending.value
+  if (!workspaceId || workspaceId === props.qorTrendSummary.baselineWorkspaceId) return
   emit('set-baseline', { workspaceId })
+  baselineChangePending.value = null
 }
 
 function selectTimingIssueWorkspace(workspaceId: string) {
@@ -730,10 +1076,73 @@ function formatTimingClockDelays(
   return `Launch ${launch.toFixed(3)} ns · Capture ${capture.toFixed(3)} ns${deltaText}`
 }
 
-function tabAriaLabel(tabId: QorDashboardTab): string {
-  const label = deltaTabs.find((tab) => tab.id === tabId)?.label ?? 'QoR Dashboard'
-  if (tabId !== 'timing' || timingWorkItemCount.value === 0) return label
-  return `${label}, ${timingWorkItemCount.value} timing work items`
+function timingIssueHasDetails(
+  issue: ProjectQorTrendSummary['timingClosure']['issues'][number],
+): boolean {
+  return timingIssueDetails(issue).length > 0
+}
+
+function timingIssueDetails(
+  issue: ProjectQorTrendSummary['timingClosure']['issues'][number],
+): string[] {
+  return [
+    formatTimingTriage(issue),
+    formatTimingPhysicalContext(issue),
+    formatTimingReviewHints(issue),
+    formatTimingClockDelays(issue),
+  ].filter((detail): detail is string => Boolean(detail))
+}
+
+function toggleTimingIssueExpand(issueId: string): void {
+  expandedTimingIssueId.value = expandedTimingIssueId.value === issueId ? null : issueId
+}
+
+function tabCount(tabId: QorDashboardTab): number {
+  const workspaceId = selectedWorkspace.value?.workspaceId
+  if (tabId === 'timing') return filteredTimingWorkItemCount.value
+  if (tabId === 'risks') return selectedWorkspaceRiskCount.value
+  if (!workspaceId || selectedWorkspaceIsBaseline.value) return 0
+  if (tabId === 'regressions') {
+    return props.qorTrendSummary.regressions.filter(
+      (item) => item.workspaceId === workspaceId,
+    ).length
+  }
+  return props.qorTrendSummary.improvements.filter(
+    (item) => item.workspaceId === workspaceId,
+  ).length
+}
+
+function handleDeltaTabKeydown(event: KeyboardEvent, currentTab: QorDashboardTab) {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+  event.preventDefault()
+  const currentIndex = deltaTabs.findIndex((tab) => tab.id === currentTab)
+  const nextIndex =
+    event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? deltaTabs.length - 1
+        : (currentIndex + (event.key === 'ArrowRight' ? 1 : -1) + deltaTabs.length) %
+          deltaTabs.length
+  const nextTab = deltaTabs[nextIndex]
+  activeDeltaTab.value = nextTab.id
+  document.getElementById(`qor-tab-${nextTab.id}`)?.focus()
+}
+
+function chartPointDescription(
+  point: ProjectQorTrendSummary['trendPoints'][number],
+): string {
+  return `${point.label}: ${formatScore(point.score)}${
+    chartPointContext(point) ? ` (${chartPointContext(point)})` : ''
+  }`
+}
+
+function chartPointContext(point: ProjectQorTrendSummary['trendPoints'][number]): string {
+  const tags = [
+    point.workspaceId === selectedWorkspace.value?.workspaceId ? 'selected' : '',
+    point.workspaceId === props.qorTrendSummary.baselineWorkspaceId ? 'baseline' : '',
+    point.score !== null && point.score < 60 ? 'below analysis target' : '',
+  ].filter(Boolean)
+  return tags.join(', ')
 }
 
 function formatDelta(delta: number | null): string {
@@ -742,21 +1151,41 @@ function formatDelta(delta: number | null): string {
   return `${sign}${delta.toFixed(1)}%`
 }
 
-function formatDeltaBadge(
-  delta:
-    | ProjectQorTrendSummary['improvements'][number]
-    | ProjectQorTrendSummary['regressions'][number],
-): string {
-  return 'priority' in delta ? delta.priority : formatDelta(delta.relativeDeltaPct)
+function formatMetricValue(value: number): string {
+  const abs = Math.abs(value)
+  if (abs >= 1000) {
+    return value.toLocaleString(undefined, { maximumFractionDigits: 2 })
+  }
+  if (abs >= 100) return value.toFixed(2)
+  if (abs >= 1) return value.toFixed(3)
+  return value.toFixed(4)
 }
 
-function formatDeltaDetail(
-  delta:
+function formatAbsoluteDelta(delta: number): string {
+  const sign = delta > 0 ? '+' : ''
+  return `${sign}${formatMetricValue(delta)}`
+}
+
+function deltaBarWidth(relativeDeltaPct: number | null): number {
+  if (relativeDeltaPct === null || relativeDeltaPct === 0) return 0
+  const scaled = (Math.abs(relativeDeltaPct) / maxDeltaBarPct.value) * 100
+  return Math.max(8, Math.min(100, scaled))
+}
+
+function deltaCompareRowKey(
+  item:
     | ProjectQorTrendSummary['improvements'][number]
     | ProjectQorTrendSummary['regressions'][number],
 ): string {
-  const workspaces = `${delta.workspaceName} vs ${delta.baselineWorkspaceName}`
-  return 'message' in delta ? `${workspaces}: ${delta.message}` : workspaces
+  return `${item.workspaceId}-${item.metricName}`
+}
+
+function isProjectQorRegression(
+  item:
+    | ProjectQorTrendSummary['improvements'][number]
+    | ProjectQorTrendSummary['regressions'][number],
+): item is ProjectQorTrendSummary['regressions'][number] {
+  return 'priority' in item
 }
 
 function isProjectQorRisk(
@@ -765,29 +1194,6 @@ function isProjectQorRisk(
     | ProjectQorTrendSummary['risks'][number],
 ): item is ProjectQorTrendSummary['risks'][number] {
   return 'severity' in item
-}
-
-function formatQorListItemBadge(
-  item:
-    | ProjectQorTrendSummary['improvements'][number]
-    | ProjectQorTrendSummary['regressions'][number]
-    | ProjectQorTrendSummary['risks'][number],
-): string {
-  if (isProjectQorRisk(item)) return item.severity.toUpperCase()
-  return formatDeltaBadge(item)
-}
-
-function formatQorListItemDetail(
-  item:
-    | ProjectQorTrendSummary['improvements'][number]
-    | ProjectQorTrendSummary['regressions'][number]
-    | ProjectQorTrendSummary['risks'][number],
-): string {
-  if (isProjectQorRisk(item)) {
-    const value = item.value === null ? '' : `: ${item.value}`
-    return `${item.workspaceName} · ${item.step} · ${item.message}${value}`
-  }
-  return formatDeltaDetail(item)
 }
 
 function qorListItemKey(
@@ -814,105 +1220,198 @@ function qorListItemClass(
 
 <style scoped>
 .qor-overview-panel {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 10px;
-  height: 100%;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
   color: var(--text-primary);
 }
 
-.qor-overview-header,
 .qor-section-title,
 .qor-trend-card {
   border: 1px solid var(--border-color);
   background: var(--bg-primary);
 }
 
-.qor-overview-header {
+.qor-panel-toolbar {
   display: flex;
+  flex: 0 0 auto;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
-  padding: 14px 16px;
-  border-radius: 8px;
+  gap: 12px;
+  min-height: 34px;
+  padding: 0 2px 2px;
 }
 
-.qor-overview-header h4 {
+.qor-toolbar-leading {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.qor-selection-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
   margin: 0;
-  font-size: 16px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.qor-selection-context strong {
+  color: var(--text-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 760;
+}
+
+.qor-toolbar-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.qor-meta-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-secondary) 58%, var(--bg-primary));
+  color: var(--text-secondary);
+  font-size: 11px;
   font-weight: 700;
 }
 
-.qor-overview-header p,
+.qor-meta-chip.qor-signoff-pass {
+  color: var(--success-color, #2f9f6f);
+  background: color-mix(in srgb, var(--success-color, #2f9f6f) 12%, var(--bg-primary));
+}
+
+.qor-meta-chip.qor-signoff-blocked {
+  color: var(--danger-color, #b91c1c);
+  background: color-mix(in srgb, var(--danger-color, #b91c1c) 10%, var(--bg-primary));
+}
+
+.qor-meta-chip.qor-signoff-incomplete,
+.qor-meta-chip.qor-signoff-unavailable {
+  color: var(--warning-color, #b45309);
+  background: color-mix(in srgb, var(--warning-color, #b45309) 12%, var(--bg-primary));
+}
+
+.qor-toolbar-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.qor-baseline-action {
+  display: inline-flex;
+}
+
+.qor-toolbar-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-primary) 88%, transparent);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.qor-toolbar-button:hover {
+  color: var(--accent-color);
+  border-color: color-mix(in srgb, var(--accent-color) 42%, transparent);
+  background: color-mix(in srgb, var(--accent-color) 8%, var(--bg-primary));
+}
+
+.qor-toolbar-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.qor-baseline-confirmation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--bg-secondary) 58%, var(--bg-primary));
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.qor-baseline-confirmation strong {
+  color: var(--text-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.qor-baseline-confirmation > div {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.qor-inline-action {
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.qor-inline-action.primary {
+  border-color: color-mix(in srgb, var(--accent-color) 54%, var(--border-color));
+  color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 10%, var(--bg-primary));
+}
+
 .qor-section-title small,
 .qor-empty-note,
 .qor-delta-list small {
   color: var(--text-secondary);
 }
 
-.qor-overview-header p {
-  margin: 4px 0 0;
-  font-size: 12px;
+.qor-section-meta {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  min-width: 0;
+  text-align: right;
 }
 
-.qor-header-tags {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 6px;
+.qor-score-context {
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 720;
 }
 
-.qor-baseline-tag,
-.qor-baseline-button,
-.qor-export-button {
-  min-width: 54px;
-  padding: 5px 9px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent-color) 12%, var(--bg-primary));
-  color: var(--accent-color);
-  font-size: 12px;
-  font-weight: 700;
-  text-align: center;
+.qor-score-context.is-pass {
+  color: var(--success-color, #2f9f6f);
 }
 
-.qor-baseline-button,
-.qor-export-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  border: 1px solid color-mix(in srgb, var(--accent-color) 42%, transparent);
-  cursor: pointer;
+.qor-score-context.is-below {
+  color: var(--warning-color, #b45309);
 }
 
-.qor-baseline-button:hover,
-.qor-export-button:hover {
-  background: color-mix(in srgb, var(--accent-color) 18%, var(--bg-primary));
-}
-
-.qor-baseline-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.48;
-}
-
-.qor-baseline-tag.qor-signoff-pass {
-  color: #34d399;
-}
-
-.qor-baseline-tag.qor-signoff-blocked {
-  color: #f87171;
-}
-
-.qor-baseline-tag.qor-signoff-incomplete,
-.qor-baseline-tag.qor-signoff-unavailable {
-  color: #fbbf24;
-}
-
-.qor-baseline-tag {
-  background: color-mix(in srgb, var(--warning-color, #d97706) 12%, var(--bg-primary));
-  color: var(--warning-color, #d97706);
+.qor-score-context.is-unavailable {
+  color: var(--text-secondary);
 }
 
 .qor-trend-card {
@@ -967,21 +1466,25 @@ function qorListItemClass(
 
 .qor-main-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.42fr);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto;
   gap: 12px;
   min-height: 0;
-  overflow: hidden;
+  flex: 0 0 auto;
 }
 
 .qor-trend-card {
   display: flex;
-  min-height: 0;
   flex-direction: column;
   overflow: hidden;
 }
 
 .qor-delta-card {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: auto auto;
   padding: 0;
+  overflow: hidden;
 }
 
 .qor-section-title {
@@ -998,8 +1501,9 @@ function qorListItemClass(
 }
 
 .qor-chart-viewport {
-  min-height: 0;
-  flex: 1 1 auto;
+  min-height: 280px;
+  height: 280px;
+  flex: 0 0 auto;
   margin: 0 -4px;
   padding: 10px 4px 2px;
   overflow: hidden;
@@ -1075,46 +1579,69 @@ function qorListItemClass(
   fill: var(--success-color, #2f9f6f);
 }
 
-.qor-score-area {
-  opacity: 0.95;
-}
-
-.qor-score-polyline {
-  stroke: var(--accent-color);
-  stroke-width: 1.55;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  vector-effect: non-scaling-stroke;
+.qor-lollipop {
+  color: var(--accent-color);
 }
 
 .qor-chart-stem {
   stroke: color-mix(in srgb, var(--border-color) 72%, transparent);
-  stroke-width: 0.7;
+  stroke-width: 0.85;
+  stroke-linecap: round;
   stroke-dasharray: 1.4 1.4;
   vector-effect: non-scaling-stroke;
 }
 
 .qor-chart-stem.rated {
-  stroke: color-mix(in srgb, var(--accent-color) 34%, transparent);
+  stroke: color-mix(in srgb, var(--accent-color) 48%, transparent);
   stroke-dasharray: none;
-  stroke-width: 1;
+  stroke-width: 1.15;
 }
 
 .qor-chart-stem.best {
-  stroke: color-mix(in srgb, var(--success-color, #2f9f6f) 42%, transparent);
+  stroke: color-mix(in srgb, var(--success-color, #2f9f6f) 58%, transparent);
+}
+
+.qor-chart-stem.selected {
+  stroke: var(--text-primary);
+  stroke-width: 1.55;
+}
+
+.qor-chart-stem.baseline {
+  stroke: var(--warning-color, #b45309);
+  stroke-dasharray: none;
 }
 
 .qor-chart-point {
   fill: var(--bg-primary);
   stroke: var(--accent-color);
-  stroke-width: 1.5;
+  stroke-width: 1.45;
   vector-effect: non-scaling-stroke;
 }
 
 .qor-chart-point.best {
   fill: var(--success-color, #2f9f6f);
   stroke: color-mix(in srgb, var(--success-color, #2f9f6f) 55%, #0b6b48);
-  stroke-width: 0.9;
+  stroke-width: 1;
+}
+
+.qor-chart-point.selected {
+  fill: var(--text-primary);
+  stroke: var(--text-primary);
+  stroke-width: 1.2;
+}
+
+.qor-chart-point.baseline {
+  stroke: var(--warning-color, #b45309);
+  stroke-width: 1.55;
+}
+
+.qor-chart-point.selected.baseline {
+  fill: var(--warning-color, #b45309);
+  stroke: var(--warning-color, #b45309);
+}
+
+.qor-chart-value-label.selected {
+  fill: var(--text-primary);
 }
 
 .qor-chart-nr-pill {
@@ -1158,10 +1685,14 @@ function qorListItemClass(
   box-sizing: border-box;
 }
 
-.qor-chart-legend .legend-best {
-  width: 8px;
-  height: 8px;
-  background: var(--success-color, #2f9f6f);
+.qor-chart-legend .legend-selected {
+  border: 2px solid var(--text-primary);
+  background: var(--bg-primary);
+}
+
+.qor-chart-legend .legend-baseline {
+  border: 2px solid var(--warning-color, #b45309);
+  background: var(--bg-primary);
 }
 
 .qor-chart-legend .legend-pass {
@@ -1178,20 +1709,103 @@ function qorListItemClass(
   border-radius: 3px;
 }
 
-.qor-delta-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 38px;
-  gap: 0;
-  min-height: 0;
-  flex: 1 1 auto;
+.qor-chart-data {
+  flex: 0 0 auto;
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.qor-chart-data summary {
+  width: max-content;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.qor-chart-data table {
+  width: 100%;
+  margin-top: 7px;
+  border-collapse: collapse;
+  color: var(--text-primary);
+  font-size: 11px;
+  text-align: left;
+}
+
+.qor-chart-data th,
+.qor-chart-data td {
+  padding: 5px 6px;
+  border-top: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+}
+
+.qor-chart-data th[scope='row'] {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .qor-delta-list-panel {
   display: flex;
   min-width: 0;
-  min-height: 0;
   flex-direction: column;
   padding: 14px;
+}
+
+.qor-delta-tabs {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-bottom: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-secondary) 68%, var(--bg-primary));
+}
+
+.qor-delta-tab {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 6px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.qor-delta-tab span {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qor-delta-tab:hover,
+.qor-delta-tab.selected {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent-color) 7%, var(--bg-primary));
+}
+
+.qor-delta-tab.selected {
+  border-bottom-color: var(--accent-color);
+}
+
+.qor-delta-tab:focus-visible,
+.qor-inline-action:focus-visible,
+.qor-toolbar-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-color) 72%, transparent);
+  outline-offset: -2px;
+}
+
+.qor-delta-tab strong {
+  display: inline-grid;
+  min-width: 16px;
+  height: 16px;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 12%, var(--bg-primary));
+  font-size: 10px;
 }
 
 .qor-delta-list-header {
@@ -1215,128 +1829,312 @@ function qorListItemClass(
   text-align: right;
 }
 
-.qor-delta-edge-rail {
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex-direction: column;
-  border-left: 1px solid var(--border-color);
-  background: color-mix(in srgb, var(--bg-secondary) 70%, var(--bg-primary));
-}
-
-.qor-vertical-tab {
-  position: relative;
-  display: inline-flex;
-  min-width: 0;
-  min-height: 0;
-  flex: 1 1 0;
-  align-items: center;
-  justify-content: center;
-  padding: 6px 3px;
-  border: 0;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.qor-vertical-tab + .qor-vertical-tab {
-  border-top: 1px solid var(--border-color);
-}
-
-.qor-vertical-tab:hover,
-.qor-vertical-tab.selected {
-  background: color-mix(in srgb, var(--accent-color) 14%, var(--bg-primary));
-  color: var(--accent-color);
-}
-
-.qor-vertical-tab:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent-color) 72%, transparent);
-  outline-offset: -2px;
-  background: color-mix(in srgb, var(--accent-color) 14%, var(--bg-primary));
-  color: var(--accent-color);
-}
-
-.qor-vertical-tab.selected::before {
-  position: absolute;
-  top: 8px;
-  bottom: 8px;
-  left: 0;
-  width: 3px;
-  background: var(--accent-color);
-  content: '';
-}
-
-.qor-vertical-tab-abbreviation {
-  writing-mode: vertical-rl;
-  text-orientation: upright;
-  letter-spacing: 0;
-  font-size: 11px;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.qor-vertical-tab-full-label {
-  display: none;
-}
-
-.qor-vertical-tab-badge {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  display: inline-flex;
-  min-width: 15px;
-  height: 15px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  background: var(--warning-color, #d97706);
-  color: var(--bg-primary);
-  font-size: 9px;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.qor-vertical-tab-tooltip {
-  position: absolute;
-  z-index: 2;
-  right: calc(100% + 8px);
-  display: block;
-  width: max-content;
-  max-width: 180px;
-  padding: 5px 7px;
-  border: 1px solid var(--border-color);
-  border-radius: 5px;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1.2;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateX(3px);
-  transition:
-    opacity 120ms ease,
-    transform 120ms ease;
-  white-space: nowrap;
-}
-
-.qor-vertical-tab:hover .qor-vertical-tab-tooltip,
-.qor-vertical-tab:focus-visible .qor-vertical-tab-tooltip {
-  opacity: 1;
-  transform: translateX(0);
-}
-
 .qor-delta-list {
   display: flex;
-  min-height: 0;
-  flex: 1 1 auto;
   flex-direction: column;
   gap: 8px;
   margin: 0;
-  padding: 0 2px 0 0;
-  overflow: auto;
-  overscroll-behavior: contain;
+  padding: 0;
   list-style: none;
+}
+
+.qor-delta-table-wrap {
+  border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-secondary) 24%, var(--bg-primary));
+}
+
+.qor-delta-table {
+  width: 100%;
+  min-width: 0;
+  border-collapse: collapse;
+  font-size: 11px;
+  text-align: right;
+}
+
+.qor-delta-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 8px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-secondary) 82%, var(--bg-primary));
+  font-size: 10px;
+  font-weight: 780;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.qor-delta-table thead th:first-child,
+.qor-delta-table tbody th {
+  text-align: left;
+}
+
+.qor-delta-table tbody td,
+.qor-delta-table tbody th {
+  padding: 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 62%, transparent);
+  vertical-align: middle;
+}
+
+.qor-delta-table tbody tr:last-child td,
+.qor-delta-table tbody tr:last-child th {
+  border-bottom: 0;
+}
+
+.qor-delta-table tbody td {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.qor-delta-table.is-regressions tbody td:nth-child(4),
+.qor-delta-table.is-regressions tbody td:nth-child(5) {
+  color: var(--danger-color, #b91c1c);
+}
+
+.qor-delta-table.is-improvements tbody td:nth-child(4),
+.qor-delta-table.is-improvements tbody td:nth-child(5) {
+  color: var(--success-color, #2f9f6f);
+}
+
+.qor-delta-metric-name {
+  display: block;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 720;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qor-delta-priority {
+  display: inline-flex;
+  margin-top: 3px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-secondary) 70%, var(--bg-primary));
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.qor-delta-table.is-regressions tbody td:last-child,
+.qor-delta-table.is-improvements tbody td:last-child {
+  width: 72px;
+  padding-right: 10px;
+}
+
+.qor-delta-bar {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-color) 72%, transparent);
+}
+
+.qor-delta-table.is-regressions .qor-delta-bar {
+  background: color-mix(in srgb, var(--danger-color, #b91c1c) 72%, transparent);
+}
+
+.qor-delta-table.is-improvements .qor-delta-bar {
+  background: color-mix(in srgb, var(--success-color, #2f9f6f) 72%, transparent);
+}
+
+.qor-risk-table tbody td:nth-child(2),
+.qor-risk-table tbody td:nth-child(3) {
+  white-space: nowrap;
+}
+
+.qor-severity-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 820;
+  letter-spacing: 0.04em;
+}
+
+.qor-severity-pill.qor-risk-critical {
+  color: var(--error-color, #b91c1c);
+  background: color-mix(in srgb, var(--error-color, #b91c1c) 12%, var(--bg-primary));
+}
+
+.qor-severity-pill.qor-risk-warning {
+  color: var(--warning-color, #b45309);
+  background: color-mix(in srgb, var(--warning-color, #b45309) 12%, var(--bg-primary));
+}
+
+.qor-severity-pill.qor-risk-info {
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-secondary) 70%, var(--bg-primary));
+}
+
+.qor-cell-wrap {
+  overflow-wrap: anywhere;
+  white-space: normal;
+  text-align: left;
+}
+
+.qor-timing-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.qor-timing-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.qor-summary-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 760;
+}
+
+.qor-summary-chip.critical {
+  color: var(--error-color, #b91c1c);
+  background: color-mix(in srgb, var(--error-color, #b91c1c) 10%, var(--bg-primary));
+}
+
+.qor-summary-chip.warning {
+  color: var(--warning-color, #b45309);
+  background: color-mix(in srgb, var(--warning-color, #b45309) 10%, var(--bg-primary));
+}
+
+.qor-summary-chip.coverage {
+  color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 10%, var(--bg-primary));
+}
+
+.qor-summary-chip.cleared {
+  color: var(--success-color, #15803d);
+  background: color-mix(in srgb, var(--success-color, #15803d) 10%, var(--bg-primary));
+}
+
+.qor-timing-table tbody td:nth-child(4) {
+  font-weight: 760;
+}
+
+.qor-timing-row {
+  cursor: pointer;
+}
+
+.qor-timing-row:hover td,
+.qor-timing-row:hover th,
+.qor-timing-row.selected td,
+.qor-timing-row.selected th {
+  background: color-mix(in srgb, var(--accent-color) 6%, var(--bg-primary));
+}
+
+.qor-timing-row.expanded td,
+.qor-timing-row.expanded th {
+  border-bottom-color: transparent;
+}
+
+.qor-row-expand {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  background: var(--bg-primary);
+  cursor: pointer;
+}
+
+.qor-row-expand:hover,
+.qor-row-expand:focus-visible {
+  border-color: color-mix(in srgb, var(--accent-color) 50%, var(--border-color));
+  color: var(--accent-color);
+}
+
+.qor-timing-detail-row td {
+  padding-top: 0;
+  background: color-mix(in srgb, var(--bg-secondary) 28%, var(--bg-primary));
+}
+
+.qor-timing-detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0 0 8px 0;
+  list-style: none;
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-align: left;
+}
+
+.qor-triage-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 780;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.qor-triage-pill.qor-timing-triage-new {
+  color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 10%, var(--bg-primary));
+}
+
+.qor-triage-pill.qor-timing-triage-regressed {
+  color: var(--error-color, #b91c1c);
+  background: color-mix(in srgb, var(--error-color, #b91c1c) 10%, var(--bg-primary));
+}
+
+.qor-triage-pill.qor-timing-triage-persistent {
+  color: var(--warning-color, #b45309);
+  background: color-mix(in srgb, var(--warning-color, #b45309) 10%, var(--bg-primary));
+}
+
+.qor-triage-pill.qor-timing-triage-improved {
+  color: var(--success-color, #15803d);
+  background: color-mix(in srgb, var(--success-color, #15803d) 10%, var(--bg-primary));
+}
+
+.qor-timing-subsection {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.qor-subsection-title {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 780;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sr-only {
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  border: 0;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.qor-scroll-list {
+  min-height: 0;
 }
 
 .qor-delta-list > li:not(.qor-timing-issue) {
@@ -1441,82 +2239,22 @@ function qorListItemClass(
   font-size: 11px;
 }
 
-.qor-scroll-list {
-  min-height: 0;
-  overflow: auto;
-}
-
 .qor-empty-note {
   margin: 0;
   font-size: 12px;
 }
 
-@media (max-width: 980px) {
-  .qor-main-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .qor-main-grid {
-    overflow: auto;
-  }
-
-  .qor-chart-card,
-  .qor-delta-card {
-    min-height: 260px;
-  }
-}
-
 @media (max-width: 560px) {
+  .qor-delta-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .qor-delta-card {
     padding: 14px;
   }
 
-  .qor-delta-layout {
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-
   .qor-delta-list-panel {
     padding: 0;
-  }
-
-  .qor-delta-edge-rail {
-    flex-direction: row;
-    order: -1;
-    gap: 4px;
-    border-left: 0;
-    background: transparent;
-  }
-
-  .qor-vertical-tab,
-  .qor-vertical-tab + .qor-vertical-tab {
-    min-width: 0;
-    min-height: 32px;
-    padding: 5px 7px;
-    border: 1px solid var(--border-color);
-    border-radius: 5px;
-  }
-
-  .qor-vertical-tab.selected {
-    border-color: color-mix(in srgb, var(--accent-color) 48%, var(--border-color));
-  }
-
-  .qor-vertical-tab.selected::before {
-    display: none;
-  }
-
-  .qor-vertical-tab-abbreviation,
-  .qor-vertical-tab-tooltip {
-    display: none;
-  }
-
-  .qor-vertical-tab-full-label {
-    display: inline;
-    overflow: hidden;
-    font-size: 10px;
-    font-weight: 750;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 }
 </style>
