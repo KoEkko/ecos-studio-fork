@@ -78,7 +78,9 @@
 
             <div
               class="project-list"
-              :class="{ 'project-list--popover-open': Boolean(popoverWorkspaceId) }"
+              :class="{
+                'project-list--popover-open': Boolean(popoverWorkspaceId),
+              }"
               aria-label="Project list"
             >
               <article
@@ -111,31 +113,46 @@
                   >
                     <button
                       type="button"
-                      class="circle-action primary row-action-primary"
-                      title="New workspace"
+                      class="row-primary-action"
                       :aria-label="`New workspace in ${project.model.name}`"
                       @click="createWorkspaceForProject(project.model)"
                     >
-                      <i class="ri-add-line"></i>
+                      <i class="ri-add-line" aria-hidden="true"></i>
+                      <span>New</span>
                     </button>
                     <button
                       type="button"
-                      class="circle-action row-action-secondary"
-                      title="Import or open workspace"
-                      :aria-label="`Import or open workspace for ${project.model.name}`"
-                      @click="importWorkspaceIntoProject(project.model)"
+                      class="circle-action row-action-menu-trigger"
+                      :aria-expanded="projectActionMenuId === project.model.id"
+                      :aria-label="`More actions for ${project.model.name}`"
+                      aria-haspopup="menu"
+                      @click="toggleProjectActionMenu(project.model.id)"
                     >
-                      <i class="ri-file-add-line"></i>
+                      <i class="ri-more-2-fill" aria-hidden="true"></i>
                     </button>
-                    <button
-                      type="button"
-                      class="circle-action danger row-action-secondary"
-                      title="Remove from Project Management"
-                      :aria-label="`Remove ${project.model.name} from Project Management`"
-                      @click="requestDeleteProject(project.source)"
+                    <div
+                      v-if="projectActionMenuId === project.model.id"
+                      class="row-action-menu"
+                      role="group"
+                      :aria-label="`More actions for ${project.model.name}`"
                     >
-                      <i class="ri-subtract-line"></i>
-                    </button>
+                      <button
+                        type="button"
+                        class="row-action-menu-item"
+                        @click="importWorkspaceIntoProject(project.model)"
+                      >
+                        <i class="ri-file-add-line" aria-hidden="true"></i>
+                        <span>Import workspace</span>
+                      </button>
+                      <button
+                        type="button"
+                        class="row-action-menu-item danger"
+                        @click="requestDeleteProject(project.source)"
+                      >
+                        <i class="ri-delete-bin-line" aria-hidden="true"></i>
+                        <span>Remove project</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -185,31 +202,46 @@
                       >
                         <button
                           type="button"
-                          class="circle-action primary row-action-primary"
-                          title="Open workspace"
+                          class="row-primary-action"
                           :aria-label="`Open workspace ${workspace.id}`"
                           @click="openWorkspace(workspace)"
                         >
-                          <i class="ri-arrow-right-up-line"></i>
+                          <i class="ri-arrow-right-up-line" aria-hidden="true"></i>
+                          <span>Open</span>
                         </button>
                         <button
                           type="button"
-                          class="circle-action row-action-secondary workspace-flow-trigger"
-                          title="Create workspace from step output"
-                          :aria-label="`Create workspace from ${workspace.id}`"
-                          @click="toggleWorkspaceFlowPopover(workspace.id)"
+                          class="circle-action row-action-menu-trigger"
+                          :aria-expanded="workspaceActionMenuId === workspace.id"
+                          :aria-label="`More actions for ${workspace.id}`"
+                          aria-haspopup="menu"
+                          @click="toggleWorkspaceActionMenu(workspace.id)"
                         >
-                          <i class="ri-add-line"></i>
+                          <i class="ri-more-2-fill" aria-hidden="true"></i>
                         </button>
-                        <button
-                          type="button"
-                          class="circle-action danger row-action-secondary"
-                          title="Delete workspace"
-                          :aria-label="`Delete workspace ${workspace.id}`"
-                          @click="requestDeleteWorkspace(workspace.id)"
+                        <div
+                          v-if="workspaceActionMenuId === workspace.id"
+                          class="row-action-menu"
+                          role="group"
+                          :aria-label="`More actions for ${workspace.id}`"
                         >
-                          <i class="ri-subtract-line"></i>
-                        </button>
+                          <button
+                            type="button"
+                            class="row-action-menu-item workspace-flow-trigger"
+                            @click="toggleWorkspaceFlowPopover(workspace.id)"
+                          >
+                            <i class="ri-git-branch-line" aria-hidden="true"></i>
+                            <span>Create from output</span>
+                          </button>
+                          <button
+                            type="button"
+                            class="row-action-menu-item danger"
+                            @click="requestDeleteWorkspace(workspace.id)"
+                          >
+                            <i class="ri-delete-bin-line" aria-hidden="true"></i>
+                            <span>Delete workspace</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
 
@@ -344,10 +376,12 @@
 
     <div v-if="showNewProjectDialog" class="project-modal-scrim" role="presentation">
       <section
+        ref="newProjectDialog"
         class="project-modal-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="new-project-title"
+        @keydown="handleModalKeydown($event, 'new-project')"
       >
         <button
           type="button"
@@ -364,7 +398,12 @@
 
         <label class="form-field">
           <span>Project Name</span>
-          <input v-model="projectRootDraft.name" type="text" placeholder="project_name" />
+          <input
+            v-model="projectRootDraft.name"
+            type="text"
+            placeholder="project_name"
+            data-dialog-initial-focus
+          />
         </label>
 
         <label class="form-field">
@@ -398,10 +437,12 @@
 
     <div v-if="branchDraft" class="project-modal-scrim" role="presentation">
       <section
+        ref="workspaceDraftDialog"
         class="project-modal-dialog branch-draft-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="branch-draft-title"
+        @keydown="handleModalKeydown($event, 'workspace-draft')"
       >
         <button
           type="button"
@@ -445,6 +486,7 @@
           <button
             type="button"
             class="secondary-button"
+            data-dialog-initial-focus
             @click="closeWorkspaceDraftDialog"
           >
             Cancel
@@ -459,10 +501,12 @@
 
     <div v-if="pendingDeleteWorkspaceId" class="project-modal-scrim" role="presentation">
       <section
+        ref="deleteWorkspaceDialog"
         class="project-modal-dialog confirm-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="delete-workspace-title"
+        @keydown="handleModalKeydown($event, 'delete-workspace')"
       >
         <button
           type="button"
@@ -494,10 +538,14 @@
             </small>
           </span>
         </label>
+        <p v-if="deleteWorkspaceError" class="modal-error" role="alert">
+          {{ deleteWorkspaceError }}
+        </p>
         <footer class="modal-actions">
           <button
             type="button"
             class="secondary-button"
+            data-dialog-initial-focus
             @click="closeDeleteWorkspaceDialog"
           >
             Cancel
@@ -508,7 +556,7 @@
             @click="confirmDeleteWorkspace"
           >
             <i class="ri-delete-bin-line"></i>
-            <span>Delete</span>
+            <span>{{ deleteWorkspaceError ? 'Retry delete' : 'Delete' }}</span>
           </button>
         </footer>
       </section>
@@ -516,10 +564,12 @@
 
     <div v-if="pendingDeleteProject" class="project-modal-scrim" role="presentation">
       <section
+        ref="deleteProjectDialog"
         class="project-modal-dialog confirm-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="remove-project-title"
+        @keydown="handleModalKeydown($event, 'delete-project')"
       >
         <button
           type="button"
@@ -541,6 +591,7 @@
           <button
             type="button"
             class="secondary-button"
+            data-dialog-initial-focus
             @click="closeDeleteProjectDialog"
           >
             Cancel
@@ -560,7 +611,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type { Project, ProjectStatus } from '../types'
 import { useWorkspace } from '../composables/useWorkspace'
@@ -599,6 +650,7 @@ import {
 import { serializeProjectQorTrendReport } from '@/utils/projectQorTrend'
 
 type BranchDraft = WorkspaceBranchDraft
+type ModalId = 'new-project' | 'workspace-draft' | 'delete-workspace' | 'delete-project'
 
 const router = useRouter()
 const { openProject, showToast } = useWorkspace()
@@ -611,8 +663,11 @@ const selectedAnalysisTab = ref<'dashboard' | 'step'>('dashboard')
 const hasOpenedStepAnalysis = ref(false)
 const branchDraft = ref<BranchDraft | null>(null)
 const popoverWorkspaceId = ref('')
+const projectActionMenuId = ref<string | null>(null)
+const workspaceActionMenuId = ref<string | null>(null)
 const pendingDeleteWorkspaceId = ref<string | null>(null)
 const keepWorkspaceDataOnDelete = ref(true)
+const deleteWorkspaceError = ref('')
 const pendingDeleteProject = ref<Project | null>(null)
 const isDialogMaximized = ref(false)
 const projectHistory = ref<Project[]>([])
@@ -627,6 +682,11 @@ const projectRootDraft = ref({
   name: '',
   directory: '',
 })
+const newProjectDialog = ref<HTMLElement | null>(null)
+const workspaceDraftDialog = ref<HTMLElement | null>(null)
+const deleteWorkspaceDialog = ref<HTMLElement | null>(null)
+const deleteProjectDialog = ref<HTMLElement | null>(null)
+const modalFocusReturnTarget = ref<HTMLElement | null>(null)
 
 onMounted(async () => {
   document.addEventListener('pointerdown', handleWorkspacePopoverPointerDown)
@@ -643,6 +703,31 @@ onBeforeUnmount(() => {
 })
 
 const projectSources = computed<Project[]>(() => projectHistory.value)
+
+const activeModal = computed<ModalId | null>(() => {
+  if (showNewProjectDialog.value) return 'new-project'
+  if (branchDraft.value) return 'workspace-draft'
+  if (pendingDeleteWorkspaceId.value) return 'delete-workspace'
+  if (pendingDeleteProject.value) return 'delete-project'
+  return null
+})
+
+watch(activeModal, async (modal, previousModal) => {
+  if (modal) {
+    if (!previousModal && document.activeElement instanceof HTMLElement) {
+      modalFocusReturnTarget.value = document.activeElement
+    }
+    await nextTick()
+    focusInitialModalElement(modal)
+    return
+  }
+
+  if (!previousModal) return
+  await nextTick()
+  const trigger = modalFocusReturnTarget.value
+  modalFocusReturnTarget.value = null
+  if (trigger?.isConnected) trigger.focus()
+})
 
 const projectCards = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
@@ -780,6 +865,7 @@ function selectProject(projectId: string) {
   selectedProjectId.value = projectId
   branchDraft.value = null
   popoverWorkspaceId.value = ''
+  closeRowActionMenus()
 }
 
 function writeFailureDetail(fileName: string, error: unknown): string {
@@ -790,12 +876,14 @@ function writeFailureDetail(fileName: string, error: unknown): string {
 function selectWorkspace(workspaceId: string) {
   selectedWorkspaceId.value = workspaceId
   branchDraft.value = null
+  closeRowActionMenus()
 }
 
 function selectStep(step: FlowStep) {
   selectedStep.value = step
   hasOpenedStepAnalysis.value = true
   branchDraft.value = null
+  closeRowActionMenus()
 }
 
 function openStepAnalysis() {
@@ -898,6 +986,7 @@ async function startWorkspaceFromCell(workspaceId: string, step: FlowStep) {
 function toggleWorkspaceFlowPopover(workspaceId: string) {
   selectedWorkspaceId.value = workspaceId
   branchDraft.value = null
+  closeRowActionMenus()
   popoverWorkspaceId.value = popoverWorkspaceId.value === workspaceId ? '' : workspaceId
 }
 
@@ -905,21 +994,108 @@ function closeWorkspaceFlowPopover() {
   popoverWorkspaceId.value = ''
 }
 
+function toggleProjectActionMenu(projectId: string) {
+  projectActionMenuId.value = projectActionMenuId.value === projectId ? null : projectId
+  workspaceActionMenuId.value = null
+  closeWorkspaceFlowPopover()
+}
+
+function toggleWorkspaceActionMenu(workspaceId: string) {
+  workspaceActionMenuId.value =
+    workspaceActionMenuId.value === workspaceId ? null : workspaceId
+  projectActionMenuId.value = null
+  closeWorkspaceFlowPopover()
+}
+
+function closeRowActionMenus() {
+  projectActionMenuId.value = null
+  workspaceActionMenuId.value = null
+}
+
+function modalElement(modal: ModalId): HTMLElement | null {
+  return {
+    'new-project': newProjectDialog.value,
+    'workspace-draft': workspaceDraftDialog.value,
+    'delete-workspace': deleteWorkspaceDialog.value,
+    'delete-project': deleteProjectDialog.value,
+  }[modal]
+}
+
+function modalFocusableElements(dialog: HTMLElement): HTMLElement[] {
+  return Array.from(
+    dialog.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
+  ).filter((element) => !element.hasAttribute('hidden'))
+}
+
+function focusInitialModalElement(modal: ModalId) {
+  const dialog = modalElement(modal)
+  if (!dialog) return
+  const initial = dialog.querySelector<HTMLElement>('[data-dialog-initial-focus]')
+  ;(initial ?? modalFocusableElements(dialog)[0])?.focus()
+}
+
+function handleModalKeydown(event: KeyboardEvent, modal: ModalId) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    closeModal(modal)
+    return
+  }
+  if (event.key !== 'Tab') return
+
+  const dialog = modalElement(modal)
+  if (!dialog) return
+  const focusable = modalFocusableElements(dialog)
+  if (focusable.length === 0) {
+    event.preventDefault()
+    return
+  }
+
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
+function closeModal(modal: ModalId) {
+  if (modal === 'new-project') closeNewProjectDialog()
+  if (modal === 'workspace-draft') closeWorkspaceDraftDialog()
+  if (modal === 'delete-workspace') closeDeleteWorkspaceDialog()
+  if (modal === 'delete-project') closeDeleteProjectDialog()
+}
+
 function handleWorkspacePopoverPointerDown(event: PointerEvent) {
-  if (!popoverWorkspaceId.value) return
+  if (
+    !popoverWorkspaceId.value &&
+    !projectActionMenuId.value &&
+    !workspaceActionMenuId.value
+  )
+    return
   const target = event.target
   if (!(target instanceof Element)) {
     closeWorkspaceFlowPopover()
+    closeRowActionMenus()
     return
   }
   if (target.closest('.workspace-flow-popover')) return
   if (target.closest('.workspace-flow-trigger')) return
+  if (target.closest('.row-action-menu')) return
+  if (target.closest('.row-action-menu-trigger')) return
   closeWorkspaceFlowPopover()
+  closeRowActionMenus()
 }
 
 function handleWorkspacePopoverKeydown(event: KeyboardEvent) {
-  if (!popoverWorkspaceId.value || event.key !== 'Escape') return
-  closeWorkspaceFlowPopover()
+  if (event.key !== 'Escape') return
+  if (popoverWorkspaceId.value) closeWorkspaceFlowPopover()
+  if (projectActionMenuId.value || workspaceActionMenuId.value) closeRowActionMenus()
 }
 
 async function startWorkspaceFromPopoverStep(workspaceId: string, step: FlowStep) {
@@ -967,6 +1143,7 @@ async function continueWorkspaceDraft() {
 }
 
 async function openWorkspace(workspace: ProjectWorkspace) {
+  closeRowActionMenus()
   const success = await openProject({
     id: workspace.workspacePath,
     name: `${selectedProject.value.name}/${workspace.id}`,
@@ -1086,6 +1263,7 @@ async function importProject() {
 }
 
 async function importWorkspaceIntoProject(project: ProjectManagementProject) {
+  closeRowActionMenus()
   if (!project.path) return
   try {
     const desktopApi = await waitForDesktopApi({ timeoutMs: 500 })
@@ -1125,6 +1303,7 @@ async function importWorkspaceIntoProject(project: ProjectManagementProject) {
 }
 
 async function createWorkspaceForProject(project: ProjectManagementProject) {
+  closeRowActionMenus()
   if (!project.path) return
   const workspaceId = await nextAvailableWorkspaceId(project)
   if (!workspaceId) return
@@ -1140,17 +1319,21 @@ async function createWorkspaceForProject(project: ProjectManagementProject) {
 }
 
 function requestDeleteWorkspace(workspaceId: string) {
+  closeRowActionMenus()
   pendingDeleteWorkspaceId.value = workspaceId
   keepWorkspaceDataOnDelete.value = true
+  deleteWorkspaceError.value = ''
 }
 
 function closeDeleteWorkspaceDialog() {
   pendingDeleteWorkspaceId.value = null
   keepWorkspaceDataOnDelete.value = true
+  deleteWorkspaceError.value = ''
 }
 
 async function confirmDeleteWorkspace() {
   const workspaceId = pendingDeleteWorkspaceId.value
+  deleteWorkspaceError.value = ''
   const deleted = await deleteWorkspace(workspaceId ?? undefined, {
     keepWorkspaceData: keepWorkspaceDataOnDelete.value,
   })
@@ -1158,6 +1341,7 @@ async function confirmDeleteWorkspace() {
 }
 
 function requestDeleteProject(project: Project) {
+  closeRowActionMenus()
   pendingDeleteProject.value = project
 }
 
@@ -1204,10 +1388,11 @@ async function deleteWorkspace(
     return true
   } catch (error) {
     console.warn('Failed to delete selected workspace.', error)
+    deleteWorkspaceError.value = writeFailureDetail('project.json', error)
     showToast({
       severity: 'warn',
       summary: 'Workspace not deleted',
-      detail: 'project.json could not be updated.',
+      detail: deleteWorkspaceError.value,
     })
     return false
   }
@@ -1251,6 +1436,7 @@ async function removeProjectFromHistory(project: Project) {
 }
 
 function openNewProjectDialog() {
+  closeRowActionMenus()
   projectRootError.value = ''
   projectRootDraft.value = {
     name: '',

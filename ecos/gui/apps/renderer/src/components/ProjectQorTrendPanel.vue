@@ -1,6 +1,11 @@
 <template>
   <div class="qor-overview-panel" aria-label="QoR Overview">
-    <div v-if="baselineChangePending" class="qor-baseline-confirmation" role="status">
+    <section
+      v-if="baselineChangePending"
+      class="qor-baseline-confirmation"
+      role="group"
+      aria-label="Confirm QoR baseline change"
+    >
       <span>
         Use <strong>{{ baselineChangePending }}</strong> as the QoR baseline for this
         project?
@@ -17,15 +22,21 @@
           Confirm baseline
         </button>
       </div>
-    </div>
+    </section>
 
     <div class="qor-panel-toolbar">
       <div class="qor-toolbar-leading">
-        <p v-if="!selectedWorkspaceIsBaseline" class="qor-selection-context">
-          <span>Comparing</span>
-          <strong>{{ selectedWorkspace?.workspaceId ?? 'No workspace' }}</strong>
-          <span>with baseline</span>
-          <strong>{{ baselineLabel }}</strong>
+        <p class="qor-selection-context">
+          <template v-if="selectedWorkspaceIsBaseline">
+            <span>Viewing baseline</span>
+            <strong>{{ baselineLabel }}</strong>
+          </template>
+          <template v-else>
+            <span>Comparing</span>
+            <strong>{{ selectedWorkspace?.workspaceId ?? 'No workspace' }}</strong>
+            <span>with baseline</span>
+            <strong>{{ baselineLabel }}</strong>
+          </template>
         </p>
         <div class="qor-toolbar-meta">
           <span class="qor-meta-chip">Baseline: {{ baselineLabel }}</span>
@@ -61,6 +72,34 @@
       </div>
     </div>
 
+    <section class="qor-attention" aria-label="Current engineering attention">
+      <header>
+        <div>
+          <span>Needs attention</span>
+          <small
+            >Prioritized for
+            {{ selectedWorkspace?.workspaceId ?? 'the selected workspace' }}</small
+          >
+        </div>
+        <small class="qor-attention-threshold">{{ attentionThresholdContext }}</small>
+      </header>
+      <ol v-if="attentionItems.length > 0" class="qor-attention-list">
+        <li
+          v-for="(item, index) in attentionItems"
+          :key="item.id"
+          class="qor-attention-item"
+          :class="item.tone"
+        >
+          <span class="qor-attention-rank">{{ index === 0 ? 'Priority' : 'Next' }}</span>
+          <strong>{{ item.label }}</strong>
+          <small>{{ item.detail }}</small>
+        </li>
+      </ol>
+      <p v-else class="qor-attention-empty">
+        No active QoR findings for this workspace. Review the score trend for comparison.
+      </p>
+    </section>
+
     <div class="qor-main-grid">
       <section class="qor-trend-card qor-chart-card">
         <div class="qor-section-title">
@@ -89,6 +128,7 @@
             :viewBox="chartViewBox"
             role="img"
             aria-label="Overall QoR score by workspace from 0 to 100"
+            aria-describedby="qor-chart-description"
           >
             <rect
               class="qor-chart-plot-bg"
@@ -223,11 +263,22 @@
             </g>
           </svg>
         </div>
-        <div class="qor-chart-legend" aria-hidden="true">
-          <span><i class="legend-selected"></i>Selected</span>
-          <span><i class="legend-baseline"></i>Baseline</span>
-          <span><i class="legend-pass"></i>Analysis target 60</span>
-          <span><i class="legend-nr"></i>Not rated</span>
+        <p id="qor-chart-description" class="sr-only">
+          {{ chartAccessibleSummary }}
+        </p>
+        <div class="qor-chart-legend" role="list" aria-label="QoR chart legend">
+          <span role="listitem"
+            ><i class="legend-selected" aria-hidden="true"></i>Selected</span
+          >
+          <span role="listitem"
+            ><i class="legend-baseline" aria-hidden="true"></i>Baseline</span
+          >
+          <span role="listitem"
+            ><i class="legend-pass" aria-hidden="true"></i>60 analysis threshold</span
+          >
+          <span role="listitem"
+            ><i class="legend-nr" aria-hidden="true"></i>Not rated</span
+          >
         </div>
         <details class="qor-chart-data">
           <summary>Score data</summary>
@@ -236,6 +287,7 @@
               <tr>
                 <th scope="col">Workspace</th>
                 <th scope="col">QoR score</th>
+                <th scope="col">Context</th>
               </tr>
             </thead>
             <tbody>
@@ -245,6 +297,7 @@
               >
                 <th scope="row">{{ point.label }}</th>
                 <td>{{ formatScore(point.score) }}</td>
+                <td>{{ chartPointContext(point) }}</td>
               </tr>
             </tbody>
           </table>
@@ -262,6 +315,7 @@
             class="qor-delta-tab"
             :class="{ selected: activeDeltaTab === tab.id }"
             :aria-selected="activeDeltaTab === tab.id"
+            :tabindex="activeDeltaTab === tab.id ? 0 : -1"
             aria-controls="qor-tabpanel"
             @click="activeDeltaTab = tab.id"
             @keydown="handleDeltaTabKeydown($event, tab.id)"
@@ -311,11 +365,6 @@
                   >
                     <th scope="row">
                       <span class="qor-delta-metric-name">{{ item.displayName }}</span>
-                      <span
-                        v-if="isProjectQorRegression(item)"
-                        class="qor-delta-priority"
-                        >{{ item.priority }}</span
-                      >
                     </th>
                     <td>{{ formatMetricValue(item.baselineValue) }}</td>
                     <td>{{ formatMetricValue(item.currentValue) }}</td>
@@ -429,9 +478,17 @@
                           selected: issue.workspaceId === selectedWorkspaceId,
                           expanded: expandedTimingIssueId === issue.issueId,
                         }"
-                        @click="selectTimingIssueWorkspace(issue.workspaceId)"
                       >
-                        <th scope="row">{{ issue.analysisType.toUpperCase() }}</th>
+                        <th scope="row">
+                          <button
+                            type="button"
+                            class="qor-timing-select"
+                            :aria-label="`Inspect ${issue.analysisType.toUpperCase()} timing issue for ${issue.workspaceId}`"
+                            @click="selectTimingIssueWorkspace(issue.workspaceId)"
+                          >
+                            {{ issue.analysisType.toUpperCase() }}
+                          </button>
+                        </th>
                         <td>{{ issue.corner }}</td>
                         <td class="qor-cell-wrap">
                           {{ issue.pathGroup }} · {{ issue.checkType }}
@@ -506,9 +563,17 @@
                         :key="`cleared-${triage.workspaceId}-${triage.issueId}`"
                         class="qor-timing-row"
                         :class="{ selected: triage.workspaceId === selectedWorkspaceId }"
-                        @click="selectTimingIssueWorkspace(triage.workspaceId)"
                       >
-                        <th scope="row">{{ triage.analysisType.toUpperCase() }}</th>
+                        <th scope="row">
+                          <button
+                            type="button"
+                            class="qor-timing-select"
+                            :aria-label="`Inspect cleared ${triage.analysisType.toUpperCase()} timing issue for ${triage.workspaceId}`"
+                            @click="selectTimingIssueWorkspace(triage.workspaceId)"
+                          >
+                            {{ triage.analysisType.toUpperCase() }}
+                          </button>
+                        </th>
                         <td>{{ triage.corner }}</td>
                         <td class="qor-cell-wrap">
                           {{ triage.pathGroup }} · {{ triage.checkType }}
@@ -543,9 +608,17 @@
                         :class="{
                           selected: coverage.workspaceId === selectedWorkspaceId,
                         }"
-                        @click="selectTimingIssueWorkspace(coverage.workspaceId)"
                       >
-                        <th scope="row">INCOMPLETE</th>
+                        <th scope="row">
+                          <button
+                            type="button"
+                            class="qor-timing-select"
+                            :aria-label="`Inspect timing coverage for ${coverage.workspaceId}`"
+                            @click="selectTimingIssueWorkspace(coverage.workspaceId)"
+                          >
+                            INCOMPLETE
+                          </button>
+                        </th>
                         <td>
                           {{ formatMissingCornerCount(coverage.missingCornerCount) }}
                         </td>
@@ -591,6 +664,12 @@ const chartTop = 10
 const chartBottom = 68
 const chartNotRatedY = 56
 type QorDashboardTab = 'improvements' | 'regressions' | 'risks' | 'timing'
+type QorAttentionItem = {
+  id: string
+  label: string
+  detail: string
+  tone: 'critical' | 'warning' | 'info'
+}
 
 const deltaTabs: Array<{
   id: QorDashboardTab
@@ -665,7 +744,9 @@ const selectedScore = computed(
 const selectedScoreContext = computed(() => {
   if (selectedScore.value === null) return 'QoR score unavailable'
   const targetState =
-    selectedScore.value >= 60 ? 'meets analysis target' : 'below analysis target'
+    selectedScore.value >= 60
+      ? 'meets the 60 analysis threshold'
+      : 'is below the 60 analysis threshold'
   return `QoR ${formatScore(selectedScore.value)} · ${targetState}`
 })
 const selectedScoreClass = computed(() =>
@@ -882,6 +963,79 @@ const selectedTimingSummary = computed(() => ({
   cleared: filteredClearedTimingTriage.value.length,
 }))
 
+const attentionThresholdContext = computed(() => {
+  if (selectedScore.value === null) {
+    return 'QoR unavailable · 60 is an analysis threshold, not signoff.'
+  }
+  return `QoR ${formatScore(selectedScore.value)} / analysis threshold 60 · Signoff separate`
+})
+
+const attentionItems = computed<QorAttentionItem[]>(() => {
+  const workspaceId = selectedWorkspace.value?.workspaceId
+  if (!workspaceId) return []
+
+  const items: QorAttentionItem[] = []
+  const criticalTiming = filteredVisibleTimingIssues.value.filter(
+    (issue) => issue.severity === 'critical',
+  ).length
+  const warningTiming = filteredVisibleTimingIssues.value.filter(
+    (issue) => issue.severity === 'warning',
+  ).length
+  const criticalRisks = props.qorTrendSummary.risks.filter(
+    (item) => item.workspaceId === workspaceId && item.severity === 'critical',
+  ).length
+  const nonCriticalRisks = props.qorTrendSummary.risks.filter(
+    (item) => item.workspaceId === workspaceId && item.severity === 'warning',
+  ).length
+  const regressions = selectedWorkspaceIsBaseline.value
+    ? 0
+    : props.qorTrendSummary.regressions.filter((item) => item.workspaceId === workspaceId)
+        .length
+
+  if (criticalTiming > 0) {
+    items.push({
+      id: 'critical-timing',
+      label: `${criticalTiming} critical timing ${criticalTiming === 1 ? 'issue' : 'issues'}`,
+      detail: 'Failing paths need triage.',
+      tone: 'critical',
+    })
+  } else if (warningTiming > 0 || filteredTimingCoverage.value.length > 0) {
+    const count = warningTiming + filteredTimingCoverage.value.length
+    items.push({
+      id: 'timing',
+      label: `${count} timing work ${count === 1 ? 'item' : 'items'}`,
+      detail: 'Paths or analysis coverage require review.',
+      tone: 'warning',
+    })
+  }
+
+  if (criticalRisks > 0 || nonCriticalRisks > 0) {
+    const count = criticalRisks + nonCriticalRisks
+    items.push({
+      id: 'risks',
+      label: `${count} analysis ${count === 1 ? 'risk' : 'risks'}`,
+      detail: riskAttentionDetail(workspaceId),
+      tone: criticalRisks > 0 ? 'critical' : 'warning',
+    })
+  }
+
+  if (regressions > 0) {
+    items.push({
+      id: 'regressions',
+      label: `${regressions} QoR ${regressions === 1 ? 'regression' : 'regressions'}`,
+      detail: `Against baseline ${baselineLabel.value}.`,
+      tone: 'warning',
+    })
+  }
+
+  return items.slice(0, 3)
+})
+
+const chartAccessibleSummary = computed(() => {
+  const workspace = selectedWorkspace.value?.workspaceId ?? 'No workspace selected'
+  return `QoR score by workspace from 0 to 100. ${workspace}: ${selectedScoreContext.value}. The 60 line is an analysis threshold only and does not determine signoff. Baseline: ${baselineLabel.value}.`
+})
+
 const timingEmptyMessage = computed(() => {
   const summary = props.qorTrendSummary.timingClosure
   const workspaceId = selectedWorkspace.value?.workspaceId
@@ -904,6 +1058,7 @@ watch(
   () => props.selectedWorkspaceId,
   () => {
     expandedTimingIssueId.value = null
+    activeDeltaTab.value = initialDeltaTab()
   },
 )
 
@@ -978,6 +1133,20 @@ function initialDeltaTab(): QorDashboardTab {
     return 'improvements'
   }
   return 'improvements'
+}
+
+function riskAttentionDetail(workspaceId: string): string {
+  const steps = [
+    ...new Set(
+      props.qorTrendSummary.risks
+        .filter((item) => item.workspaceId === workspaceId && item.severity !== 'info')
+        .map((item) => item.step.toUpperCase()),
+    ),
+  ]
+  const visibleSteps = steps.slice(0, 3)
+  const remainingCount = steps.length - visibleSteps.length
+  const remainingSuffix = remainingCount > 0 ? ` +${remainingCount}` : ''
+  return `Affected steps: ${visibleSteps.join(', ')}${remainingSuffix}`
 }
 
 function requestSetSelectedWorkspaceAsBaseline() {
@@ -1137,11 +1306,17 @@ function chartPointDescription(
 }
 
 function chartPointContext(point: ProjectQorTrendSummary['trendPoints'][number]): string {
-  const tags = [
-    point.workspaceId === selectedWorkspace.value?.workspaceId ? 'selected' : '',
-    point.workspaceId === props.qorTrendSummary.baselineWorkspaceId ? 'baseline' : '',
-    point.score !== null && point.score < 60 ? 'below analysis target' : '',
-  ].filter(Boolean)
+  const tags: string[] = []
+  if (point.workspaceId === selectedWorkspace.value?.workspaceId) tags.push('selected')
+  if (point.workspaceId === props.qorTrendSummary.baselineWorkspaceId)
+    tags.push('baseline')
+  if (point.score === null) {
+    tags.push('not rated')
+  } else if (point.score < 60) {
+    tags.push('below the 60 analysis threshold')
+  } else {
+    tags.push('meets the 60 analysis threshold')
+  }
   return tags.join(', ')
 }
 
@@ -1178,14 +1353,6 @@ function deltaCompareRowKey(
     | ProjectQorTrendSummary['regressions'][number],
 ): string {
   return `${item.workspaceId}-${item.metricName}`
-}
-
-function isProjectQorRegression(
-  item:
-    | ProjectQorTrendSummary['improvements'][number]
-    | ProjectQorTrendSummary['regressions'][number],
-): item is ProjectQorTrendSummary['regressions'][number] {
-  return 'priority' in item
 }
 
 function isProjectQorRisk(
@@ -1338,6 +1505,108 @@ function qorListItemClass(
 .qor-toolbar-button:disabled {
   cursor: not-allowed;
   opacity: 0.48;
+}
+
+.qor-attention {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--bg-secondary) 46%, var(--bg-primary));
+}
+
+.qor-attention header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.qor-attention header > div {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.qor-attention header span {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.qor-attention header small,
+.qor-attention-empty {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.qor-attention-threshold {
+  text-align: right;
+}
+
+.qor-attention-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qor-attention-item {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 10px;
+  padding: 0 12px;
+}
+
+.qor-attention-item:not(:last-child) {
+  border-right: 1px solid color-mix(in srgb, var(--border-color) 76%, transparent);
+}
+
+.qor-attention-item:first-child {
+  padding-left: 0;
+}
+
+.qor-attention-item:last-child {
+  padding-right: 0;
+}
+
+.qor-attention-rank {
+  grid-row: 1 / span 2;
+  align-self: center;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 760;
+}
+
+.qor-attention-item > strong,
+.qor-attention-item > small {
+  min-width: 0;
+}
+
+.qor-attention-item > strong {
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.qor-attention-item > small {
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.qor-attention-item.critical > strong {
+  color: var(--danger-color);
+}
+
+.qor-attention-item.warning > strong {
+  color: var(--warning-color);
+}
+
+.qor-attention-empty {
+  margin: 0;
 }
 
 .qor-baseline-confirmation {
@@ -1741,6 +2010,10 @@ function qorListItemClass(
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
+.qor-chart-data td:last-child {
+  white-space: normal;
+}
+
 .qor-delta-list-panel {
   display: flex;
   min-width: 0;
@@ -1792,7 +2065,8 @@ function qorListItemClass(
 
 .qor-delta-tab:focus-visible,
 .qor-inline-action:focus-visible,
-.qor-toolbar-button:focus-visible {
+.qor-toolbar-button:focus-visible,
+.qor-timing-select:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent-color) 72%, transparent);
   outline-offset: -2px;
 }
@@ -1879,6 +2153,22 @@ function qorListItemClass(
   vertical-align: middle;
 }
 
+.qor-timing-select {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-weight: inherit;
+  text-align: left;
+}
+
+.qor-timing-select:hover {
+  color: var(--accent-color);
+}
+
 .qor-delta-table tbody tr:last-child td,
 .qor-delta-table tbody tr:last-child th {
   border-bottom: 0;
@@ -1908,18 +2198,6 @@ function qorListItemClass(
   font-weight: 720;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.qor-delta-priority {
-  display: inline-flex;
-  margin-top: 3px;
-  padding: 1px 5px;
-  border-radius: 999px;
-  color: var(--text-secondary);
-  background: color-mix(in srgb, var(--bg-secondary) 70%, var(--bg-primary));
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.03em;
 }
 
 .qor-delta-table.is-regressions tbody td:last-child,
@@ -2245,6 +2523,32 @@ function qorListItemClass(
 }
 
 @media (max-width: 560px) {
+  .qor-attention header,
+  .qor-attention header > div {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .qor-attention-threshold {
+    text-align: left;
+  }
+
+  .qor-attention-list {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .qor-attention-item {
+    padding: 0;
+  }
+
+  .qor-attention-item:not(:last-child) {
+    padding-bottom: 8px;
+    border-right: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--border-color) 76%, transparent);
+  }
+
   .qor-delta-tabs {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

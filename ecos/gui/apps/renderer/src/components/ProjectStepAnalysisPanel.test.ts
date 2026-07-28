@@ -94,7 +94,7 @@ describe('ProjectStepAnalysisPanel', () => {
     expect(source).toContain('scrollbar-gutter: stable')
   })
 
-  it('uses fixed-size items in every repeated Flow Stage list', () => {
+  it('uses bounded matrix rows and content-sized Findings cards', () => {
     expect(source).toContain('.stage-rail-item')
     expect(source).toContain('height: 40px')
     expect(source).toContain('grid-auto-rows: 40px')
@@ -107,12 +107,21 @@ describe('ProjectStepAnalysisPanel', () => {
     expect(source).toContain('th,')
     expect(source).toContain('height: 32px')
     expect(source).toContain('.findings-rail li')
-    expect(source).toContain('grid-auto-rows: minmax(132px, max-content)')
+    expect(source).toContain('grid-auto-rows: max-content')
     expect(source).toContain('minmax(220px, 0.32fr)')
     expect(source).toContain('.finding-detail-info[open]')
     expect(source).toContain('max-height: min(52vh, 420px)')
     expect(source).not.toContain('max-height: 168px')
     expect(source).not.toContain('top: 78px')
     expect(source).not.toContain('position: absolute')
+  })
+
+  it('lets findings cards grow to their full summary and detail content', () => {
+    const findingsCardRule = source.match(/\.findings-rail li \{[\s\S]*?\n\}/)?.[0] ?? ''
+
+    expect(findingsCardRule).toContain('min-height: 0')
+    expect(findingsCardRule).not.toContain('overflow: clip')
+    expect(source).toContain('grid-auto-rows: max-content')
+    expect(source).not.toContain('-webkit-line-clamp: 3')
   })
 })

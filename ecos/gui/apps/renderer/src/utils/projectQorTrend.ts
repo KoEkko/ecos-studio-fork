@@ -281,7 +281,6 @@ export interface ProjectQorDelta {
 }
 
 export interface ProjectQorRegression extends ProjectQorDelta {
-  priority: 'P0' | 'P1' | 'P2' | 'P3'
   message: string
 }
 
@@ -1318,7 +1317,6 @@ export function buildProjectQorTrendReport(
       absolute_delta: regression.absoluteDelta,
       relative_delta_pct: regression.relativeDeltaPct,
       state: regression.state,
-      priority: regression.priority,
       message: regression.message,
     })),
     improvements: summary.improvements.map((improvement) => ({
@@ -2498,7 +2496,6 @@ function buildWorkspaceDeltas(
         } else if (delta.state === 'regression') {
           regressions.push({
             ...delta,
-            priority: regressionPriority(delta),
             message: regressionMessage(delta),
           })
         }
@@ -2511,7 +2508,7 @@ function buildWorkspaceDeltas(
   }
 
   return {
-    regressions: regressions.sort(compareRegressionPriority),
+    regressions: regressions.sort(compareDeltaMagnitude),
     improvements: improvements.sort(compareDeltaMagnitude),
   }
 }
@@ -2546,7 +2543,6 @@ function buildExplicitBaselineDeltas(
       } else if (delta.state === 'regression') {
         regressions.push({
           ...delta,
-          priority: regressionPriority(delta),
           message: regressionMessage(delta),
         })
       }
@@ -2554,7 +2550,7 @@ function buildExplicitBaselineDeltas(
   }
 
   return {
-    regressions: regressions.sort(compareRegressionPriority),
+    regressions: regressions.sort(compareDeltaMagnitude),
     improvements: improvements.sort(compareDeltaMagnitude),
   }
 }
@@ -2662,25 +2658,6 @@ function deltaState(
     return absoluteDelta > 0 ? 'improvement' : 'regression'
   }
   return 'neutral'
-}
-
-function regressionPriority(delta: ProjectQorDelta): ProjectQorRegression['priority'] {
-  if (
-    delta.metricName === 'drc_count' &&
-    delta.baselineValue === 0 &&
-    delta.currentValue > 0
-  ) {
-    return 'P0'
-  }
-
-  if (
-    (delta.metricName === 'route_wirelength' || delta.metricName === 'route_via_count') &&
-    (delta.relativeDeltaPct ?? 0) > 10
-  ) {
-    return 'P2'
-  }
-
-  return 'P3'
 }
 
 function regressionMessage(delta: ProjectQorDelta): string {
@@ -3381,16 +3358,6 @@ function compareWorkspaceInput(
   const createdDelta = Date.parse(left.createdAt) - Date.parse(right.createdAt)
   if (createdDelta !== 0 && Number.isFinite(createdDelta)) return createdDelta
   return left.workspaceId.localeCompare(right.workspaceId)
-}
-
-function compareRegressionPriority(
-  left: ProjectQorRegression,
-  right: ProjectQorRegression,
-): number {
-  const priorityOrder = { P0: 0, P1: 1, P2: 2, P3: 3 }
-  const priorityDelta = priorityOrder[left.priority] - priorityOrder[right.priority]
-  if (priorityDelta !== 0) return priorityDelta
-  return compareDeltaMagnitude(left, right)
 }
 
 function compareProjectQorRisk(left: ProjectQorRisk, right: ProjectQorRisk): number {

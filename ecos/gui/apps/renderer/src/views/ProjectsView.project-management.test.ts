@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import source from './ProjectsView.vue?raw'
 import analysisSource from './project-management/ProjectAnalysisPanel.vue?raw'
+import stepAnalysisSource from '../components/ProjectStepAnalysisPanel.vue?raw'
 import presentationSource from './project-management/projectAnalysisPresentation.ts?raw'
 import analysisDataSource from './project-management/projectWorkspaceAnalysisData.ts?raw'
 
@@ -124,9 +125,8 @@ describe('ProjectsView project management surface', () => {
     expect(projectListStyles).toContain('overflow-y: auto;')
     expect(projectListStyles).toContain('overflow-x: hidden;')
     expect(projectListStyles).toContain('scrollbar-gutter: stable;')
-    expect(source).toContain(
-      ':class="{ \'project-list--popover-open\': Boolean(popoverWorkspaceId) }"',
-    )
+    expect(source).toContain("'project-list--popover-open': Boolean(popoverWorkspaceId)")
+    expect(source).not.toContain('popoverWorkspaceId || projectActionMenuId')
     expect(projectStyles).toContain('.project-list--popover-open {')
     expect(projectStyles).toContain('overflow: visible;')
   })
@@ -147,22 +147,23 @@ describe('ProjectsView project management surface', () => {
     const rowSource = source.slice(projectRowStart, projectRowEnd)
 
     expect(rowSource).toContain('project-tree-actions')
-    expect(rowSource).toContain('circle-action')
-    expect(rowSource).toContain('title="Import or open workspace"')
-    expect(rowSource).toContain('title="New workspace"')
-    expect(rowSource).toContain('title="Remove from Project Management"')
+    expect(rowSource).toContain('class="row-primary-action"')
+    expect(rowSource).toContain('<span>New</span>')
+    expect(rowSource).toContain('class="row-action-menu"')
+    expect(rowSource).toContain('Import workspace')
+    expect(rowSource).toContain('Remove project')
     expect(source).toContain('class="project-tree-row-shell"')
     expect(rowSource).toContain('type="button"')
     expect(rowSource).toContain(':aria-pressed="project.model.id === selectedProjectId"')
     expect(rowSource).toContain('@click="importWorkspaceIntoProject(project.model)"')
     expect(rowSource).toContain('@click="createWorkspaceForProject(project.model)"')
     expect(rowSource).toContain('@click="requestDeleteProject(project.source)"')
-    expect(rowSource).toContain('class="circle-action primary row-action-primary"')
-    expect(rowSource).toContain('row-action-secondary')
+    expect(rowSource).toContain('toggleProjectActionMenu(project.model.id)')
+    expect(rowSource).toContain('aria-haspopup="menu"')
     expect(rowSource).not.toContain('file-action-button')
     expect(rowSource).toContain('ri-add-line')
     expect(rowSource).toContain('ri-file-add-line')
-    expect(rowSource).toContain('ri-subtract-line')
+    expect(rowSource).toContain('ri-delete-bin-line')
     expect(rowSource).not.toContain('circle-glyph')
     expect(projectStyles).toContain('.project-tree-row-shell')
     expect(projectStyles).not.toContain('.project-tree-row:hover .row-action-secondary')
@@ -196,9 +197,10 @@ describe('ProjectsView project management surface', () => {
     const workspaceRowStart = source.indexOf('class="workspace-tree-item"')
     const workspaceRowEnd = source.indexOf('workspace-flow-popover', workspaceRowStart)
     const rowSource = source.slice(workspaceRowStart, workspaceRowEnd)
-    expect(rowSource).toContain('title="Open workspace"')
-    expect(rowSource).toContain('title="Create workspace from step output"')
-    expect(rowSource).toContain('title="Delete workspace"')
+    expect(rowSource).toContain('class="row-primary-action"')
+    expect(rowSource).toContain('<span>Open</span>')
+    expect(rowSource).toContain('Create from output')
+    expect(rowSource).toContain('Delete workspace')
     expect(rowSource).toContain('class="workspace-tree-row-shell"')
     expect(rowSource).toContain(':aria-pressed="workspace.id === selectedWorkspaceId"')
     expect(rowSource).toContain('@click="selectWorkspace(workspace.id)"')
@@ -206,8 +208,8 @@ describe('ProjectsView project management surface', () => {
     expect(rowSource).toContain('@click="toggleWorkspaceFlowPopover(workspace.id)"')
     expect(rowSource).toContain('@click="requestDeleteWorkspace(workspace.id)"')
     expect(rowSource).toContain('circle-action')
-    expect(rowSource).toContain('class="circle-action primary row-action-primary"')
-    expect(rowSource).toContain('row-action-secondary workspace-flow-trigger')
+    expect(rowSource).toContain('toggleWorkspaceActionMenu(workspace.id)')
+    expect(rowSource).toContain('class="row-action-menu-item workspace-flow-trigger"')
     expect(rowSource).not.toContain('file-action-button')
     expect(projectStyles).toContain('.workspace-tree-row-shell')
     expect(projectStyles).not.toContain('.workspace-tree-row:hover .row-action-secondary')
@@ -227,8 +229,9 @@ describe('ProjectsView project management surface', () => {
     expect(projectStyles).not.toContain('box-shadow: inset 3px 0 0 var(--accent-color);')
   })
 
-  it('uses an up-right arrow icon for opening workspace rows', () => {
-    expect(source).toContain('<i class="ri-arrow-right-up-line"></i>')
+  it('uses an explicit Open action with an up-right icon for workspace rows', () => {
+    expect(source).toContain('<i class="ri-arrow-right-up-line" aria-hidden="true"></i>')
+    expect(source).toContain('class="row-primary-action"')
     expect(projectStyles).toContain('.circle-action i')
     expect(projectStyles).not.toContain('.circle-glyph')
   })
@@ -285,6 +288,37 @@ describe('ProjectsView project management surface', () => {
     )
     expect(source).toContain('writeFailureDetail')
     expect(source).toContain('Check project path access, then retry.')
+    expect(source).toContain('deleteWorkspaceError')
+    expect(source).toContain("deleteWorkspaceError ? 'Retry delete' : 'Delete'")
+  })
+
+  it('traps focus and restores it for every modal project-management workflow', () => {
+    expect(source).toContain('const activeModal = computed<ModalId | null>')
+    expect(source).toContain('modalFocusReturnTarget')
+    expect(source).toContain('handleModalKeydown')
+    expect(source).toContain("event.key === 'Escape'")
+    expect(source).toContain("event.key !== 'Tab'")
+    expect(source).toContain('data-dialog-initial-focus')
+    expect(source).toContain('ref="newProjectDialog"')
+    expect(source).toContain('ref="workspaceDraftDialog"')
+    expect(source).toContain('ref="deleteWorkspaceDialog"')
+    expect(source).toContain('ref="deleteProjectDialog"')
+  })
+
+  it('keeps mounted analysis panels and exposes comparison grids semantically', () => {
+    expect(analysisSource).toContain('v-if="hasProjectData"')
+    expect(analysisSource).toContain('v-show="selectedAnalysisTab === \'dashboard\'"')
+    expect(analysisSource).toContain('v-show="selectedAnalysisTab === \'step\'"')
+    expect(analysisSource).toContain('role="grid"')
+    expect(analysisSource).toContain('role="columnheader"')
+    expect(analysisSource).toContain('role="rowheader"')
+    expect(analysisSource).toContain('role="gridcell"')
+    expect(stepAnalysisSource).toContain('aria-label="Selected step workspace metrics"')
+    expect(stepAnalysisSource).toContain('role="grid"')
+    expect(stepAnalysisSource).toContain('role="columnheader"')
+    expect(stepAnalysisSource).toContain('role="rowheader"')
+    expect(stepAnalysisSource).toContain('role="gridcell"')
+    expect(stepAnalysisSource).not.toContain('border-left: 3px solid')
   })
 
   it('searches both projects and their workspaces', () => {

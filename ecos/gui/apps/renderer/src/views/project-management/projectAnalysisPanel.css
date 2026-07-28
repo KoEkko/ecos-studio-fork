@@ -596,6 +596,81 @@
   background: currentColor;
 }
 
+/* Preserve the compact metric layout while exposing complete grid semantics. */
+.dashboard-key-metric-table {
+  display: block;
+}
+
+.dashboard-key-grid-row {
+  display: grid;
+  min-width: max-content;
+}
+
+.dashboard-key-header {
+  display: block;
+  padding: 0;
+  cursor: default;
+}
+
+.dashboard-key-sort-action,
+.dashboard-key-cell-action {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+
+.dashboard-key-sort-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.01em;
+  text-align: center;
+}
+
+.dashboard-key-workspace-header .dashboard-key-sort-action {
+  justify-content: flex-start;
+}
+
+.dashboard-key-cell-action {
+  display: grid;
+  align-content: center;
+}
+
+.dashboard-key-workspace-cell {
+  padding: 0;
+}
+
+.dashboard-key-workspace-cell .dashboard-key-cell-action {
+  justify-items: start;
+  padding: 0 12px;
+  text-align: left;
+}
+
+.dashboard-key-metric-cell {
+  padding: 0;
+}
+
+.dashboard-key-metric-cell .dashboard-key-cell-action {
+  justify-items: center;
+  padding: 8px 10px;
+  text-align: center;
+}
+
+.dashboard-key-sort-action:focus-visible,
+.dashboard-key-cell-action:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-color) 72%, transparent);
+  outline-offset: -2px;
+}
+
 .step-analysis-view {
   display: grid;
   min-height: 0;

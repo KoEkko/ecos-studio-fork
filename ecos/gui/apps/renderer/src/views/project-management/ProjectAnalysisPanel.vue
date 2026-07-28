@@ -9,12 +9,18 @@
           {{ analysisContext }}
         </p>
       </div>
-      <div class="analysis-tabs" role="tablist" aria-label="Analysis views">
+      <div
+        v-if="hasProjectData"
+        class="analysis-tabs"
+        role="tablist"
+        aria-label="Analysis views"
+      >
         <button
           id="analysis-tab-dashboard"
           type="button"
           role="tab"
           :aria-selected="selectedAnalysisTab === 'dashboard'"
+          :tabindex="selectedAnalysisTab === 'dashboard' ? 0 : -1"
           aria-controls="analysis-dashboard-panel"
           :class="{ selected: selectedAnalysisTab === 'dashboard' }"
           @click="selectAnalysisTab('dashboard')"
@@ -27,6 +33,7 @@
           type="button"
           role="tab"
           :aria-selected="selectedAnalysisTab === 'step'"
+          :tabindex="selectedAnalysisTab === 'step' ? 0 : -1"
           aria-controls="analysis-step-panel"
           :class="{ selected: selectedAnalysisTab === 'step' }"
           @click="selectAnalysisTab('step')"
@@ -38,11 +45,12 @@
     </div>
 
     <div
-      v-if="hasProjectData && selectedAnalysisTab === 'dashboard'"
+      v-if="hasProjectData"
       id="analysis-dashboard-panel"
       role="tabpanel"
       aria-labelledby="analysis-tab-dashboard"
       class="analysis-dashboard-v3"
+      v-show="selectedAnalysisTab === 'dashboard'"
     >
       <div class="dashboard-summary-strip" aria-label="Project summary">
         <section class="dashboard-card dashboard-run-state-card" aria-label="Run state">
@@ -140,59 +148,94 @@
           class="dashboard-key-metric-table"
           :style="{
             '--dashboard-metric-count': String(dashboardMetricRows.length),
-            gridTemplateColumns: dashboardMetricColumnsTemplate(dashboardMetricRows),
           }"
+          role="grid"
           aria-label="Workspace key metrics comparison"
+          :aria-rowcount="displayedDashboardWorkspaceRows.length + 1"
+          :aria-colcount="dashboardMetricRows.length + 1"
         >
-          <button
-            type="button"
-            class="dashboard-key-header dashboard-key-workspace-header"
-            :class="{ 'is-sorted': dashboardSort?.key === 'workspace' }"
-            :aria-sort="metricSortAriaValue(dashboardSort, 'workspace')"
-            @click="toggleMetricSort('dashboard', 'workspace')"
-          >
-            <span>Workspace</span>
-            <i
-              v-if="dashboardSort?.key === 'workspace'"
-              :class="sortIconClass(dashboardSort.direction)"
-              class="metric-sort-icon"
-              aria-hidden="true"
-            ></i>
-          </button>
-          <button
-            v-for="metric in dashboardMetricRows"
-            :key="metric.id"
-            type="button"
-            class="dashboard-key-header"
-            :class="{
-              'is-sparse': !metricHasComparableData(metric),
-              'is-sorted': dashboardSort?.key === metric.id,
+          <div
+            class="dashboard-key-grid-row"
+            role="row"
+            :style="{
+              gridTemplateColumns: dashboardMetricColumnsTemplate(dashboardMetricRows),
             }"
-            :aria-sort="metricSortAriaValue(dashboardSort, metric.id)"
-            :title="`Sort by ${metric.label}`"
-            @click="toggleMetricSort('dashboard', metric.id)"
           >
-            <span>{{ metric.label }}</span>
-            <i
-              v-if="dashboardSort?.key === metric.id"
-              :class="sortIconClass(dashboardSort.direction)"
-              class="metric-sort-icon"
-              aria-hidden="true"
-            ></i>
-          </button>
-          <template v-for="row in displayedDashboardWorkspaceRows" :key="row.workspaceId">
-            <button
-              type="button"
+            <div
+              role="columnheader"
+              class="dashboard-key-header dashboard-key-workspace-header"
+              :class="{ 'is-sorted': dashboardSort?.key === 'workspace' }"
+              :aria-sort="metricSortAriaValue(dashboardSort, 'workspace')"
+            >
+              <button
+                type="button"
+                class="dashboard-key-sort-action"
+                @click="toggleMetricSort('dashboard', 'workspace')"
+              >
+                <span>Workspace</span>
+                <i
+                  v-if="dashboardSort?.key === 'workspace'"
+                  :class="sortIconClass(dashboardSort.direction)"
+                  class="metric-sort-icon"
+                  aria-hidden="true"
+                ></i>
+              </button>
+            </div>
+            <div
+              v-for="metric in dashboardMetricRows"
+              :key="metric.id"
+              role="columnheader"
+              class="dashboard-key-header"
+              :class="{
+                'is-sparse': !metricHasComparableData(metric),
+                'is-sorted': dashboardSort?.key === metric.id,
+              }"
+              :aria-sort="metricSortAriaValue(dashboardSort, metric.id)"
+            >
+              <button
+                type="button"
+                class="dashboard-key-sort-action"
+                :title="`Sort by ${metric.label}`"
+                @click="toggleMetricSort('dashboard', metric.id)"
+              >
+                <span>{{ metric.label }}</span>
+                <i
+                  v-if="dashboardSort?.key === metric.id"
+                  :class="sortIconClass(dashboardSort.direction)"
+                  class="metric-sort-icon"
+                  aria-hidden="true"
+                ></i>
+              </button>
+            </div>
+          </div>
+          <div
+            v-for="row in displayedDashboardWorkspaceRows"
+            :key="row.workspaceId"
+            class="dashboard-key-grid-row"
+            role="row"
+            :aria-selected="row.workspaceId === selectedWorkspaceId"
+            :style="{
+              gridTemplateColumns: dashboardMetricColumnsTemplate(dashboardMetricRows),
+            }"
+          >
+            <div
+              role="rowheader"
               class="dashboard-key-workspace-cell"
               :class="{ selected: row.workspaceId === selectedWorkspaceId }"
-              @click="selectWorkspace(row.workspaceId)"
             >
-              {{ row.workspaceId }}
-            </button>
-            <button
+              <button
+                type="button"
+                class="dashboard-key-cell-action"
+                :aria-label="`Select workspace ${row.workspaceId}`"
+                @click="selectWorkspace(row.workspaceId)"
+              >
+                {{ row.workspaceId }}
+              </button>
+            </div>
+            <div
               v-for="cell in row.cells"
               :key="`${row.workspaceId}-${cell.metric.id}`"
-              type="button"
+              role="gridcell"
               class="dashboard-key-metric-cell"
               :class="[
                 metricValueClass(cell.point.state),
@@ -201,29 +244,38 @@
                   'is-sparse': !metricHasComparableData(cell.metric),
                 },
               ]"
-              :title="metricCellTitle(row.workspaceId, cell.metric.label, cell.point)"
-              @click="selectWorkspace(row.workspaceId)"
             >
-              <strong>
-                <i
-                  v-if="cell.metric.id === 'drc' && cell.point.value !== null"
-                  class="metric-status-dot"
-                  aria-hidden="true"
-                ></i>
-                {{ cell.point.label }}
-              </strong>
-            </button>
-          </template>
+              <button
+                type="button"
+                class="dashboard-key-cell-action"
+                :title="metricCellTitle(row.workspaceId, cell.metric.label, cell.point)"
+                :aria-label="
+                  metricCellTitle(row.workspaceId, cell.metric.label, cell.point)
+                "
+                @click="selectWorkspace(row.workspaceId)"
+              >
+                <strong>
+                  <i
+                    v-if="cell.metric.id === 'drc' && cell.point.value !== null"
+                    class="metric-status-dot"
+                    aria-hidden="true"
+                  ></i>
+                  {{ cell.point.label }}
+                </strong>
+              </button>
+            </div>
+          </div>
         </div>
       </section>
     </div>
 
     <div
-      v-else-if="hasProjectData"
+      v-if="hasProjectData"
       id="analysis-step-panel"
       role="tabpanel"
       aria-labelledby="analysis-tab-step"
       class="analysis-step-panel"
+      v-show="selectedAnalysisTab === 'step'"
     >
       <ProjectStepAnalysisPanel
         :steps="project.stepCompareSummaries"
@@ -236,7 +288,7 @@
       />
     </div>
 
-    <div v-else class="metrics-empty-state">
+    <div v-if="!hasProjectData" class="metrics-empty-state">
       <i class="ri-line-chart-line" aria-hidden="true"></i>
       <strong>No project data available</strong>
       <span

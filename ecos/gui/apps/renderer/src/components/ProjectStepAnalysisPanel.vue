@@ -51,35 +51,71 @@
           v-if="selectedMetrics.length > 0"
           class="stage-metric-table"
           :style="{ '--workspace-count': String(workspaceMetricColumns.length) }"
+          role="grid"
+          aria-label="Selected step workspace metrics"
+          :aria-rowcount="metricWorkspaceRows.length + 1"
+          :aria-colcount="workspaceMetricColumns.length + 1"
         >
-          <div class="stage-metric-heading metric">Metric</div>
-          <button
-            v-for="workspace in workspaceMetricColumns"
-            :key="workspace.workspaceId"
-            type="button"
-            class="stage-workspace-cell stage-workspace-heading"
-            :class="{ selected: workspace.workspaceId === selectedWorkspaceId }"
-            :title="workspace.workspaceName"
-            @click="emit('select-workspace', workspace.workspaceId)"
+          <div
+            class="stage-metric-grid-row"
+            role="row"
+            :style="{
+              gridTemplateColumns: `minmax(160px, 1.35fr) repeat(${workspaceMetricColumns.length}, minmax(104px, 1fr))`,
+            }"
           >
-            {{ workspace.workspaceName }}
-          </button>
-          <template v-for="row in metricWorkspaceRows" :key="row.metric.id">
-            <div class="stage-metric-heading metric" :title="row.metric.hint">
+            <div role="columnheader" class="stage-metric-heading metric">Metric</div>
+            <div
+              v-for="workspace in workspaceMetricColumns"
+              :key="workspace.workspaceId"
+              role="columnheader"
+              class="stage-workspace-cell stage-workspace-heading"
+              :class="{ selected: workspace.workspaceId === selectedWorkspaceId }"
+              :title="workspace.workspaceName"
+            >
+              <button
+                type="button"
+                class="stage-metric-cell-action"
+                :aria-label="`Select workspace ${workspace.workspaceName}`"
+                @click="emit('select-workspace', workspace.workspaceId)"
+              >
+                {{ workspace.workspaceName }}
+              </button>
+            </div>
+          </div>
+          <div
+            v-for="row in metricWorkspaceRows"
+            :key="row.metric.id"
+            class="stage-metric-grid-row"
+            role="row"
+            :style="{
+              gridTemplateColumns: `minmax(160px, 1.35fr) repeat(${workspaceMetricColumns.length}, minmax(104px, 1fr))`,
+            }"
+          >
+            <div
+              role="rowheader"
+              class="stage-metric-heading metric"
+              :title="row.metric.hint"
+            >
               {{ row.metric.label }}
             </div>
-            <button
+            <div
               v-for="cell in row.cells"
               :key="`${cell.workspaceId}-${row.metric.id}`"
-              type="button"
+              role="gridcell"
               class="stage-metric-cell"
               :class="cell.point.state"
-              :title="metricCellTitle(cell.workspaceName, row.metric, cell.point)"
-              @click="emit('select-workspace', cell.workspaceId)"
             >
-              <strong>{{ cell.point.label }}</strong>
-            </button>
-          </template>
+              <button
+                type="button"
+                class="stage-metric-cell-action"
+                :title="metricCellTitle(cell.workspaceName, row.metric, cell.point)"
+                :aria-label="metricCellTitle(cell.workspaceName, row.metric, cell.point)"
+                @click="emit('select-workspace', cell.workspaceId)"
+              >
+                <strong>{{ cell.point.label }}</strong>
+              </button>
+            </div>
+          </div>
         </div>
         <p v-else class="stage-empty">
           No step-specific V3 metrics are available for this stage.
@@ -167,6 +203,7 @@
             class="finding-select"
             @click="emit('select-workspace', finding.workspaceId)"
           >
+            <span class="finding-severity">{{ finding.severity }}</span>
             <span>{{ finding.workspaceName }}</span>
             <strong>{{ finding.label }}</strong>
             <em>Actual: {{ findingValueLabel(finding) }}</em>
@@ -1139,6 +1176,52 @@ function stringValue(value: unknown): string | null {
   color: var(--success-color);
 }
 
+/* Rows keep the compact matrix layout while exposing column, row, and cell roles. */
+.stage-metric-table {
+  display: block;
+}
+
+.stage-metric-grid-row {
+  display: grid;
+  min-width: max-content;
+}
+
+.stage-workspace-cell,
+.stage-metric-cell {
+  padding: 0;
+}
+
+.stage-metric-cell-action {
+  display: grid;
+  box-sizing: border-box;
+  width: 100%;
+  height: 40px;
+  min-height: 40px;
+  align-content: center;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+
+.stage-workspace-cell .stage-metric-cell-action {
+  justify-items: start;
+  padding: 7px 8px;
+  text-align: left;
+}
+
+.stage-metric-cell .stage-metric-cell-action {
+  justify-items: start;
+  padding: 7px 8px;
+  text-align: left;
+}
+
+.stage-metric-cell-action:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-color) 72%, transparent);
+  outline-offset: -2px;
+}
+
 .stage-detail-list {
   display: grid;
   align-content: stretch;
@@ -1281,7 +1364,7 @@ th {
   display: grid;
   align-content: start;
   grid-auto-flow: row;
-  grid-auto-rows: minmax(132px, max-content);
+  grid-auto-rows: max-content;
   gap: 10px;
   margin: 0;
   min-height: 0;
@@ -1301,35 +1384,25 @@ th {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  min-height: 132px;
+  min-height: 0;
   border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
-  border-left: 3px solid var(--text-secondary);
   border-radius: 8px;
   background: color-mix(in srgb, var(--bg-secondary) 48%, var(--bg-primary));
-  overflow: clip;
-}
-
-.findings-rail li:not(:has(.finding-detail-info)) {
-  min-height: 0;
-}
-
-.findings-rail li:has(.finding-detail-info[open]) {
-  min-height: 0;
 }
 
 .findings-rail li.critical {
-  border-left-color: var(--error-color);
+  border-color: color-mix(in srgb, var(--error-color) 72%, var(--border-color));
 }
 .findings-rail li.warning {
-  border-left-color: var(--warning-color);
+  border-color: color-mix(in srgb, var(--warning-color) 72%, var(--border-color));
 }
 
 .findings-rail .finding-select {
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: repeat(5, auto);
   width: 100%;
   box-sizing: border-box;
-  min-height: 96px;
+  min-height: 0;
   gap: 5px;
   border: 0;
   padding: 12px 12px 10px;
@@ -1337,47 +1410,51 @@ th {
   background: transparent;
   cursor: pointer;
   text-align: left;
-  overflow: hidden;
+}
+.findings-rail .finding-severity {
+  color: var(--text-secondary);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.findings-rail li.critical .finding-severity {
+  color: var(--error-color);
+}
+.findings-rail li.warning .finding-severity {
+  color: var(--warning-color);
 }
 
 .findings-rail .finding-select:hover {
   background: var(--success-bg);
 }
 .findings-rail .finding-select span {
-  overflow: hidden;
   font-size: 11px;
   font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .findings-rail .finding-select strong {
   color: var(--text-primary);
-  overflow: hidden;
   font-size: 12px;
   line-height: 1.3;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .findings-rail .finding-select em {
   color: var(--warning-color);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  overflow: hidden;
   font-size: 11px;
   font-style: normal;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .findings-rail li.critical .finding-select em {
   color: var(--error-color);
 }
 .findings-rail .finding-select small {
-  display: -webkit-box;
-  overflow: hidden;
+  display: block;
   margin-top: 2px;
   font-size: 11px;
   line-height: 1.4;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+  overflow-wrap: anywhere;
 }
 
 .finding-detail-info {
