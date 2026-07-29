@@ -287,7 +287,6 @@
               <tr>
                 <th scope="col">Workspace</th>
                 <th scope="col">QoR score</th>
-                <th scope="col">Context</th>
               </tr>
             </thead>
             <tbody>
@@ -297,7 +296,6 @@
               >
                 <th scope="row">{{ point.label }}</th>
                 <td>{{ formatScore(point.score) }}</td>
-                <td>{{ chartPointContext(point) }}</td>
               </tr>
             </tbody>
           </table>

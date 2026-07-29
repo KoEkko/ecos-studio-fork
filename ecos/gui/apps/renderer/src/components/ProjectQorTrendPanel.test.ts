@@ -242,7 +242,7 @@ describe('ProjectQorTrendPanel', () => {
     expect(source).toContain('activeDeltaTab.value = initialDeltaTab()')
     expect(source).toContain('qor-chart-data')
     expect(source).toContain('<summary>Score data</summary>')
-    expect(source).toContain('<th scope="col">Context</th>')
+    expect(source).not.toContain('<th scope="col">Context</th>')
     expect(source).toContain('chartAccessibleSummary')
     expect(source).toContain('aria-describedby="qor-chart-description"')
     expect(source).toContain('60 analysis threshold')
