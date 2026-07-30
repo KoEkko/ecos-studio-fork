@@ -361,9 +361,11 @@
               :selected-analysis-tab="selectedAnalysisTab"
               :selected-step="selectedStep"
               :selected-workspace-id="selectedWorkspaceId"
+              :selected-issue-metric="selectedIssueMetric"
               @select-analysis-tab="handleAnalysisTabSelection"
               @select-step="selectStep"
               @select-workspace="selectWorkspace"
+              @select-issue-metric="selectIssueMetric"
               @export-report="exportQorTrendReport"
               @set-baseline="setQorBaseline"
               @import-project="importProject"
@@ -659,6 +661,7 @@ const searchQuery = ref('')
 const selectedProjectId = ref<string | null>(null)
 const selectedWorkspaceId = ref('')
 const selectedStep = ref<FlowStep>('DRC')
+const selectedIssueMetric = ref<string | null>(null)
 const selectedAnalysisTab = ref<'dashboard' | 'step'>('dashboard')
 const hasOpenedStepAnalysis = ref(false)
 const branchDraft = ref<BranchDraft | null>(null)
@@ -844,6 +847,7 @@ watch(
     if (update.mode === 'reset' && update.selection) {
       selectedWorkspaceId.value = update.selection.selectedWorkspaceId
       selectedStep.value = update.selection.selectedStep
+      selectedIssueMetric.value = null
       hasOpenedStepAnalysis.value = false
       popoverWorkspaceId.value = ''
       branchDraft.value = null
@@ -875,15 +879,21 @@ function writeFailureDetail(fileName: string, error: unknown): string {
 
 function selectWorkspace(workspaceId: string) {
   selectedWorkspaceId.value = workspaceId
+  selectedIssueMetric.value = null
   branchDraft.value = null
   closeRowActionMenus()
 }
 
 function selectStep(step: FlowStep) {
   selectedStep.value = step
+  selectedIssueMetric.value = null
   hasOpenedStepAnalysis.value = true
   branchDraft.value = null
   closeRowActionMenus()
+}
+
+function selectIssueMetric(metric: string | null) {
+  selectedIssueMetric.value = metric
 }
 
 function openStepAnalysis() {

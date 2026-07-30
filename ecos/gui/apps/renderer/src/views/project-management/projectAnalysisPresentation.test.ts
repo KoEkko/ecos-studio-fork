@@ -4,11 +4,6 @@ import {
   DASHBOARD_METRIC_ORDER,
   buildBestWorkspacePpaMetrics,
   buildDashboardMetricRows,
-  buildDashboardWorkspaceMetricRows,
-  buildRunStatePieBackground,
-  findBestFrequencyWorkspace,
-  dashboardMetricColumnsTemplate,
-  dashboardPillClass,
   initialMetricSortDirection,
   metricHasComparableData,
   metricPointForWorkspace,
@@ -17,7 +12,6 @@ import {
   nextMetricSortState,
   pendingMetricPoint,
   runStateSliceClass,
-  sortWorkspaceMetricRows,
 } from './projectAnalysisPresentation'
 import type {
   ProjectFlowMetricSummary,
@@ -104,38 +98,17 @@ describe('project analysis presentation', () => {
     expect(rows[rows.length - 1]?.points).toEqual(flowMetricSummary.memoryPoints)
   })
 
-  it('fills dashboard workspace rows with a pending metric point when data is absent', () => {
-    const rows = buildDashboardWorkspaceMetricRows(
-      [{ id: 'ws_a' }, { id: 'ws_b' }],
-      [metric('frequency', 'Frequency [MHz]', [point('ws_a', 125)])],
-    )
+  it('falls back to a pending point when a workspace has no value for a metric', () => {
+    const frequency = metric('frequency', 'Frequency [MHz]', [point('ws_a', 125)])
 
-    expect(rows).toEqual([
-      {
-        workspaceId: 'ws_a',
-        cells: [
-          {
-            metric: expect.objectContaining({ id: 'frequency' }),
-            point: point('ws_a', 125),
-          },
-        ],
-      },
-      {
-        workspaceId: 'ws_b',
-        cells: [
-          {
-            metric: expect.objectContaining({ id: 'frequency' }),
-            point: pendingMetricPoint('ws_b'),
-          },
-        ],
-      },
-    ])
+    expect(metricPointForWorkspace(frequency, 'ws_a')).toEqual(point('ws_a', 125))
+    expect(metricPointForWorkspace(frequency, 'ws_b')).toEqual(pendingMetricPoint('ws_b'))
     expect(metricPointForWorkspace({ points: [] }, 'ws_missing')).toEqual(
       pendingMetricPoint('ws_missing'),
     )
   })
 
-  it('selects the best frequency workspace and summarizes its PPA metrics', () => {
+  it('summarizes the PPA metrics of a chosen workspace in the intended order', () => {
     const rows = [
       metric('core_util', 'Core Util', [point('ws_fast', 0.72, '72%')]),
       metric('drc', 'DRC', [point('ws_fast', 0, '0')]),
@@ -151,9 +124,6 @@ describe('project analysis presentation', () => {
       metric('die_area', 'Die Area', [point('ws_fast', 820, '820 um2')]),
     ]
 
-    const best = findBestFrequencyWorkspace(rows)
-
-    expect(best).toMatchObject({ workspaceId: 'ws_fast', value: 150 })
     expect(BEST_WORKSPACE_PPA_METRIC_ORDER).toEqual([
       'frequency',
       'wns',
@@ -164,7 +134,7 @@ describe('project analysis presentation', () => {
       'die_area',
       'core_util',
     ])
-    expect(buildBestWorkspacePpaMetrics(rows, best?.workspaceId)).toEqual([
+    expect(buildBestWorkspacePpaMetrics(rows, 'ws_fast')).toEqual([
       {
         id: 'frequency',
         label: 'Frequency [MHz]',
@@ -182,18 +152,7 @@ describe('project analysis presentation', () => {
     expect(buildBestWorkspacePpaMetrics(rows, null)).toEqual([])
   })
 
-  it('builds run-state pie backgrounds and metric display helpers', () => {
-    expect(buildRunStatePieBackground([])).toBe(
-      'conic-gradient(color-mix(in srgb, var(--text-secondary) 14%, transparent) 0deg 360deg)',
-    )
-    expect(
-      buildRunStatePieBackground([
-        { state: 'success', label: 'Success', count: 3, percent: 75 },
-        { state: 'failed', label: 'Failed', count: 1, percent: 25 },
-      ]),
-    ).toBe(
-      'conic-gradient(var(--success-color) 0deg 270deg, var(--danger-color) 270deg 360deg)',
-    )
+  it('maps metric state, run state, and sort interactions to display values', () => {
     expect(runStateSliceClass('running')).toBe('run-state-running')
     expect(metricValueClass('good')).toBe('metric-good')
     expect(metricValueClass('warn')).toBe('metric-warn')
@@ -220,53 +179,8 @@ describe('project analysis presentation', () => {
     expect(metricSortAriaValue({ key: 'frequency', direction: 'desc' }, 'wns')).toBe(
       'none',
     )
-    expect(
-      sortWorkspaceMetricRows(
-        [
-          {
-            workspaceId: 'ws_b',
-            cells: [{ metric: { id: 'frequency' }, point: point('ws_b', 640) }],
-          },
-          {
-            workspaceId: 'ws_a',
-            cells: [{ metric: { id: 'frequency' }, point: point('ws_a', 820) }],
-          },
-          {
-            workspaceId: 'ws_c',
-            cells: [{ metric: { id: 'frequency' }, point: pendingMetricPoint('ws_c') }],
-          },
-        ],
-        { key: 'frequency', direction: 'desc' },
-      ).map((row) => row.workspaceId),
-    ).toEqual(['ws_a', 'ws_b', 'ws_c'])
-    expect(
-      sortWorkspaceMetricRows(
-        [
-          {
-            workspaceId: 'ws_b',
-            cells: [{ metric: { id: 'runtime' }, point: point('ws_b', 48, '48 s') }],
-          },
-          {
-            workspaceId: 'ws_a',
-            cells: [{ metric: { id: 'runtime' }, point: point('ws_a', 32, '32 s') }],
-          },
-          {
-            workspaceId: 'ws_c',
-            cells: [{ metric: { id: 'runtime' }, point: pendingMetricPoint('ws_c') }],
-          },
-        ],
-        { key: 'runtime', direction: 'asc' },
-      ).map((row) => row.workspaceId),
-    ).toEqual(['ws_a', 'ws_b', 'ws_c'])
-    expect(dashboardPillClass(0, 'success')).toBe('dashboard-pill is-zero')
-    expect(dashboardPillClass(2, 'success')).toBe('dashboard-pill success')
-    expect(dashboardPillClass(1, 'info')).toBe('dashboard-pill info')
-
     const runtimePoints = [point('ws_a', 32, '32 s'), point('ws_b', 48, '48 s')]
     expect(metricHasComparableData({ points: [pendingMetricPoint('ws_a')] })).toBe(false)
     expect(metricHasComparableData({ points: runtimePoints })).toBe(true)
-    expect(
-      dashboardMetricColumnsTemplate([{ points: runtimePoints }, { points: [] }]),
-    ).toBe('minmax(148px, 0.9fr) minmax(100px, 1fr) minmax(88px, 1fr)')
   })
 })

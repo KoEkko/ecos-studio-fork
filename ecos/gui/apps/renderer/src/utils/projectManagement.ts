@@ -220,8 +220,8 @@ export interface ProjectWorkspaceFinalMetrics {
 }
 
 export interface ProjectWorkspaceFlowMetrics {
-  totalRuntimeSec: number
-  peakMemoryMb: number
+  totalRuntimeSec: number | null
+  peakMemoryMb: number | null
   checklistPassed: number
   checklistFailed: number
   checklistWarning: number
@@ -293,7 +293,6 @@ export interface ProjectDashboardSummary {
   signoffReadyCount: number
   runStateSlices: ProjectRunStateSlice[]
   flowMetricSummary: ProjectFlowMetricSummary
-  topBlockingSteps: Array<{ step: FlowStep; count: number }>
 }
 
 export interface ProjectManagementProject {
@@ -676,13 +675,16 @@ function v3FlowMetrics(
   )
   const runtimes = metrics
     .filter((metric) => metric.metricName === 'runtime_seconds')
-    .map((metric) => metric.value ?? 0)
+    .flatMap((metric) => (metric.value === null ? [] : [metric.value]))
   const memories = metrics
     .filter((metric) => metric.metricName === 'peak_memory_mb')
-    .map((metric) => metric.value ?? 0)
+    .flatMap((metric) => (metric.value === null ? [] : [metric.value]))
   return {
-    totalRuntimeSec: Number(runtimes.reduce((sum, value) => sum + value, 0).toFixed(3)),
-    peakMemoryMb: Math.max(0, ...memories),
+    totalRuntimeSec:
+      runtimes.length > 0
+        ? Number(runtimes.reduce((sum, value) => sum + value, 0).toFixed(3))
+        : null,
+    peakMemoryMb: memories.length > 0 ? Math.max(...memories) : null,
     checklistPassed: 0,
     checklistFailed: 0,
     checklistWarning: 0,
@@ -800,7 +802,9 @@ function buildV3ComparisonSummary(
       ? `Highest eligible QoR score: ${bestRatedWorkspace.overallScore}`
       : 'No workspace has eligible V3 signoff readiness.',
     riskLabels: Array.from(
-      new Set(qorTrendSummary.risks.map((risk) => risk.message)),
+      new Set(
+        qorTrendSummary.risks.flatMap((risk) => (risk.message ? [risk.message] : [])),
+      ),
     ).slice(0, 8),
     parameterDiffs: buildParameterDiffs(workspaces),
     metricDiffs: [],
@@ -1470,17 +1474,6 @@ function buildProjectDashboardSummary(
   const signoffReadyCount = qorTrendSummary.workspaces.filter(
     (workspace) => workspace.signoffReadiness.status === 'pass',
   ).length
-  const blockingCounts = new Map<FlowStep, number>()
-  for (const workspace of workspaces) {
-    const blockedStep = workspace.steps.find(
-      (cell) =>
-        cell.status === 'failed' ||
-        cell.status === 'running' ||
-        cell.status === 'unstart',
-    )
-    if (!blockedStep) continue
-    blockingCounts.set(blockedStep.step, (blockingCounts.get(blockedStep.step) ?? 0) + 1)
-  }
   const runStateSlices = buildRunStateSlices(workspaces)
   const flowMetricSummary = buildFlowMetricSummary(workspaceSummaries)
 
@@ -1499,14 +1492,6 @@ function buildProjectDashboardSummary(
     signoffReadyCount,
     runStateSlices,
     flowMetricSummary,
-    topBlockingSteps: [...blockingCounts.entries()]
-      .sort(
-        (left, right) =>
-          right[1] - left[1] ||
-          FLOW_STEPS.indexOf(left[0]) - FLOW_STEPS.indexOf(right[0]),
-      )
-      .slice(0, 3)
-      .map(([step, count]) => ({ step, count })),
   }
 }
 
@@ -1550,46 +1535,56 @@ function buildRunStateSlices(workspaces: ProjectWorkspace[]): ProjectRunStateSli
 function buildFlowMetricSummary(
   workspaceSummaries: ProjectWorkspaceSummary[],
 ): ProjectFlowMetricSummary {
-  const empty = emptyFlowMetrics()
-  const totals = workspaceSummaries.reduce(
-    (summary, workspace) => ({
-      totalRuntimeSec: summary.totalRuntimeSec + workspace.flowMetrics.totalRuntimeSec,
-      peakMemoryMb: Math.max(summary.peakMemoryMb, workspace.flowMetrics.peakMemoryMb),
-      checklistPassed: summary.checklistPassed + workspace.flowMetrics.checklistPassed,
-      checklistFailed: summary.checklistFailed + workspace.flowMetrics.checklistFailed,
-      checklistWarning: summary.checklistWarning + workspace.flowMetrics.checklistWarning,
-      checklistTotal: summary.checklistTotal + workspace.flowMetrics.checklistTotal,
+  const runtimes = workspaceSummaries.flatMap((summary) =>
+    summary.flowMetrics.totalRuntimeSec === null
+      ? []
+      : [summary.flowMetrics.totalRuntimeSec],
+  )
+  const memories = workspaceSummaries.flatMap((summary) =>
+    summary.flowMetrics.peakMemoryMb === null
+      ? []
+      : [summary.flowMetrics.peakMemoryMb],
+  )
+  const checklist = workspaceSummaries.reduce(
+    (totals, summary) => ({
+      passed: totals.passed + summary.flowMetrics.checklistPassed,
+      failed: totals.failed + summary.flowMetrics.checklistFailed,
+      warning: totals.warning + summary.flowMetrics.checklistWarning,
+      total: totals.total + summary.flowMetrics.checklistTotal,
     }),
-    empty,
+    { passed: 0, failed: 0, warning: 0, total: 0 },
   )
 
   return {
-    ...totals,
+    totalRuntimeSec:
+      runtimes.length > 0
+        ? Number(runtimes.reduce((sum, value) => sum + value, 0).toFixed(3))
+        : null,
+    peakMemoryMb: memories.length > 0 ? Math.max(...memories) : null,
+    checklistPassed: checklist.passed,
+    checklistFailed: checklist.failed,
+    checklistWarning: checklist.warning,
+    checklistTotal: checklist.total,
     runtimePoints: workspaceSummaries.map((summary) => ({
       workspaceId: summary.workspaceId,
       workspaceName: summary.workspaceName,
-      label: formatRuntimeLabel(summary.flowMetrics.totalRuntimeSec),
+      label:
+        summary.flowMetrics.totalRuntimeSec === null
+          ? 'N/A'
+          : formatRuntimeLabel(summary.flowMetrics.totalRuntimeSec),
       value: summary.flowMetrics.totalRuntimeSec,
-      state: summary.flowMetrics.totalRuntimeSec > 0 ? 'good' : 'pending',
+      state: summary.flowMetrics.totalRuntimeSec === null ? 'pending' : 'good',
     })),
     memoryPoints: workspaceSummaries.map((summary) => ({
       workspaceId: summary.workspaceId,
       workspaceName: summary.workspaceName,
-      label: `${formatMetricValue(summary.flowMetrics.peakMemoryMb)} MB`,
+      label:
+        summary.flowMetrics.peakMemoryMb === null
+          ? 'N/A'
+          : `${formatMetricValue(summary.flowMetrics.peakMemoryMb)} MB`,
       value: summary.flowMetrics.peakMemoryMb,
-      state: summary.flowMetrics.peakMemoryMb > 0 ? 'good' : 'pending',
+      state: summary.flowMetrics.peakMemoryMb === null ? 'pending' : 'good',
     })),
-  }
-}
-
-function emptyFlowMetrics(): ProjectWorkspaceFlowMetrics {
-  return {
-    totalRuntimeSec: 0,
-    peakMemoryMb: 0,
-    checklistPassed: 0,
-    checklistFailed: 0,
-    checklistWarning: 0,
-    checklistTotal: 0,
   }
 }
 

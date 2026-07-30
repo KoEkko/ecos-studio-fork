@@ -142,15 +142,16 @@ export interface ProjectQorFindingEvidence {
   availability: string | null
 }
 
+/** Every optional field stays null when qor_hotspots.json omits it, so nothing here is a default we invented. */
 export interface ProjectQorHotspot {
   step: FlowStep
-  kind: string
-  severity: 'info' | 'warning' | 'critical'
+  kind: string | null
+  severity: 'info' | 'warning' | 'critical' | null
   metric: string
   displayName: string
   value: number | string | null
   sourceFile: string
-  description: string
+  description: string | null
 }
 
 export interface ProjectQorTimingConstraints {
@@ -297,11 +298,12 @@ export interface ProjectQorRisk {
     | 'analysis_metric_coverage'
     | 'signoff_readiness'
     | 'signoff_context_change'
-  severity: 'critical' | 'warning' | 'info'
+  /** Null when the artifact behind the risk reports no severity of its own. */
+  severity: 'critical' | 'warning' | 'info' | null
   metric: string
   displayName: string
   value: number | string | null
-  message: string
+  message: string | null
 }
 
 export interface ProjectQorTimingIssue {
@@ -3202,13 +3204,13 @@ export function normalizeQorHotspots(
     return [
       {
         step,
-        kind: stringValue(hotspot.kind) ?? 'hotspot',
+        kind: stringValue(hotspot.kind),
         severity: hotspotSeverity(hotspot.severity),
         metric,
         displayName: stringValue(hotspot.display_name) ?? metric,
         value: qorSummaryIssueValue(hotspot.value),
         sourceFile,
-        description: stringValue(hotspot.description) ?? 'QoR hotspot',
+        description: stringValue(hotspot.description),
       },
     ]
   })
@@ -3235,7 +3237,7 @@ export function normalizeQorDetailDescriptors(
 }
 
 function hotspotSeverity(value: unknown): ProjectQorHotspot['severity'] {
-  return value === 'critical' || value === 'warning' || value === 'info' ? value : 'info'
+  return value === 'critical' || value === 'warning' || value === 'info' ? value : null
 }
 
 function qorSummaryIssueValue(value: unknown): number | string | null {
@@ -3361,8 +3363,11 @@ function compareWorkspaceInput(
 }
 
 function compareProjectQorRisk(left: ProjectQorRisk, right: ProjectQorRisk): number {
+  // Unrated risks sort last rather than being folded into 'info', which no artifact claimed.
   const severityOrder = { critical: 0, warning: 1, info: 2 }
-  const severityDelta = severityOrder[left.severity] - severityOrder[right.severity]
+  const severityRank = (risk: ProjectQorRisk) =>
+    risk.severity === null ? 3 : severityOrder[risk.severity]
+  const severityDelta = severityRank(left) - severityRank(right)
   if (severityDelta !== 0) return severityDelta
 
   const workspaceDelta = left.workspaceName.localeCompare(right.workspaceName)

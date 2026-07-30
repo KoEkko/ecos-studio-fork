@@ -1,0 +1,955 @@
+.step-analysis {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  overflow: hidden;
+}
+
+/* Region 1 — flow step rail, badged with the selected workspace issue counts. */
+.step-rail {
+  display: flex;
+  min-width: 0;
+  border-bottom: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-secondary) 60%, var(--bg-primary));
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.step-rail-item {
+  display: flex;
+  align-items: center;
+  flex: 1 0 auto;
+  gap: 5px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 7px 12px;
+  color: var(--text-secondary);
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.step-rail-item:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+}
+
+.step-rail-item.selected {
+  border-bottom-color: var(--accent-color);
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent-color) 8%, transparent);
+}
+
+.step-rail-item.muted .step-rail-name {
+  opacity: 0.55;
+}
+
+.step-rail-mark {
+  display: inline-grid;
+  place-items: center;
+  min-width: 14px;
+  height: 14px;
+  border-radius: 7px;
+  padding: 0 4px;
+  color: var(--bg-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.step-rail-mark.bad {
+  background: var(--danger-color);
+}
+
+.step-rail-mark.warn {
+  background: var(--warn-color);
+}
+
+/* Findings exist but no artifact called them blocking, so the count stays uncoloured. */
+.step-rail-mark.neutral {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-secondary) 26%, transparent);
+}
+
+.step-rail-mark.good {
+  min-width: 6px;
+  width: 6px;
+  height: 6px;
+  background: var(--success-color);
+}
+
+.step-rail-mark.none {
+  min-width: 6px;
+  width: 6px;
+  height: 6px;
+  background: color-mix(in srgb, var(--text-secondary) 40%, transparent);
+}
+
+/* Region 2 — workspace picker plus the one-line verdict for the current step. */
+.verdict-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 16px;
+  border-bottom: 1px solid var(--border-color);
+  padding: 8px 12px;
+}
+
+.workspace-picker {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.workspace-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 3px 8px;
+  color: var(--text-secondary);
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.workspace-chip:hover {
+  border-color: color-mix(in srgb, var(--accent-color) 40%, var(--border-color));
+  color: var(--text-primary);
+}
+
+.workspace-chip.selected {
+  border-color: var(--accent-color);
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent-color) 9%, transparent);
+}
+
+.workspace-chip-name {
+  max-width: 150px;
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text-secondary) 45%, transparent);
+}
+
+.status-dot.good {
+  background: var(--success-color);
+}
+
+.status-dot.warn {
+  background: var(--warn-color);
+}
+
+.status-dot.bad {
+  background: var(--danger-color);
+}
+
+.chip-count {
+  border-radius: 6px;
+  padding: 0 4px;
+  color: var(--bg-primary);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.chip-count.bad {
+  background: var(--danger-color);
+}
+
+.chip-count.warn {
+  background: var(--warn-color);
+}
+
+.chip-count.neutral {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-secondary) 26%, transparent);
+}
+
+.chip-role {
+  color: var(--text-secondary);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.chip-role.accent {
+  color: var(--accent-color);
+}
+
+.verdict {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.verdict-badge {
+  border-radius: 3px;
+  padding: 2px 7px;
+  color: var(--bg-primary);
+  background: color-mix(in srgb, var(--text-secondary) 60%, transparent);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.verdict-badge.pass {
+  background: var(--success-color);
+}
+
+.verdict-badge.blocked {
+  background: var(--danger-color);
+}
+
+.verdict-badge.incomplete,
+.verdict-badge.unavailable {
+  background: var(--warn-color);
+}
+
+.verdict-summary {
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.verdict-fact {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.verdict-fact small {
+  color: var(--text-secondary);
+  font-size: 9px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.verdict-fact strong {
+  color: var(--text-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+}
+
+.verdict-fact strong.good {
+  color: var(--success-color);
+}
+
+.verdict-fact strong.warn {
+  color: var(--warn-color);
+}
+
+.verdict-fact strong.bad {
+  color: var(--danger-color);
+}
+
+/* Region 3 — issue list on the left drives the evidence reader on the right. */
+.step-body {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: minmax(260px, 0.4fr) minmax(0, 1fr);
+}
+
+.issue-pane {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  border-right: 1px solid var(--border-color);
+}
+
+.evidence-pane {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.pane-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.issue-pane > .pane-header {
+  border-bottom: 1px solid var(--border-color);
+  padding: 8px 10px;
+}
+
+.pane-title {
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pane-header small {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pane-header small.good {
+  color: var(--success-color);
+}
+
+.pane-header small.warn {
+  color: var(--warn-color);
+}
+
+.pane-header small.bad {
+  color: var(--danger-color);
+}
+
+.severity-filters {
+  display: flex;
+  gap: 3px;
+}
+
+.severity-filters button {
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  padding: 2px 5px;
+  color: var(--text-secondary);
+  background: transparent;
+  cursor: pointer;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.severity-filters button:hover,
+.severity-filters button.selected {
+  border-color: color-mix(in srgb, var(--accent-color) 46%, var(--border-color));
+  color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 7%, transparent);
+}
+
+.issue-list {
+  margin: 0;
+  min-height: 0;
+  padding: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  list-style: none;
+}
+
+.issue-item {
+  display: grid;
+  width: 100%;
+  box-sizing: border-box;
+  gap: 2px;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+  border-left: 2px solid transparent;
+  padding: 8px 10px;
+  color: var(--text-secondary);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+/*
+ * Only two things earn a colour here: a severity the artifact reported, and the fact
+ * that an artifact listed the finding as blocking. Everything else stays neutral rather
+ * than implying a ranking this panel invented.
+ */
+.issue-item.critical {
+  border-left-color: var(--danger-color);
+}
+
+.issue-item.warning {
+  border-left-color: var(--warn-color);
+}
+
+.issue-item.info {
+  border-left-color: var(--info-color);
+}
+
+.issue-item.blocking {
+  border-left-color: var(--danger-color);
+}
+
+.issue-item:hover {
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+}
+
+.issue-item.selected {
+  background: color-mix(in srgb, var(--accent-color) 9%, transparent);
+}
+
+.issue-kind {
+  color: var(--text-secondary);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.issue-title {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.issue-actual {
+  color: var(--text-secondary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.issue-item.critical .issue-actual,
+.issue-item.blocking .issue-actual {
+  color: var(--danger-color);
+}
+
+.issue-item.warning .issue-actual {
+  color: var(--warn-color);
+}
+
+/* Evidence card — every field is laid out flat, nothing hidden behind a toggle. */
+.evidence-card {
+  border: 1px solid var(--border-color);
+  border-left: 3px solid color-mix(in srgb, var(--text-secondary) 50%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-secondary) 46%, var(--bg-primary));
+}
+
+.evidence-card.critical {
+  border-left-color: var(--danger-color);
+}
+
+.evidence-card.warning {
+  border-left-color: var(--warn-color);
+}
+
+.evidence-card.info {
+  border-left-color: var(--info-color);
+}
+
+.evidence-card.blocking {
+  border-left-color: var(--danger-color);
+}
+
+.evidence-card > header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+  padding: 9px 12px;
+}
+
+/*
+ * The finding title is already the bold line in the selected queue row directly to the
+ * left, so the card heads with the channel instead of repeating it.
+ */
+.evidence-kind {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+/*
+ * Two independent markers, both facts: whether an artifact listed the finding as
+ * blocking, and the severity an artifact reported for it. Either can be absent. They sit
+ * at the trailing edge as text so colour-blind readers still get them.
+ */
+.evidence-flag,
+.evidence-severity {
+  flex: 0 0 auto;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.evidence-flag {
+  color: var(--danger-color);
+}
+
+.evidence-severity {
+  color: var(--text-secondary);
+}
+
+.evidence-card.critical .evidence-severity {
+  color: var(--danger-color);
+}
+
+.evidence-card.warning .evidence-severity {
+  color: var(--warn-color);
+}
+
+.evidence-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px 16px;
+  margin: 0;
+  padding: 11px 12px 13px;
+}
+
+.evidence-facts > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.evidence-diagnosis {
+  grid-column: 1 / -1;
+}
+
+/* Trails the artifact path it belongs to rather than claiming a slot of its own. */
+.evidence-metric-id {
+  color: var(--text-secondary);
+}
+
+.evidence-metric-id::before {
+  content: '→ ';
+}
+
+.evidence-facts dt {
+  color: var(--text-secondary);
+  font-size: 9px;
+  font-weight: 780;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.evidence-facts dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.evidence-facts dd.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+}
+
+.evidence-facts dd.strong {
+  font-weight: 700;
+}
+
+.evidence-card.critical .evidence-facts dd.strong {
+  color: var(--danger-color);
+}
+
+.evidence-card.warning .evidence-facts dd.strong {
+  color: var(--warn-color);
+}
+
+.evidence-block {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+/* Metrics of the selected workspace, grouped by QoR dimension. */
+.metric-groups {
+  display: grid;
+  gap: 10px;
+}
+
+.metric-group {
+  display: grid;
+  gap: 1px;
+}
+
+.metric-group-label {
+  padding: 3px 0;
+  color: var(--text-secondary);
+  font-size: 9px;
+  font-weight: 780;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.metric-row {
+  display: grid;
+  align-items: baseline;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+  padding: 5px 6px;
+}
+
+.metric-row.highlighted {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent-color) 11%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent-color);
+}
+
+.metric-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metric-value {
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Kept at the metric value size: the delta is the signal being scanned, so it
+   stays subordinate through colour and weight rather than through a smaller size. */
+.metric-delta {
+  color: var(--text-secondary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.metric-delta.good {
+  color: var(--success-color);
+}
+
+.metric-delta.bad {
+  color: var(--danger-color);
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.detail-table-wrap {
+  max-height: 320px;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.detail-table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.detail-table-wrap th,
+.detail-table-wrap td {
+  box-sizing: border-box;
+  min-width: 104px;
+  height: 30px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 58%, transparent);
+  padding: 5px 8px;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-table-wrap th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-secondary) 88%, var(--bg-primary));
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.detail-table-wrap td {
+  color: var(--text-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.pane-empty {
+  margin: 0;
+  padding: 16px 12px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-align: center;
+}
+
+.pane-empty-detail {
+  display: grid;
+  gap: 3px;
+  justify-items: center;
+}
+
+.pane-empty-detail small {
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+/* Region 4 — cross-workspace comparison, collapsed by default. */
+.compare-drawer {
+  display: grid;
+  min-height: 0;
+  border-top: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-secondary) 40%, var(--bg-primary));
+}
+
+.compare-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  padding: 8px 12px;
+  color: var(--text-primary);
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.compare-toggle:hover {
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+}
+
+.compare-toggle small {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.compare-caret {
+  color: var(--accent-color);
+}
+
+.compare-region {
+  min-height: 0;
+  max-height: 40vh;
+  padding: 0 12px 12px;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.compare-table {
+  display: grid;
+  min-width: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  background: var(--bg-primary);
+  overflow: hidden;
+}
+
+.compare-row {
+  display: grid;
+  min-width: max-content;
+}
+
+.compare-corner,
+.compare-head,
+.compare-metric,
+.compare-cell {
+  box-sizing: border-box;
+  min-width: 0;
+  border-right: 1px solid color-mix(in srgb, var(--border-color) 56%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+}
+
+.compare-corner,
+.compare-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: color-mix(in srgb, var(--bg-secondary) 86%, var(--bg-primary));
+}
+
+.compare-corner {
+  padding: 7px 10px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.compare-head button,
+.compare-cell button {
+  display: grid;
+  width: 100%;
+  box-sizing: border-box;
+  gap: 2px;
+  border: 0;
+  padding: 7px 10px;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.compare-head button {
+  color: var(--text-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.compare-head button small {
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.compare-head.selected,
+.compare-cell.selected {
+  background: color-mix(in srgb, var(--accent-color) 8%, transparent);
+}
+
+.compare-metric {
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  padding: 7px 10px;
+}
+
+.compare-metric strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compare-metric small {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compare-cell:hover {
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+}
+
+.compare-cell strong {
+  color: var(--text-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+}
+
+.compare-cell.good strong {
+  color: var(--success-color);
+}
+
+.compare-cell.warn strong {
+  color: var(--warn-color);
+}
+
+.compare-cell.bad strong {
+  color: var(--danger-color);
+}
+
+.compare-cell small {
+  color: var(--text-secondary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+}
+
+.compare-cell small.good {
+  color: var(--success-color);
+}
+
+.compare-cell small.bad {
+  color: var(--danger-color);
+}
+
+.step-analysis button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-color) 76%, transparent);
+  outline-offset: -2px;
+}
+
+@media (max-width: 1080px) {
+  .step-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(140px, 0.4fr) minmax(0, 1fr);
+  }
+
+  .issue-pane {
+    border-right: 0;
+    border-bottom: 1px solid var(--border-color);
+  }
+}
+
+@media (max-width: 700px) {
+  .step-rail-item {
+    flex: 0 0 auto;
+  }
+
+  .verdict-bar {
+    align-items: stretch;
+  }
+
+  .workspace-picker {
+    flex-wrap: nowrap;
+    padding-bottom: 2px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+
+  .workspace-chip {
+    flex: 0 0 auto;
+  }
+
+  .verdict {
+    border-top: 1px solid color-mix(in srgb, var(--border-color) 68%, transparent);
+    padding-top: 7px;
+  }
+
+  .issue-pane > .pane-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .severity-filters {
+    width: 100%;
+    padding-bottom: 2px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+
+  .severity-filters button {
+    flex: 0 0 auto;
+    font-size: 11px;
+  }
+}

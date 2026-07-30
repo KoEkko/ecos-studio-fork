@@ -49,132 +49,173 @@
       id="analysis-dashboard-panel"
       role="tabpanel"
       aria-labelledby="analysis-tab-dashboard"
-      class="analysis-dashboard-v3"
+      class="analysis-dashboard"
       v-show="selectedAnalysisTab === 'dashboard'"
     >
-      <div class="dashboard-summary-strip" aria-label="Project summary">
-        <section class="dashboard-card dashboard-run-state-card" aria-label="Run state">
-          <span class="dashboard-card-label">Workspace Run State</span>
-          <div class="run-state-main">
-            <div class="run-state-layout">
-              <div
-                class="run-state-pie"
-                :style="{ background: runStatePieBackground }"
-                aria-hidden="true"
-              ></div>
-              <div class="run-state-copy">
-                <div class="dashboard-stat-row">
-                  <strong>{{ project.dashboardSummary.workspaceCount }}</strong>
-                  <small>workspaces</small>
-                </div>
-                <div class="run-state-legend" aria-label="Workspace run state pie legend">
-                  <span
-                    v-for="slice in project.dashboardSummary.runStateSlices"
-                    :key="slice.state"
-                  >
-                    <i :class="runStateSliceClass(slice.state)"></i>
-                    {{ slice.label }} {{ slice.count }}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div class="dashboard-pill-row">
-              <span
-                :class="
-                  dashboardPillClass(project.dashboardSummary.drcCleanCount, 'success')
-                "
-                >{{ project.dashboardSummary.drcCleanCount }} DRC clean</span
-              >
-              <span
-                :class="
-                  dashboardPillClass(project.dashboardSummary.timingCleanCount, 'success')
-                "
-                >{{ project.dashboardSummary.timingCleanCount }} timing clean</span
-              >
-              <span
-                :class="
-                  dashboardPillClass(project.dashboardSummary.signoffReadyCount, 'info')
-                "
-                >{{ project.dashboardSummary.signoffReadyCount }} signoff ready</span
-              >
-            </div>
+      <section class="dash-health" aria-label="Project health">
+        <div class="dash-progress">
+          <span class="dash-eyebrow">Flow progress</span>
+          <p class="dash-progress-headline">
+            <strong>{{ health.stepsLabel }}</strong>
+            <small>steps complete across {{ health.workspaceCount }} workspaces</small>
+          </p>
+          <div class="dash-runbar" role="img" :aria-label="runStateSummaryLabel">
+            <i
+              v-for="segment in health.runSegments"
+              :key="segment.state"
+              :class="runStateSliceClass(segment.state)"
+              :style="{ width: `${segment.percent}%` }"
+            ></i>
           </div>
+          <ul class="dash-runlegend">
+            <li v-for="segment in health.runSegments" :key="segment.state">
+              <i :class="runStateSliceClass(segment.state)" aria-hidden="true"></i>
+              {{ segment.label }}
+              <strong>{{ segment.count }}</strong>
+            </li>
+          </ul>
+        </div>
+
+        <ul class="dash-checks" aria-label="Signoff readiness">
+          <li
+            v-for="check in health.checks"
+            :key="check.id"
+            :class="dashboardToneClass(check.tone)"
+            :title="check.hint"
+          >
+            <span class="dash-eyebrow">{{ check.label }}</span>
+            <strong>{{ check.value }}</strong>
+            <small v-if="check.note">{{ check.note }}</small>
+          </li>
+        </ul>
+
+        <div class="dash-actions">
+          <span class="dash-baseline-chip">
+            <span class="dash-eyebrow">Baseline</span>
+            <strong>{{ baselineDisplayLabel }}</strong>
+          </span>
+          <div v-if="baselineConfirmId" class="dash-baseline-confirm" role="group">
+            <small>Make {{ baselineConfirmId }} the baseline?</small>
+            <button type="button" class="dash-btn primary" @click="confirmBaseline">
+              Confirm
+            </button>
+            <button type="button" class="dash-btn" @click="baselineConfirmId = null">
+              Cancel
+            </button>
+          </div>
+          <template v-else>
+            <button
+              type="button"
+              class="dash-btn"
+              :disabled="!canSetBaseline"
+              :title="setBaselineTitle"
+              @click="requestBaseline(selectedWorkspaceId)"
+            >
+              Set baseline
+            </button>
+            <button type="button" class="dash-btn" @click="exportReport">
+              Export report
+            </button>
+          </template>
+        </div>
+      </section>
+
+      <div class="dash-lead-grid">
+        <section
+          v-if="recommendation"
+          class="dash-recommend"
+          aria-label="Recommended workspace"
+        >
+          <span class="dash-eyebrow">Recommended workspace</span>
+          <div class="dash-recommend-headline">
+            <button
+              type="button"
+              class="dash-recommend-id"
+              @click="selectWorkspace(recommendation.workspaceId)"
+            >
+              {{ recommendation.workspaceId }}
+            </button>
+            <strong :class="dashboardToneClass(recommendation.scoreTone)">
+              {{ recommendation.score }}
+              <em>QoR</em>
+            </strong>
+            <span
+              class="dash-signoff-tag"
+              :class="dashboardToneClass(signoffTone(recommendation.signoff))"
+            >
+              {{ signoffLabel(recommendation.signoff) }}
+            </span>
+          </div>
+          <p class="dash-recommend-note">{{ recommendation.scoreNote }}</p>
+          <p v-if="recommendation.reason" class="dash-recommend-reason">
+            {{ recommendation.reason }}
+          </p>
+          <dl v-if="recommendedPpaMetrics.length > 0" class="dash-recommend-metrics">
+            <div v-for="metric in recommendedPpaMetrics" :key="metric.id">
+              <dt :title="metric.label">{{ metric.label }}</dt>
+              <dd :class="metricValueClass(metric.state)">{{ metric.display }}</dd>
+            </div>
+          </dl>
+          <button
+            type="button"
+            class="dash-btn primary dash-recommend-action"
+            @click="drillDown(recommendation.workspaceId, null)"
+          >
+            Open in Step Analysis
+          </button>
+        </section>
+        <section
+          v-else
+          class="dash-recommend is-empty"
+          aria-label="Recommended workspace"
+        >
+          <span class="dash-eyebrow">Recommended workspace</span>
+          <p class="dash-recommend-reason">No workspace has an eligible QoR score yet.</p>
         </section>
 
-        <section
-          class="dashboard-card dashboard-best-card"
-          :class="{ 'is-empty': !hasBestFrequencyData }"
-          aria-label="Best Frequency workspace"
-        >
-          <header class="best-card-header">
-            <div>
-              <span>Best Frequency</span>
-              <strong>{{ bestFrequencyWorkspace?.workspaceId ?? '—' }}</strong>
-            </div>
-            <span
-              v-if="hasBestFrequencyData"
-              :class="
-                dashboardPillClass(project.dashboardSummary.drcCleanCount, 'success')
-              "
-              >{{ project.dashboardSummary.drcCleanCount }} DRC clean</span
-            >
-          </header>
-          <div v-if="hasBestFrequencyData" class="best-ppa-grid">
-            <div
-              v-for="metric in bestWorkspacePpaMetrics"
-              :key="metric.id"
-              class="best-ppa-item"
-            >
-              <span>{{ metric.label }}</span>
-              <strong :class="metricValueClass(metric.state)">{{
-                metric.display
-              }}</strong>
-            </div>
-          </div>
-          <p v-else class="best-empty-hint">No frequency data yet</p>
-        </section>
+        <ProjectQorScoreChart
+          :trend-points="project.qorTrendSummary.trendPoints"
+          :baseline-workspace-id="project.qorTrendSummary.baselineWorkspaceId"
+          :baseline-label="baselineDisplayLabel"
+          :selected-workspace-id="selectedWorkspaceId"
+          @select-workspace="selectWorkspace"
+        />
       </div>
 
-      <ProjectQorTrendPanel
-        :qor-trend-summary="project.qorTrendSummary"
-        :selected-workspace-id="selectedWorkspaceId"
-        @export-report="exportReport"
-        @set-baseline="setBaseline"
-        @select-workspace="selectWorkspace($event.workspaceId)"
-      />
-
-      <section class="dashboard-card dashboard-chart-card dashboard-key-metric-card">
+      <section class="dash-compare" aria-label="Workspace comparison">
+        <header class="dash-section-head">
+          <span>Workspace comparison</span>
+          <small>{{ workspaceRows.length }} workspaces · sort any column</small>
+        </header>
         <div
-          class="dashboard-key-metric-table"
-          :style="{
-            '--dashboard-metric-count': String(dashboardMetricRows.length),
-          }"
+          class="dash-compare-table"
           role="grid"
-          aria-label="Workspace key metrics comparison"
-          :aria-rowcount="displayedDashboardWorkspaceRows.length + 1"
-          :aria-colcount="dashboardMetricRows.length + 1"
+          aria-label="Workspace comparison"
+          :aria-rowcount="displayedWorkspaceRows.length + 1"
+          :aria-colcount="dashboardMetricRows.length + 6"
         >
           <div
-            class="dashboard-key-grid-row"
+            class="dash-compare-row is-head"
             role="row"
-            :style="{
-              gridTemplateColumns: dashboardMetricColumnsTemplate(dashboardMetricRows),
-            }"
+            :style="{ gridTemplateColumns: compareColumnsTemplate }"
           >
             <div
+              v-for="column in FIXED_COMPARE_COLUMNS"
+              :key="column.key"
               role="columnheader"
-              class="dashboard-key-header dashboard-key-workspace-header"
-              :class="{ 'is-sorted': dashboardSort?.key === 'workspace' }"
-              :aria-sort="metricSortAriaValue(dashboardSort, 'workspace')"
+              class="dash-compare-head"
+              :class="{ 'is-sorted': dashboardSort?.key === column.key }"
+              :aria-sort="metricSortAriaValue(dashboardSort, column.key)"
             >
               <button
                 type="button"
-                class="dashboard-key-sort-action"
-                @click="toggleMetricSort('dashboard', 'workspace')"
+                class="dash-sort-action"
+                :title="`Sort by ${column.label}`"
+                @click="toggleDashboardSort(column.key)"
               >
-                <span>Workspace</span>
+                <span>{{ column.label }}</span>
                 <i
-                  v-if="dashboardSort?.key === 'workspace'"
+                  v-if="dashboardSort?.key === column.key"
                   :class="sortIconClass(dashboardSort.direction)"
                   class="metric-sort-icon"
                   aria-hidden="true"
@@ -185,7 +226,7 @@
               v-for="metric in dashboardMetricRows"
               :key="metric.id"
               role="columnheader"
-              class="dashboard-key-header"
+              class="dash-compare-head is-metric"
               :class="{
                 'is-sparse': !metricHasComparableData(metric),
                 'is-sorted': dashboardSort?.key === metric.id,
@@ -194,9 +235,9 @@
             >
               <button
                 type="button"
-                class="dashboard-key-sort-action"
+                class="dash-sort-action"
                 :title="`Sort by ${metric.label}`"
-                @click="toggleMetricSort('dashboard', metric.id)"
+                @click="toggleDashboardSort(metric.id)"
               >
                 <span>{{ metric.label }}</span>
                 <i
@@ -207,65 +248,158 @@
                 ></i>
               </button>
             </div>
+            <div role="columnheader" class="dash-compare-head is-action">
+              <span>Debug</span>
+            </div>
           </div>
+
           <div
-            v-for="row in displayedDashboardWorkspaceRows"
+            v-for="row in displayedWorkspaceRows"
             :key="row.workspaceId"
-            class="dashboard-key-grid-row"
+            class="dash-compare-row"
             role="row"
+            :class="{ selected: row.workspaceId === selectedWorkspaceId }"
             :aria-selected="row.workspaceId === selectedWorkspaceId"
-            :style="{
-              gridTemplateColumns: dashboardMetricColumnsTemplate(dashboardMetricRows),
-            }"
+            :style="{ gridTemplateColumns: compareColumnsTemplate }"
           >
-            <div
-              role="rowheader"
-              class="dashboard-key-workspace-cell"
-              :class="{ selected: row.workspaceId === selectedWorkspaceId }"
-            >
+            <div role="rowheader" class="dash-compare-cell is-workspace">
               <button
                 type="button"
-                class="dashboard-key-cell-action"
+                class="dash-cell-action"
                 :aria-label="`Select workspace ${row.workspaceId}`"
                 @click="selectWorkspace(row.workspaceId)"
               >
-                {{ row.workspaceId }}
+                <i
+                  class="dash-status-dot"
+                  :class="dashboardToneClass(row.statusTone)"
+                  :title="row.statusLabel"
+                  aria-hidden="true"
+                ></i>
+                <span class="dash-workspace-id">{{ row.workspaceId }}</span>
+                <em v-if="row.isRecommended" class="dash-badge is-best">best</em>
+                <em v-if="row.isBaseline" class="dash-badge is-baseline">base</em>
               </button>
+            </div>
+            <div role="gridcell" class="dash-compare-cell is-progress">
+              <span class="dash-progress-value">{{ row.stepsLabel }}</span>
+              <span class="dash-minibar" aria-hidden="true">
+                <i :style="{ width: `${row.stepsPercent}%` }"></i>
+              </span>
+            </div>
+            <div
+              role="gridcell"
+              class="dash-compare-cell is-score"
+              :class="dashboardToneClass(row.scoreTone)"
+            >
+              {{ row.score }}
+            </div>
+            <div
+              role="gridcell"
+              class="dash-compare-cell is-issues"
+              :title="issueCellTitle(row)"
+            >
+              <template v-if="row.analysisState === 'findings'">
+                <span
+                  class="dash-issue-count"
+                  :class="row.blockingCount > 0 ? 'is-critical' : 'is-neutral'"
+                  >{{ row.blockingCount }}</span
+                >
+                <span class="dash-issue-total">/{{ row.findingCount }}</span>
+              </template>
+              <span
+                v-else
+                class="dash-issue-count"
+                :class="{
+                  'is-clean': row.analysisState === 'clean',
+                  'is-neutral': row.analysisState !== 'clean',
+                }"
+                >{{ row.analysisLabel }}</span
+              >
+            </div>
+            <div
+              role="gridcell"
+              class="dash-compare-cell is-signoff"
+              :class="dashboardToneClass(row.signoffTone)"
+            >
+              {{ row.signoffLabel }}
             </div>
             <div
               v-for="cell in row.cells"
               :key="`${row.workspaceId}-${cell.metric.id}`"
               role="gridcell"
-              class="dashboard-key-metric-cell"
+              class="dash-compare-cell is-metric"
               :class="[
                 metricValueClass(cell.point.state),
-                {
-                  selected: row.workspaceId === selectedWorkspaceId,
-                  'is-sparse': !metricHasComparableData(cell.metric),
-                },
+                { 'is-sparse': !metricHasComparableData(cell.metric) },
               ]"
+              :title="metricCellTitle(row.workspaceId, cell.metric.label, cell.point)"
             >
+              {{ cell.point.label }}
+            </div>
+            <div role="gridcell" class="dash-compare-cell is-action">
               <button
                 type="button"
-                class="dashboard-key-cell-action"
-                :title="metricCellTitle(row.workspaceId, cell.metric.label, cell.point)"
-                :aria-label="
-                  metricCellTitle(row.workspaceId, cell.metric.label, cell.point)
-                "
-                @click="selectWorkspace(row.workspaceId)"
+                class="dash-drill-action"
+                :aria-label="`Debug ${row.workspaceId} in Step Analysis`"
+                @click="drillDown(row.workspaceId, null)"
               >
-                <strong>
-                  <i
-                    v-if="cell.metric.id === 'drc' && cell.point.value !== null"
-                    class="metric-status-dot"
-                    aria-hidden="true"
-                  ></i>
-                  {{ cell.point.label }}
-                </strong>
+                Debug
               </button>
             </div>
           </div>
         </div>
+      </section>
+
+      <section class="dash-attention" aria-label="Needs attention">
+        <header class="dash-section-head">
+          <span>Needs attention</span>
+          <small>
+            <template v-if="attentionItems.length > 0">{{ attentionSummary }}</template>
+            <template v-else>No open findings</template>
+          </small>
+        </header>
+        <ul v-if="visibleAttentionItems.length > 0" class="dash-attention-list">
+          <li
+            v-for="item in visibleAttentionItems"
+            :key="item.id"
+            :class="`severity-${item.severity ?? 'unreported'}`"
+          >
+            <button
+              type="button"
+              class="dash-attention-action"
+              :aria-label="`Debug ${item.title} in ${item.workspaceId}`"
+              :title="attentionMarkTitle(item)"
+              @click="drillDown(item.workspaceId, item.step, item.step ? item.metric : null)"
+            >
+              <span class="dash-attention-severity">{{ attentionMark(item) }}</span>
+              <span class="dash-attention-origin">
+                {{ item.workspaceId }}
+                <em v-if="item.step">/ {{ item.step }}</em>
+              </span>
+              <span class="dash-attention-title">{{ item.title }}</span>
+              <span v-if="item.detail" class="dash-attention-detail">
+                {{ item.detail }}
+              </span>
+              <i class="ri-arrow-right-s-line" aria-hidden="true"></i>
+            </button>
+          </li>
+        </ul>
+        <p v-else class="dash-attention-empty">
+          {{ attentionEmptyMessage }}
+        </p>
+        <button
+          v-if="attentionItems.length > ATTENTION_PREVIEW_COUNT"
+          type="button"
+          class="dash-btn dash-attention-more"
+          :aria-expanded="attentionExpanded"
+          @click="attentionExpanded = !attentionExpanded"
+        >
+          {{
+            attentionExpanded
+              ? 'Show fewer'
+              : `Show all ${attentionItems.length} findings`
+          }}
+        </button>
       </section>
     </div>
 
@@ -281,8 +415,13 @@
         :steps="project.stepCompareSummaries"
         :workspace-summaries="project.workspaceSummaries"
         :qor-trend-summary="project.qorTrendSummary"
+        :project-name="project.name"
+        :project-objective="project.objective"
+        :best-workspace-id="project.bestWorkspaceId"
+        :best-workspace-reason="project.comparisonSummary.bestReason"
         :selected-step="selectedStep"
         :selected-workspace-id="selectedWorkspaceId"
+        :selected-issue-metric="selectedIssueMetric"
         @select-step="selectStep"
         @select-workspace="selectWorkspace"
       />
@@ -312,45 +451,71 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import ProjectQorTrendPanel from '@/components/ProjectQorTrendPanel.vue'
+import ProjectQorScoreChart from '@/components/ProjectQorScoreChart.vue'
 import ProjectStepAnalysisPanel from '@/components/ProjectStepAnalysisPanel.vue'
 import {
   type FlowStep,
   type ProjectManagementProject,
   type ProjectMetricPoint,
 } from '@/utils/projectManagement'
+import type { QorGateStatus } from '@/utils/projectQorTrend'
 import {
   buildBestWorkspacePpaMetrics,
   buildDashboardMetricRows,
-  buildDashboardWorkspaceMetricRows,
-  buildRunStatePieBackground,
-  dashboardMetricColumnsTemplate,
-  dashboardPillClass,
-  findBestFrequencyWorkspace,
   metricHasComparableData,
   metricSortAriaValue,
   metricValueClass,
   nextMetricSortState,
   runStateSliceClass,
-  sortWorkspaceMetricRows,
   type MetricTableSortDirection,
   type MetricTableSortKey,
   type MetricTableSortState,
 } from './projectAnalysisPresentation'
+import {
+  buildDashboardAttention,
+  buildDashboardHealth,
+  buildDashboardRecommendation,
+  buildDashboardWorkspaceRows,
+  countAttentionBySeverity,
+  dashboardGridTemplate,
+  dashboardToneClass,
+  sortDashboardWorkspaceRows,
+  type DashboardAttentionItem,
+  type DashboardWorkspaceRow,
+} from './projectDashboard'
 
 type AnalysisTab = 'dashboard' | 'step'
+
+const ATTENTION_PREVIEW_COUNT = 6
+
+const FIXED_COMPARE_COLUMNS = [
+  { key: 'workspace', label: 'Workspace' },
+  { key: 'progress', label: 'Progress' },
+  { key: 'score', label: 'QoR' },
+  { key: 'issues', label: 'Blocking/all' },
+  { key: 'signoff', label: 'Signoff' },
+] as const satisfies readonly { key: MetricTableSortKey; label: string }[]
+
+const SIGNOFF_DISPLAY: Record<QorGateStatus, { label: string; tone: string }> = {
+  pass: { label: 'Ready', tone: 'good' },
+  blocked: { label: 'Blocked', tone: 'bad' },
+  incomplete: { label: 'Incomplete', tone: 'warn' },
+  unavailable: { label: 'No data', tone: 'neutral' },
+}
 
 const props = defineProps<{
   project: ProjectManagementProject
   selectedAnalysisTab: AnalysisTab
   selectedStep: FlowStep
   selectedWorkspaceId: string
+  selectedIssueMetric?: string | null
 }>()
 
 const emit = defineEmits<{
   'select-analysis-tab': [tab: AnalysisTab]
   'select-step': [step: FlowStep]
   'select-workspace': [workspaceId: string]
+  'select-issue-metric': [metric: string | null]
   'export-report': []
   'set-baseline': [{ workspaceId: string }]
   'import-project': []
@@ -358,13 +523,15 @@ const emit = defineEmits<{
 }>()
 
 const dashboardSort = ref<MetricTableSortState | null>(null)
+const attentionExpanded = ref(false)
+const baselineConfirmId = ref<string | null>(null)
 
 const hasProjectData = computed(() => props.project.workspaces.length > 0)
 const analysisSubtitle = computed(() => {
   const count = props.project.workspaces.length
   const workspaceLabel = `${count} workspace${count === 1 ? '' : 's'}`
   if (props.selectedAnalysisTab === 'dashboard') {
-    return `${workspaceLabel} · key metrics`
+    return `${workspaceLabel} · project overview`
   }
   return `${workspaceLabel} · ${props.selectedStep} comparison`
 })
@@ -388,25 +555,89 @@ const dashboardMetricRows = computed(() =>
     props.project.dashboardSummary.flowMetricSummary,
   ),
 )
-const dashboardWorkspaceMetricRows = computed(() =>
-  buildDashboardWorkspaceMetricRows(props.project.workspaces, dashboardMetricRows.value),
+const health = computed(() => buildDashboardHealth(props.project.dashboardSummary))
+const runStateSummaryLabel = computed(() =>
+  health.value.runSegments
+    .map((segment) => `${segment.label} ${segment.count}`)
+    .join(', '),
 )
-const displayedDashboardWorkspaceRows = computed(() =>
-  sortWorkspaceMetricRows(dashboardWorkspaceMetricRows.value, dashboardSort.value),
-)
-const bestFrequencyWorkspace = computed(() =>
-  findBestFrequencyWorkspace(dashboardMetricRows.value),
-)
-const bestWorkspacePpaMetrics = computed(() =>
-  buildBestWorkspacePpaMetrics(
-    dashboardMetricRows.value,
-    bestFrequencyWorkspace.value?.workspaceId,
+const recommendation = computed(() =>
+  buildDashboardRecommendation(
+    props.project.qorTrendSummary,
+    props.project.bestWorkspaceId,
+    props.project.comparisonSummary.bestReason,
   ),
 )
-const hasBestFrequencyData = computed(() => bestWorkspacePpaMetrics.value.length > 0)
-const runStatePieBackground = computed(() =>
-  buildRunStatePieBackground(props.project.dashboardSummary.runStateSlices),
+const recommendedPpaMetrics = computed(() =>
+  buildBestWorkspacePpaMetrics(
+    dashboardMetricRows.value,
+    recommendation.value?.workspaceId,
+  ),
 )
+const workspaceRows = computed(() =>
+  buildDashboardWorkspaceRows(
+    props.project,
+    dashboardMetricRows.value,
+    props.project.bestWorkspaceId,
+  ),
+)
+const displayedWorkspaceRows = computed(() =>
+  sortDashboardWorkspaceRows(workspaceRows.value, dashboardSort.value),
+)
+const compareColumnsTemplate = computed(() =>
+  dashboardGridTemplate(dashboardMetricRows.value),
+)
+const attentionItems = computed(() =>
+  buildDashboardAttention(props.project.qorTrendSummary),
+)
+const attentionCounts = computed(() => countAttentionBySeverity(attentionItems.value))
+// Severity is only quoted for the findings whose artifact reported one, so the counts
+// deliberately do not add up to the total.
+const attentionSummary = computed(() => {
+  const reported = [
+    attentionCounts.value.critical > 0
+      ? `${attentionCounts.value.critical} critical`
+      : null,
+    attentionCounts.value.warning > 0 ? `${attentionCounts.value.warning} warning` : null,
+  ].filter((part) => part !== null)
+  const suffix = reported.length > 0 ? ` · ${reported.join(' · ')} reported` : ''
+  return `${attentionItems.value.length} project-wide${suffix}`
+})
+const visibleAttentionItems = computed(() =>
+  attentionExpanded.value
+    ? attentionItems.value
+    : attentionItems.value.slice(0, ATTENTION_PREVIEW_COUNT),
+)
+const attentionEmptyMessage = computed(() => {
+  const states = workspaceRows.value.map((row) => row.analysisState)
+  if (states.length > 0 && states.every((state) => state === 'clean')) {
+    return 'No project-wide risks or regressions were reported.'
+  }
+  return 'No project-wide risks or regressions were reported. Analysis coverage is incomplete.'
+})
+const baselineDisplayLabel = computed(() =>
+  props.project.qorTrendSummary.baselineWorkspaceId
+    ? props.project.qorTrendSummary.baselineLabel
+    : 'sequential',
+)
+const canSetBaseline = computed(
+  () =>
+    Boolean(props.selectedWorkspaceId) &&
+    props.selectedWorkspaceId !== props.project.qorTrendSummary.baselineWorkspaceId,
+)
+const setBaselineTitle = computed(() =>
+  canSetBaseline.value
+    ? `Set ${props.selectedWorkspaceId} as the QoR baseline`
+    : `${props.selectedWorkspaceId || 'This workspace'} is already the baseline`,
+)
+
+function signoffLabel(status: QorGateStatus): string {
+  return SIGNOFF_DISPLAY[status].label
+}
+
+function signoffTone(status: QorGateStatus) {
+  return SIGNOFF_DISPLAY[status].tone as Parameters<typeof dashboardToneClass>[0]
+}
 
 function metricCellTitle(
   workspaceId: string,
@@ -417,13 +648,38 @@ function metricCellTitle(
   return `${workspaceId} ${metricLabel}: ${point.value} (${point.label})`
 }
 
+/** Falls back to the finding kind, since only QoR risks carry a reported severity. */
+function attentionMark(item: DashboardAttentionItem): string {
+  return (item.severity ?? item.kind).slice(0, 4).toUpperCase()
+}
+
+function attentionMarkTitle(item: DashboardAttentionItem): string {
+  const origin = item.severity
+    ? `${item.kind} · severity ${item.severity} as reported`
+    : `${item.kind} · no severity reported`
+  return `${origin} · ${item.workspaceId}`
+}
+
+function issueCellTitle(row: DashboardWorkspaceRow): string {
+  if (row.analysisState !== 'findings') return `${row.workspaceName}: ${row.analysisLabel}`
+  if (row.findingCount === 0) return `${row.workspaceName}: no findings reported`
+  return `${row.workspaceName}: ${row.findingCount} findings, ${row.blockingCount} listed as blocking by the analysis artifacts`
+}
+
 function sortIconClass(direction: MetricTableSortDirection): string {
   return direction === 'asc' ? 'ri-arrow-up-s-line' : 'ri-arrow-down-s-line'
 }
 
-function toggleMetricSort(target: 'dashboard' | 'step', key: MetricTableSortKey): void {
-  if (target !== 'dashboard') return
+function toggleDashboardSort(key: MetricTableSortKey): void {
   dashboardSort.value = nextMetricSortState(dashboardSort.value, key)
+}
+
+/** Hands the user from the overview to the detail view already pointed at the finding. */
+function drillDown(workspaceId: string, step: FlowStep | null, metric: string | null = null): void {
+  emit('select-workspace', workspaceId)
+  emit('select-analysis-tab', 'step')
+  if (step) emit('select-step', step)
+  emit('select-issue-metric', step ? metric : null)
 }
 
 function selectAnalysisTab(tab: AnalysisTab): void {
@@ -460,8 +716,16 @@ function exportReport(): void {
   emit('export-report')
 }
 
-function setBaseline(payload: { workspaceId: string }): void {
-  emit('set-baseline', payload)
+/** Baseline changes rewrite project.json, so they take a second click to commit. */
+function requestBaseline(workspaceId: string): void {
+  if (!workspaceId) return
+  baselineConfirmId.value = workspaceId
+}
+
+function confirmBaseline(): void {
+  const workspaceId = baselineConfirmId.value
+  baselineConfirmId.value = null
+  if (workspaceId) emit('set-baseline', { workspaceId })
 }
 </script>
 

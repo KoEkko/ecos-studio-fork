@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import source from './ProjectsView.vue?raw'
 import analysisSource from './project-management/ProjectAnalysisPanel.vue?raw'
-import stepAnalysisSource from '../components/ProjectStepAnalysisPanel.vue?raw'
 import presentationSource from './project-management/projectAnalysisPresentation.ts?raw'
 import analysisDataSource from './project-management/projectWorkspaceAnalysisData.ts?raw'
 
@@ -67,34 +66,7 @@ describe('ProjectsView project management surface', () => {
     expect(projectSurfaceSource).toContain('left: calc(100% + 14px);')
     expect(source).toContain('class="resource-row project-tree-row mockup-project-row"')
     expect(analysisSource).toContain('class="analysis-panel mockup-analysis-panel"')
-    expect(analysisSource).toContain('class="dashboard-summary-strip"')
-    expect(analysisSource).not.toContain('is-best-empty')
-    expect(analysisSource).toContain('class="dashboard-card dashboard-run-state-card"')
-    expect(analysisSource).toContain('class="dashboard-card dashboard-best-card"')
-    expect(analysisSource).toContain('class="{ \'is-empty\': !hasBestFrequencyData }"')
-    expect(analysisSource).toContain('best-empty-hint')
-    expect(analysisSource).toContain('No frequency data yet')
-    expect(analysisSource).toContain('aria-label="Best Frequency workspace"')
-    expect(analysisSource).not.toContain('dashboard-best-inline-empty')
-    expect(analysisSource).not.toContain('class="run-state-header"')
-    expect(analysisSource).not.toContain('>Run state</span>')
-    expect(analysisSource).toContain('aria-label="Run state"')
-    expect(analysisSource).toContain('class="run-state-main"')
-    expect(analysisSource).toContain(
-      'class="dashboard-card dashboard-chart-card dashboard-key-metric-card"',
-    )
-    expect(analysisSource).not.toContain('metricCompareClass')
-    expect(analysisSource).toContain('dashboardMetricColumnsTemplate')
-    expect(analysisStyles).toContain('.dashboard-summary-strip {')
-    expect(analysisStyles).toContain('.best-empty-hint')
-    expect(analysisStyles).not.toContain('.dashboard-summary-strip.is-best-empty')
     expect(analysisStyles).toContain('position: sticky;')
-    expect(analysisStyles).toMatch(
-      /\.dashboard-key-header,\s*\n\.step-compare-header\s*\{[\s\S]*?background:[\s\S]*?\}/,
-    )
-    expect(analysisStyles).not.toMatch(
-      /\.dashboard-key-header,\s*\n\.step-compare-header\s*\{[^}]*text-transform:\s*uppercase/,
-    )
     expect(analysisStyles).not.toContain('.compare-best')
     expect(projectStyles).toContain('.workspace-tree-row.selected')
     expect(source).toContain(
@@ -313,12 +285,6 @@ describe('ProjectsView project management surface', () => {
     expect(analysisSource).toContain('role="columnheader"')
     expect(analysisSource).toContain('role="rowheader"')
     expect(analysisSource).toContain('role="gridcell"')
-    expect(stepAnalysisSource).toContain('aria-label="Selected step workspace metrics"')
-    expect(stepAnalysisSource).toContain('role="grid"')
-    expect(stepAnalysisSource).toContain('role="columnheader"')
-    expect(stepAnalysisSource).toContain('role="rowheader"')
-    expect(stepAnalysisSource).toContain('role="gridcell"')
-    expect(stepAnalysisSource).not.toContain('border-left: 3px solid')
   })
 
   it('searches both projects and their workspaces', () => {
@@ -406,85 +372,19 @@ describe('ProjectsView project management surface', () => {
     expect(analysisDataSource).not.toContain('Synthesis_metrics.json')
   })
 
-  it('renders V3 dashboard and step analysis from the shared project snapshot', () => {
+  it('wires the analysis panel to the shared project snapshot', () => {
     expect(analysisSource).toContain('project.dashboardSummary')
-    expect(analysisSource).not.toContain('Flow Success Ratio')
-    expect(analysisSource).not.toContain(
-      'class="dashboard-card dashboard-ratio-card mockup-dashboard-card"',
-    )
-    expect(analysisSource).not.toContain('flowSuccessRatio * 100')
-    expect(analysisSource).toContain('runStateSlices')
-    expect(analysisSource).toContain('class="dashboard-card dashboard-run-state-card"')
-    expect(analysisSource).toContain('class="dashboard-card dashboard-best-card"')
-    expect(analysisSource).toContain('Best')
-    expect(analysisSource).toContain('bestFrequencyWorkspace')
-    expect(analysisSource).toContain('bestWorkspacePpaMetrics')
-    expect(analysisSource).not.toContain('Flow Metric Snapshot')
-    expect(analysisSource).not.toContain(
-      'class="dashboard-card dashboard-flow-metric-card"',
-    )
-    expect(analysisSource).toContain('flowMetricSummary')
-    expect(analysisSource).toContain('dashboardMetricRows')
-    expect(analysisSource).toContain('dashboardWorkspaceMetricRows')
-    expect(analysisSource).toContain('displayedDashboardWorkspaceRows')
-    expect(analysisSource).toContain('toggleMetricSort')
-    expect(analysisSource).toContain("toggleMetricSort('dashboard'")
-    expect(analysisSource).toContain('dashboard-key-metric-table')
-    expect(analysisSource).toContain('ProjectQorTrendPanel')
     expect(analysisSource).toContain('project.qorTrendSummary')
-    expect(analysisSource).toContain('@export-report="exportReport"')
-    expect(analysisSource).toContain('@set-baseline="setBaseline"')
-    expect(analysisSource).toContain('{{ metric.label }}')
-    expect(analysisSource).not.toContain('metric-range')
-    expect(analysisSource).not.toContain('metricShowsRangeTick')
-    expect(analysisStyles).toMatch(
-      /\.dashboard-key-metric-cell,\s*\n\.step-compare-metric-cell\s*\{[\s\S]*?text-align:\s*center/,
-    )
-    expect(analysisStyles).toMatch(
-      /\.dashboard-key-workspace-cell,\s*\n\.step-compare-workspace-cell\s*\{[\s\S]*?text-align:\s*left/,
-    )
-    expect(analysisSource).toContain('best-card-header')
-    expect(analysisSource).toContain('>Best Frequency</span>')
-    expect(analysisSource).not.toContain('Best Frequency Workspace')
-    expect(analysisSource).not.toContain('frequency best workspace PPA')
-    expect(presentationSource).toContain('runtimePoints')
-    expect(presentationSource).toContain('memoryPoints')
-    expect(analysisSource).not.toContain('Top Blocking Steps')
-    expect(analysisSource).not.toContain('class="dashboard-blockers-card"')
     expect(analysisSource).toContain('ProjectStepAnalysisPanel')
     expect(analysisSource).toContain(':workspace-summaries="project.workspaceSummaries"')
     expect(analysisSource).toContain(':steps="project.stepCompareSummaries"')
-    expect(analysisSurfaceSource).toContain('.analysis-dashboard-v3 {')
-    expect(analysisSurfaceSource).toContain('.dashboard-summary-strip {')
+    expect(presentationSource).toContain('runtimePoints')
+    expect(presentationSource).toContain('memoryPoints')
+    expect(analysisSurfaceSource).toContain('.analysis-dashboard {')
     expect(analysisSurfaceSource).toContain('overflow-y: auto;')
-    expect(analysisSurfaceSource).toContain(
-      '.analysis-dashboard-v3 > .qor-overview-panel {',
-    )
-    expect(analysisSurfaceSource).not.toContain('height: min(680px, 62vh);')
-    expect(analysisSurfaceSource).toContain('.best-ppa-grid {')
-    expect(analysisSource).toContain('class="dashboard-summary-strip"')
-    expect(analysisSource.indexOf('class="dashboard-summary-strip"')).toBeLessThan(
-      analysisSource.indexOf('<ProjectQorTrendPanel'),
-    )
-    expect(analysisSource.indexOf('<ProjectQorTrendPanel')).toBeLessThan(
-      analysisSource.indexOf('dashboard-key-metric-table'),
-    )
-    expect(analysisSource).toContain('analysisSubtitle')
-    expect(analysisSource).toContain('key metrics')
-    expect(analysisSource).toContain('comparison')
-    expect(analysisSource).not.toContain('metricCompareClass')
-    expect(analysisSource).toContain('dashboardMetricColumnsTemplate')
-    expect(analysisSurfaceSource).toContain(
-      '.dashboard-key-header,\n.step-compare-header {',
-    )
-    expect(analysisSurfaceSource).not.toMatch(
-      /\.dashboard-key-header,\s*\n\.step-compare-header\s*\{[^}]*text-transform:\s*uppercase/,
-    )
-    expect(analysisSurfaceSource).not.toContain('.step-compare-metric-cell.compare-best')
-    expect(analysisSource).not.toContain('align-self: stretch;')
-    expect(analysisSource).not.toContain('step-compare-metric-card')
-    expect(analysisSource).not.toContain('step-compare-metric-chart')
-    expect(analysisSource).not.toContain('class="step-compare-point"')
+  })
+
+  it('keeps the Step Analysis entry points in ProjectsView', () => {
     expect(source).toContain('const hasOpenedStepAnalysis = ref(false)')
     expect(source).toContain('handleAnalysisTabSelection')
     expect(source).toContain('exportQorTrendReport')
