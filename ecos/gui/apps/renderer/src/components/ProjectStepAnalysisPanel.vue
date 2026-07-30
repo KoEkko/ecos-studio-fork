@@ -59,7 +59,24 @@
       </div>
     </div>
 
-    <div class="step-body">
+    <div class="mode-bar" role="tablist" aria-label="Step analysis view">
+      <button
+        v-for="option in modeOptions"
+        :key="option.id"
+        type="button"
+        role="tab"
+        class="mode-tab"
+        :class="{ selected: mode === option.id }"
+        :aria-selected="mode === option.id"
+        @click="mode = option.id"
+      >
+        {{ option.label }}
+        <em v-if="option.count !== null" :class="option.tone">{{ option.count }}</em>
+      </button>
+      <small class="mode-hint">{{ modeHint }}</small>
+    </div>
+
+    <div v-if="mode === 'findings'" class="step-body">
       <section class="issue-pane" aria-label="Issues">
         <header class="pane-header">
           <span class="pane-title">Issues</span>
@@ -161,6 +178,10 @@
                 <span class="metric-value mono">{{ row.value }}</span>
                 <span v-if="row.delta" class="metric-delta" :class="row.deltaTone">
                   {{ row.delta }}
+                  <em v-if="row.deltaPercent">{{ row.deltaPercent }}</em>
+                </span>
+                <span v-else-if="row.deltaNote" class="metric-delta compare-note">
+                  {{ row.deltaNote }}
                 </span>
               </div>
             </div>
@@ -213,27 +234,67 @@
       </section>
     </div>
 
-    <section class="compare-drawer" aria-label="Cross-workspace comparison">
-      <button
-        type="button"
-        class="compare-toggle"
-        :aria-expanded="compareOpen"
-        :aria-controls="compareOpen ? 'step-compare-region' : undefined"
-        @click="compareOpen = !compareOpen"
-      >
-        <span class="compare-caret" aria-hidden="true">{{
-          compareOpen ? '▾' : '▸'
-        }}</span>
-        Compare {{ compareMatrix.columns.length }} workspaces on {{ selectedStep }}
-        <small>baseline {{ qorTrendSummary.baselineLabel }}</small>
-      </button>
-      <div v-if="compareOpen" id="step-compare-region" class="compare-region">
+    <section v-else class="compare-view" aria-label="Cross-workspace comparison">
+      <header class="compare-summary">
+        <div class="compare-summary-head">
+          <span class="pane-title">{{ selectedStep }} across workspaces</span>
+          <small>{{ compareCaption }}</small>
+          <button
+            v-if="canFilterDiffering"
+            type="button"
+            class="differ-toggle"
+            :class="{ selected: onlyDiffering }"
+            :aria-pressed="onlyDiffering"
+            @click="onlyDiffering = !onlyDiffering"
+          >
+            Only differing {{ compareMatrix.differingCount }}
+          </button>
+        </div>
+
+        <ul v-if="compareMatrix.verdicts.length > 0" class="verdict-cards">
+          <li v-for="card in compareMatrix.verdicts" :key="card.workspaceId">
+            <button
+              type="button"
+              class="verdict-card"
+              :class="{
+                selected: card.workspaceId === activeWorkspaceId,
+                baseline: card.isBaseline,
+              }"
+              :aria-pressed="card.workspaceId === activeWorkspaceId"
+              :title="`${card.workspaceName} · ${card.summary}`"
+              @click="emit('select-workspace', card.workspaceId)"
+            >
+              <span class="verdict-card-head">
+                <strong>{{ abbreviateWorkspaceName(card.workspaceName) }}</strong>
+                <small v-if="card.isBaseline" class="chip-role">base</small>
+                <small v-else-if="card.isBest" class="chip-role accent">best</small>
+              </span>
+              <span v-if="card.segments.length > 0" class="win-bar" aria-hidden="true">
+                <i
+                  v-for="segment in card.segments"
+                  :key="segment.outcome"
+                  :class="segment.tone"
+                  :style="{ width: `${segment.percent}%` }"
+                ></i>
+              </span>
+              <!-- Holds the slot open so every card's summary sits on the same line. -->
+              <span v-else class="win-bar-slot" aria-hidden="true"></span>
+              <small class="verdict-card-summary">{{ card.summary }}</small>
+            </button>
+          </li>
+        </ul>
+        <p v-else class="compare-no-baseline">
+          No baseline workspace is set, so no value here can be read as better or worse.
+        </p>
+      </header>
+
+      <div class="compare-scroll">
         <div
-          v-if="compareMatrix.rows.length > 0"
+          v-if="compareGroups.length > 0"
           class="compare-table"
           role="grid"
           :aria-colcount="compareMatrix.columns.length + 1"
-          :aria-rowcount="compareMatrix.rows.length + 1"
+          :aria-rowcount="compareVisibleRowCount + compareGroups.length + 1"
         >
           <div class="compare-row" role="row" :style="compareGridStyle">
             <div role="columnheader" class="compare-corner">Metric</div>
@@ -244,45 +305,89 @@
               class="compare-head"
               :class="{ selected: column.workspaceId === activeWorkspaceId }"
             >
-              <button type="button" @click="emit('select-workspace', column.workspaceId)">
-                {{ column.workspaceName }}
-                <small v-if="column.isBaseline">base</small>
-              </button>
-            </div>
-          </div>
-          <div
-            v-for="row in compareMatrix.rows"
-            :key="row.id"
-            class="compare-row"
-            role="row"
-            :style="compareGridStyle"
-          >
-            <div role="rowheader" class="compare-metric" :title="row.descriptor">
-              <strong>{{ row.label }}</strong>
-              <small>{{ row.descriptor }}</small>
-            </div>
-            <div
-              v-for="cell in row.cells"
-              :key="`${row.id}-${cell.workspaceId}`"
-              role="gridcell"
-              class="compare-cell"
-              :class="[cell.state, { selected: cell.workspaceId === activeWorkspaceId }]"
-            >
               <button
                 type="button"
-                :title="`${cell.workspaceName} ${row.label}: ${cell.value}`"
-                @click="emit('select-workspace', cell.workspaceId)"
+                :title="column.workspaceName"
+                @click="emit('select-workspace', column.workspaceId)"
               >
-                <strong>{{ cell.value }}</strong>
-                <small v-if="cell.delta" :class="cell.deltaTone">{{ cell.delta }}</small>
+                <span class="compare-head-name">
+                  {{ abbreviateWorkspaceName(column.workspaceName) }}
+                </span>
+                <small v-if="column.isBaseline">base</small>
+                <small v-else-if="column.isBest" class="accent">best</small>
               </button>
             </div>
           </div>
+          <template v-for="group in compareGroups" :key="group.id">
+            <div class="compare-group" role="row">
+              <div role="rowheader">{{ group.label }}</div>
+            </div>
+            <div
+              v-for="row in group.rows"
+              :key="row.id"
+              class="compare-row"
+              role="row"
+              :style="compareGridStyle"
+            >
+              <div role="rowheader" class="compare-metric" :title="row.descriptor">
+                <strong>{{ row.label }}</strong>
+                <small>{{ row.descriptor }}</small>
+              </div>
+              <div
+                v-for="cell in row.cells"
+                :key="`${row.id}-${cell.workspaceId}`"
+                role="gridcell"
+                class="compare-cell"
+                :class="{
+                  selected: cell.workspaceId === activeWorkspaceId,
+                  unreported: !cell.reported,
+                  leads: cell.leads,
+                }"
+              >
+                <button
+                  type="button"
+                  :title="compareCellTitle(row, cell)"
+                  @click="emit('select-workspace', cell.workspaceId)"
+                >
+                  <span class="compare-value">
+                    <strong>{{ cell.value }}</strong>
+                    <small v-if="cell.leads" class="lead-flag">best</small>
+                  </span>
+                  <small v-if="cell.delta" class="compare-delta" :class="cell.deltaTone">
+                    {{ cell.delta }}
+                    <em v-if="cell.deltaPercent">{{ cell.deltaPercent }}</em>
+                  </small>
+                  <small v-else-if="cell.deltaNote" class="compare-delta compare-note">
+                    {{ cell.deltaNote }}
+                  </small>
+                  <span
+                    v-if="cell.barRatio !== null"
+                    class="delta-bar"
+                    aria-hidden="true"
+                  >
+                    <i
+                      class="delta-bar-fill"
+                      :class="cell.deltaTone"
+                      :style="deltaBarStyle(cell)"
+                    ></i>
+                  </span>
+                </button>
+              </div>
+            </div>
+          </template>
         </div>
-        <p v-else class="pane-empty">
-          No comparable key metrics are registered for {{ selectedStep }}.
-        </p>
+        <p v-else class="pane-empty">{{ compareEmptyMessage }}</p>
       </div>
+
+      <footer class="compare-legend">
+        <span><i class="legend-swatch good"></i>Better than the baseline</span>
+        <span><i class="legend-swatch bad"></i>Worse</span>
+        <span>
+          <i class="legend-swatch neutral"></i>
+          Metric reports no better/worse direction — the bar only shows which way it moved
+        </span>
+        <span>Full bar = {{ barFullScalePercent }}% change or more</span>
+      </footer>
     </section>
   </section>
 </template>
@@ -290,6 +395,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import {
+  abbreviateWorkspaceName,
   buildStepCompareMatrix,
   buildStepDetailTables,
   buildStepIssueFilters,
@@ -298,9 +404,13 @@ import {
   buildStepTabs,
   buildStepVerdict,
   buildStepWorkspaceChips,
+  COMPARE_BAR_FULL_SCALE_PERCENT,
   countStepIssues,
+  filterStepCompareGroups,
   hasStepIssueEvidence,
   matchesStepIssueFilter,
+  type StepCompareCell,
+  type StepCompareRow,
   type StepIssue,
   type StepMetricRow,
   type StepTab,
@@ -331,9 +441,13 @@ const emit = defineEmits<{
   'select-workspace': [workspaceId: string]
 }>()
 
+type StepAnalysisMode = 'findings' | 'compare'
+
 const issueFilter = ref('all')
 const selectedIssueId = ref<string | null>(null)
-const compareOpen = ref(false)
+const mode = ref<StepAnalysisMode>('findings')
+const onlyDiffering = ref(false)
+const barFullScalePercent = COMPARE_BAR_FULL_SCALE_PERCENT
 
 const activeWorkspace = computed(
   () =>
@@ -421,7 +535,6 @@ const detailTables = computed(() =>
 )
 const compareMatrix = computed(() =>
   buildStepCompareMatrix(
-    props.steps.find((stage) => stage.step === props.selectedStep) ?? null,
     props.workspaceSummaries,
     props.qorTrendSummary,
     props.bestWorkspaceId,
@@ -429,8 +542,54 @@ const compareMatrix = computed(() =>
   ),
 )
 const compareGridStyle = computed(() => ({
-  gridTemplateColumns: `minmax(180px, 1.4fr) repeat(${compareMatrix.value.columns.length}, minmax(108px, 1fr))`,
+  gridTemplateColumns: `minmax(190px, 0.9fr) repeat(${compareMatrix.value.columns.length}, minmax(146px, 1fr))`,
 }))
+const compareCaption = computed(() => {
+  const { rowCount, differingCount } = compareMatrix.value
+  const baseline = `baseline ${props.qorTrendSummary.baselineLabel}`
+  if (rowCount === 0) return baseline
+  if (differingCount === 0) return `${baseline} · no metric differs`
+  return `${baseline} · ${differingCount} of ${rowCount} differ`
+})
+// Hiding matched rows is only ever an improvement when some of them would remain.
+const canFilterDiffering = computed(
+  () =>
+    compareMatrix.value.differingCount > 0 &&
+    compareMatrix.value.differingCount < compareMatrix.value.rowCount,
+)
+const compareGroups = computed(() =>
+  filterStepCompareGroups(
+    compareMatrix.value.groups,
+    onlyDiffering.value && canFilterDiffering.value,
+  ),
+)
+const compareVisibleRowCount = computed(() =>
+  compareGroups.value.reduce((total, group) => total + group.rows.length, 0),
+)
+const compareEmptyMessage = computed(() =>
+  compareMatrix.value.rowCount === 0
+    ? `No V3 metrics were reported for ${props.selectedStep} in any workspace.`
+    : `Every ${props.selectedStep} metric matches the baseline.`,
+)
+const modeOptions = computed(() => [
+  {
+    id: 'findings' as const,
+    label: 'Findings',
+    count: issues.value.length,
+    tone: issueCounts.value.blocking > 0 ? 'bad' : 'neutral',
+  },
+  {
+    id: 'compare' as const,
+    label: 'Compare',
+    count: compareMatrix.value.rowCount === 0 ? null : compareMatrix.value.differingCount,
+    tone: 'neutral',
+  },
+])
+const modeHint = computed(() =>
+  mode.value === 'findings'
+    ? `${activeWorkspace.value?.workspaceName ?? 'No workspace'} · ${props.selectedStep}`
+    : `${compareMatrix.value.columns.length} workspaces · ${props.selectedStep}`,
+)
 const metricsCaption = computed(() => {
   const name = activeWorkspace.value?.workspaceName ?? 'No workspace'
   const baseline = baselineWorkspace.value
@@ -500,6 +659,27 @@ function metricRowTitle(row: StepMetricRow): string {
   return [row.label, row.descriptor, row.corner, row.sourceFile]
     .filter(Boolean)
     .join(' · ')
+}
+
+function compareCellTitle(row: StepCompareRow, cell: StepCompareCell): string {
+  const change = cell.deltaPercent ? `${cell.delta} (${cell.deltaPercent})` : cell.delta
+  return [
+    `${cell.workspaceName} ${row.label}: ${cell.value}`,
+    change ?? cell.deltaNote,
+    cell.leads ? `best reported value (${row.descriptor})` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
+
+/**
+ * Grows the fill out of the track's centre line, which every cell of a column shares, so
+ * a reader compares bar against bar rather than reading each one on its own.
+ */
+function deltaBarStyle(cell: StepCompareCell): Record<string, string> {
+  const ratio = cell.barRatio ?? 0
+  const width = `${Math.abs(ratio) * 50}%`
+  return ratio < 0 ? { right: '50%', width } : { left: '50%', width }
 }
 </script>
 

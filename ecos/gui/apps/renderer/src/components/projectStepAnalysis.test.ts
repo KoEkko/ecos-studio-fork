@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  abbreviateWorkspaceName,
   buildStepCompareMatrix,
   buildStepDetailTables,
   buildStepIssueFilters,
@@ -8,6 +9,7 @@ import {
   buildStepTabs,
   buildStepVerdict,
   buildStepWorkspaceChips,
+  filterStepCompareGroups,
   hasStepIssueEvidence,
   matchesStepIssueFilter,
 } from './projectStepAnalysis'
@@ -413,11 +415,13 @@ describe('buildStepMetricGroups', () => {
       label: 'Total wirelength',
       value: '900 um',
       descriptor: 'um / lower is better',
-      delta: '-100',
+      delta: '-100 um',
+      deltaPercent: '-10%',
       deltaTone: 'good',
     })
     expect(groups[1].rows[0]).toMatchObject({
-      delta: '+20',
+      delta: '+20 s',
+      deltaPercent: '+20%',
       deltaTone: 'bad',
     })
   })
@@ -546,49 +550,49 @@ describe('buildStepDetailTables', () => {
 })
 
 describe('buildStepCompareMatrix', () => {
-  it('flags the baseline and best columns and derives per-cell deltas', () => {
-    const workspaces = [
+  function wirelengthWorkspaces(baselineValue: number | null, otherValue: number) {
+    return [
       workspaceSummaryFixture('ws_a', {
+        Route: stepSnapshotFixture({
+          metrics:
+            baselineValue === null
+              ? []
+              : [
+                  metricRecordFixture({
+                    metricName: 'route_wirelength',
+                    displayName: 'Total wirelength',
+                    unit: 'um',
+                    polarity: 'lower_is_better',
+                    value: baselineValue,
+                  }),
+                ],
+        }),
+      }),
+      workspaceSummaryFixture('ws_b', {
         Route: stepSnapshotFixture({
           metrics: [
             metricRecordFixture({
               metricName: 'route_wirelength',
+              displayName: 'Total wirelength',
               unit: 'um',
               polarity: 'lower_is_better',
+              value: otherValue,
             }),
           ],
         }),
       }),
-      workspaceSummaryFixture('ws_b', {}),
     ]
-    const stage = compareSummaryFixture('Route', [
-      {
-        id: 'route_wirelength',
-        label: 'Total wirelength',
-        hint: 'shorter is better',
-        points: [
-          {
-            workspaceId: 'ws_a',
-            workspaceName: 'ws_a',
-            label: '1000 um',
-            value: 1000,
-            state: 'good',
-          },
-          {
-            workspaceId: 'ws_b',
-            workspaceName: 'ws_b',
-            label: '1100 um',
-            value: 1100,
-            state: 'warn',
-          },
-        ],
-      },
-    ])
+  }
 
+  const trend = trendSummaryFixture(
+    [{ workspaceId: 'ws_a' }, { workspaceId: 'ws_b' }],
+    'ws_a',
+  )
+
+  it('flags the baseline and best columns and derives per-cell deltas', () => {
     const matrix = buildStepCompareMatrix(
-      stage,
-      workspaces,
-      trendSummaryFixture([{ workspaceId: 'ws_a' }, { workspaceId: 'ws_b' }], 'ws_a'),
+      wirelengthWorkspaces(1000, 1100),
+      trend,
       'ws_b',
       'Route',
     )
@@ -597,15 +601,362 @@ describe('buildStepCompareMatrix', () => {
       { workspaceId: 'ws_a', workspaceName: 'ws_a', isBaseline: true, isBest: false },
       { workspaceId: 'ws_b', workspaceName: 'ws_b', isBaseline: false, isBest: true },
     ])
-    expect(matrix.rows[0].descriptor).toBe('um / lower is better')
-    expect(matrix.rows[0].cells[0].delta).toBe('base')
-    expect(matrix.rows[0].cells[1]).toMatchObject({
+    const [row] = matrix.groups[0].rows
+    expect(matrix.groups[0].label).toBe('Routability')
+    expect(row.descriptor).toBe('um / lower is better')
+    expect(row.cells[0].delta).toBe('base')
+    expect(row.cells[1]).toMatchObject({
       value: '1100 um',
-      delta: '+100',
+      delta: '+100 um',
+      deltaPercent: '+10%',
       deltaTone: 'bad',
+      reported: true,
     })
   })
+
+  it('builds rows from reported metrics, so steps without a curated list still compare', () => {
+    const workspaces = [
+      workspaceSummaryFixture('ws_a', {
+        Legal: stepSnapshotFixture({
+          step: 'Legal',
+          metrics: [
+            metricRecordFixture({
+              metricName: 'legal_displacement_max',
+              step: 'Legal',
+              value: 4,
+              unit: 'um',
+            }),
+          ],
+        }),
+      }),
+      workspaceSummaryFixture('ws_b', {
+        Legal: stepSnapshotFixture({
+          step: 'Legal',
+          metrics: [
+            metricRecordFixture({
+              metricName: 'legal_displacement_max',
+              step: 'Legal',
+              value: 4,
+              unit: 'um',
+            }),
+          ],
+        }),
+      }),
+    ]
+
+    const matrix = buildStepCompareMatrix(workspaces, trend, 'ws_b', 'Legal')
+
+    expect(matrix.rowCount).toBe(1)
+    expect(matrix.groups[0].rows[0].id).toBe('legal_displacement_max')
+    expect(matrix.groups[0].rows[0].cells[1].delta).toBe('±0')
+  })
+
+  it('counts only the metrics on which a workspace differs from the baseline', () => {
+    const same = buildStepCompareMatrix(
+      wirelengthWorkspaces(1000, 1000),
+      trend,
+      'ws_b',
+      'Route',
+    )
+    const differing = buildStepCompareMatrix(
+      wirelengthWorkspaces(1000, 1100),
+      trend,
+      'ws_b',
+      'Route',
+    )
+
+    expect([same.rowCount, same.differingCount]).toEqual([1, 0])
+    expect([differing.rowCount, differing.differingCount]).toEqual([1, 1])
+    expect(same.groups[0].rows[0].differs).toBe(false)
+  })
+
+  it('says so when the baseline never reported the metric', () => {
+    const matrix = buildStepCompareMatrix(
+      wirelengthWorkspaces(null, 1100),
+      trend,
+      'ws_b',
+      'Route',
+    )
+
+    const [baselineCell, otherCell] = matrix.groups[0].rows[0].cells
+    expect(baselineCell).toMatchObject({ value: 'Not reported', reported: false })
+    expect(otherCell).toMatchObject({ delta: null, deltaNote: 'base n/a' })
+  })
+
+  it('leaves the note off when no baseline is configured at all', () => {
+    const matrix = buildStepCompareMatrix(
+      wirelengthWorkspaces(1000, 1100),
+      trendSummaryFixture([{ workspaceId: 'ws_a' }, { workspaceId: 'ws_b' }], null),
+      'ws_b',
+      'Route',
+    )
+
+    for (const cell of matrix.groups[0].rows[0].cells) {
+      expect(cell.delta).toBeNull()
+      expect(cell.deltaNote).toBeNull()
+    }
+  })
+
+  it('omits the relative change when the baseline value is zero', () => {
+    const matrix = buildStepCompareMatrix(
+      wirelengthWorkspaces(0, 120),
+      trend,
+      'ws_b',
+      'Route',
+    )
+
+    expect(matrix.groups[0].rows[0].cells[1]).toMatchObject({
+      delta: '+120 um',
+      deltaPercent: null,
+      // A relative change needs a value to be relative to, so there is no bar to draw.
+      barRatio: null,
+    })
+  })
+
+  it('points the bar at the better side on the scale every row shares', () => {
+    const matrix = buildStepCompareMatrix(
+      wirelengthWorkspaces(1000, 1100),
+      trend,
+      'ws_b',
+      'Route',
+    )
+
+    const [baselineCell, otherCell] = matrix.groups[0].rows[0].cells
+    // The baseline draws the line the other bars are measured from.
+    expect(baselineCell.barRatio).toBe(0)
+    // 10% longer wire on a lower-is-better metric: 10 of the 25% that fills a bar, worse.
+    expect(otherCell).toMatchObject({ barRatio: -0.4, outcome: 'worse' })
+  })
+
+  it('draws a change past the full scale at full length rather than overflowing', () => {
+    const matrix = buildStepCompareMatrix(
+      wirelengthWorkspaces(100, 200),
+      trend,
+      'ws_b',
+      'Route',
+    )
+
+    expect(matrix.groups[0].rows[0].cells[1].barRatio).toBe(-1)
+  })
+
+  it('reads no better or worse into a metric that reports no direction', () => {
+    const workspaces = [
+      trendOnlyWorkspace('ws_a', 1000),
+      trendOnlyWorkspace('ws_b', 1100),
+    ]
+
+    const [row] = buildStepCompareMatrix(workspaces, trend, 'ws_b', 'Route').groups[0]
+      .rows
+
+    expect(row.directional).toBe(false)
+    expect(row.cells[1]).toMatchObject({
+      deltaTone: 'neutral',
+      outcome: null,
+      // Only which way the value moved, so the bar follows the raw sign.
+      barRatio: 0.4,
+      leads: false,
+    })
+  })
+
+  it('marks the leading value only where the metric reports a direction', () => {
+    const matrix = buildStepCompareMatrix(
+      wirelengthWorkspaces(1000, 1100),
+      trend,
+      'ws_b',
+      'Route',
+    )
+
+    expect(matrix.groups[0].rows[0].cells.map((cell) => cell.leads)).toEqual([
+      true,
+      false,
+    ])
+  })
+
+  it('names no leader when every reported value is the same', () => {
+    const matrix = buildStepCompareMatrix(
+      wirelengthWorkspaces(1000, 1000),
+      trend,
+      'ws_b',
+      'Route',
+    )
+
+    expect(matrix.groups[0].rows[0].cells.map((cell) => cell.leads)).toEqual([
+      false,
+      false,
+    ])
+  })
+
+  it('names no leader when only one workspace reported the metric', () => {
+    const matrix = buildStepCompareMatrix(
+      wirelengthWorkspaces(null, 1100),
+      trend,
+      'ws_b',
+      'Route',
+    )
+
+    expect(matrix.groups[0].rows[0].cells.map((cell) => cell.leads)).toEqual([
+      false,
+      false,
+    ])
+  })
+
+  it('totals each workspace against the baseline across the whole step', () => {
+    const workspaces = [
+      mixedWorkspace('ws_a', { wirelength: 1000, density: 0.5, note: 10 }),
+      mixedWorkspace('ws_b', { wirelength: 1100, density: 0.5, note: 20 }),
+    ]
+
+    const matrix = buildStepCompareMatrix(workspaces, trend, 'ws_b', 'Route')
+
+    expect(matrix.hasBaseline).toBe(true)
+    expect(matrix.verdicts[0]).toMatchObject({
+      workspaceId: 'ws_a',
+      isBaseline: true,
+      summary: 'Baseline for this step',
+      segments: [],
+    })
+    // Wirelength regressed, density held, and the trend-only metric cannot be read either way.
+    expect(matrix.verdicts[1]).toMatchObject({
+      workspaceId: 'ws_b',
+      better: 0,
+      worse: 1,
+      same: 1,
+      uncomparable: 1,
+      summary: '0 better · 1 worse · 1 same · 1 not comparable',
+    })
+    expect(matrix.verdicts[1].segments).toEqual([
+      { tone: 'bad', outcome: 'worse', count: 1, percent: 50 },
+      { tone: 'neutral', outcome: 'same', count: 1, percent: 50 },
+    ])
+  })
+
+  it('says the step cannot be compared rather than reporting an all-zero verdict', () => {
+    const matrix = buildStepCompareMatrix(
+      wirelengthWorkspaces(null, 1100),
+      trend,
+      'ws_b',
+      'Route',
+    )
+
+    expect(matrix.verdicts[1]).toMatchObject({
+      uncomparable: 1,
+      summary: 'No metric of this step can be compared with the baseline',
+      segments: [],
+    })
+  })
+
+  it('counts nothing as better or worse when no baseline is configured', () => {
+    const matrix = buildStepCompareMatrix(
+      wirelengthWorkspaces(1000, 1100),
+      trendSummaryFixture([{ workspaceId: 'ws_a' }, { workspaceId: 'ws_b' }], null),
+      'ws_b',
+      'Route',
+    )
+
+    expect(matrix.hasBaseline).toBe(false)
+    expect(matrix.verdicts).toEqual([])
+  })
 })
+
+describe('abbreviateWorkspaceName', () => {
+  it('leaves the default workspace names untouched', () => {
+    expect(abbreviateWorkspaceName('ws_0001')).toBe('ws_0001')
+  })
+
+  it('keeps both ends, since either may be what tells two workspaces apart', () => {
+    expect(abbreviateWorkspaceName('run_placement_sweep_density_02_rev3')).toBe(
+      'run_placeme…ty_02_rev3',
+    )
+  })
+
+  it('keeps a name that exactly fills the budget whole', () => {
+    const exact = 'a'.repeat(22)
+    expect(abbreviateWorkspaceName(exact)).toBe(exact)
+  })
+})
+
+describe('filterStepCompareGroups', () => {
+  const trend = trendSummaryFixture(
+    [{ workspaceId: 'ws_a' }, { workspaceId: 'ws_b' }],
+    'ws_a',
+  )
+
+  function matrix() {
+    return buildStepCompareMatrix(
+      [
+        mixedWorkspace('ws_a', { wirelength: 1000, density: 0.5, note: 10 }),
+        mixedWorkspace('ws_b', { wirelength: 1100, density: 0.5, note: 10 }),
+      ],
+      trend,
+      'ws_b',
+      'Route',
+    )
+  }
+
+  it('returns every group untouched when the filter is off', () => {
+    expect(
+      filterStepCompareGroups(matrix().groups, false).flatMap((group) =>
+        group.rows.map((row) => row.id),
+      ),
+    ).toEqual(['route_density', 'route_wirelength', 'route_trend_note'])
+  })
+
+  it('keeps only the rows some workspace moved, and drops the emptied groups', () => {
+    expect(filterStepCompareGroups(matrix().groups, true)).toEqual([
+      expect.objectContaining({
+        id: 'routability_physical',
+        rows: [expect.objectContaining({ id: 'route_wirelength' })],
+      }),
+    ])
+  })
+})
+
+function trendOnlyWorkspace(workspaceId: string, value: number) {
+  return workspaceSummaryFixture(workspaceId, {
+    Route: stepSnapshotFixture({
+      metrics: [
+        metricRecordFixture({
+          metricName: 'route_trend_note',
+          displayName: 'Trend note',
+          polarity: 'trend_only',
+          value,
+        }),
+      ],
+    }),
+  })
+}
+
+/** One directional metric that moves, one that holds, and one with no reported direction. */
+function mixedWorkspace(
+  workspaceId: string,
+  values: { wirelength: number; density: number; note: number },
+) {
+  return workspaceSummaryFixture(workspaceId, {
+    Route: stepSnapshotFixture({
+      metrics: [
+        metricRecordFixture({
+          metricName: 'route_wirelength',
+          displayName: 'Total wirelength',
+          unit: 'um',
+          polarity: 'lower_is_better',
+          value: values.wirelength,
+        }),
+        metricRecordFixture({
+          metricName: 'route_density',
+          displayName: 'Density',
+          polarity: 'higher_is_better',
+          value: values.density,
+        }),
+        metricRecordFixture({
+          metricName: 'route_trend_note',
+          displayName: 'Trend note',
+          polarity: 'trend_only',
+          value: values.note,
+        }),
+      ],
+    }),
+  })
+}
 
 describe('buildStepTabs and buildStepWorkspaceChips', () => {
   it('counts issues per step for the selected workspace', () => {

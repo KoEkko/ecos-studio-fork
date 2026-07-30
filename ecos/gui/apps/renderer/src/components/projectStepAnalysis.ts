@@ -6,7 +6,6 @@ import {
 } from '@/utils/projectAnalysisSnapshot'
 import type {
   FlowStep,
-  ProjectMetricPoint,
   ProjectStepCompareSummary,
   ProjectWorkspaceSummary,
 } from '@/utils/projectManagement'
@@ -104,7 +103,9 @@ export interface StepMetricRow {
   corner: string | null
   sourceFile: string
   delta: string | null
+  deltaPercent: string | null
   deltaTone: StepTone
+  deltaNote: string | null
 }
 
 export interface StepMetricGroup {
@@ -133,13 +134,30 @@ export interface StepCompareColumn {
   isBest: boolean
 }
 
+/** How a workspace compares with the baseline, using only the direction the metric reports. */
+export type StepCompareOutcome = 'better' | 'worse' | 'same'
+
 export interface StepCompareCell {
   workspaceId: string
   workspaceName: string
   value: string
-  state: ProjectMetricPoint['state']
+  /** Whether this workspace reported the metric. Nothing here grades the value itself. */
+  reported: boolean
   delta: string | null
+  deltaPercent: string | null
   deltaTone: StepTone
+  /** Why a delta is missing, when the reason is worth printing instead of a blank cell. */
+  deltaNote: string | null
+  /**
+   * Signed share of a full bar, in [-1, 1]. Positive points to the better side when the
+   * metric reports a direction, and to an increase when it does not. Null when there is
+   * nothing to draw, so the view renders no track at all.
+   */
+  barRatio: number | null
+  /** Null for the baseline column and for metrics that report no better/worse direction. */
+  outcome: StepCompareOutcome | null
+  /** True when this cell holds the leading value of a row whose metric reports a direction. */
+  leads: boolean
 }
 
 export interface StepCompareRow {
@@ -147,11 +165,50 @@ export interface StepCompareRow {
   label: string
   descriptor: string
   cells: StepCompareCell[]
+  /** True when at least one workspace differs from the baseline on this metric. */
+  differs: boolean
+  /** True when the metric reports a polarity, so better/worse is the artifact's own reading. */
+  directional: boolean
+}
+
+export interface StepCompareGroup {
+  id: string
+  label: string
+  rows: StepCompareRow[]
+}
+
+export interface StepCompareSegment {
+  tone: StepTone
+  outcome: StepCompareOutcome
+  count: number
+  /** Share of the comparable metrics, so the view lays the bar out without arithmetic. */
+  percent: number
+}
+
+/** One workspace read against the baseline across every metric of the step. */
+export interface StepCompareVerdict {
+  workspaceId: string
+  workspaceName: string
+  isBaseline: boolean
+  isBest: boolean
+  better: number
+  worse: number
+  same: number
+  /** Metrics one side never reported, or that report no better/worse direction. */
+  uncomparable: number
+  segments: StepCompareSegment[]
+  summary: string
 }
 
 export interface StepCompareMatrix {
   columns: StepCompareColumn[]
-  rows: StepCompareRow[]
+  groups: StepCompareGroup[]
+  rowCount: number
+  /** Metrics on which some workspace differs from the baseline, so the view can say so. */
+  differingCount: number
+  /** Empty when no baseline is set, since every count would then be against nothing. */
+  verdicts: StepCompareVerdict[]
+  hasBaseline: boolean
 }
 
 export interface StepWorkspaceChip {
@@ -232,6 +289,33 @@ const POLARITY_LABELS: Record<string, string> = {
   lower_is_better: 'lower is better',
   target_range: 'target range',
   trend_only: 'trend only',
+}
+
+/**
+ * Relative change that fills a comparison bar end to end. A drawing scale, not a
+ * threshold: one shared scale is what lets a reader weigh one row's bar against
+ * another's, which a per-row scale cannot do. Larger changes draw at full length and
+ * still read exactly on the cell.
+ */
+export const COMPARE_BAR_FULL_SCALE_PERCENT = 25
+
+/** Monospace characters a comparison column header fits before it starts eating columns. */
+const WORKSPACE_LABEL_LENGTH = 22
+
+/**
+ * Shortens a workspace name from the middle. Workspace names are the user's to set, so
+ * whether the part that tells two of them apart sits at the front or the back is not
+ * something this panel can know; dropping either end alone would guess wrong for
+ * someone. Callers pair this with the full name on a tooltip.
+ */
+export function abbreviateWorkspaceName(
+  name: string,
+  maxLength: number = WORKSPACE_LABEL_LENGTH,
+): string {
+  if (name.length <= maxLength) return name
+  const head = Math.ceil((maxLength - 1) / 2)
+  const tail = maxLength - 1 - head
+  return `${name.slice(0, head)}…${name.slice(name.length - tail)}`
 }
 
 const DETAIL_TITLES: Record<string, string> = {
@@ -800,7 +884,12 @@ export function buildStepMetricGroups(
     const baselineRecord = baselineRecords.find(
       (item) => item.metricName === record.metricName,
     )
-    const row = buildMetricRow(record, baselineRecord ?? null, isBaselineWorkspace)
+    const row = buildMetricRow(
+      record,
+      baselineRecord ?? null,
+      isBaselineWorkspace,
+      Boolean(baseline),
+    )
     const group = groups.get(record.dimension)
     if (group) {
       group.rows.push(row)
@@ -871,9 +960,14 @@ export function buildStepDetailTables(
   return tables
 }
 
-/** Cross-workspace comparison of the curated key metrics, kept as a secondary view. */
+/**
+ * Cross-workspace comparison over the metrics the workspaces actually reported for this
+ * step, read from the same snapshots and grouped by the same QoR dimensions as the
+ * Metrics pane. Sourcing the rows from a curated per-step allowlist instead would let a
+ * hand-kept list decide which metrics are comparable, and would leave any step missing
+ * from that list unable to compare anything at all.
+ */
 export function buildStepCompareMatrix(
-  stage: ProjectStepCompareSummary | null | undefined,
   workspaceSummaries: readonly ProjectWorkspaceSummary[],
   qorTrendSummary: ProjectQorTrendSummary,
   bestWorkspaceId: string,
@@ -886,53 +980,226 @@ export function buildStepCompareMatrix(
     isBaseline: summary.workspaceId === baselineId,
     isBest: summary.workspaceId === bestWorkspaceId,
   }))
+  const baselineSummary = baselineId
+    ? (workspaceSummaries.find((summary) => summary.workspaceId === baselineId) ?? null)
+    : null
+  const hasBaseline = baselineSummary !== null
 
-  const rows = (stage?.metrics ?? []).map((metric) => {
-    const meta = metricMeta(workspaceSummaries, step, metric.id)
-    const baselinePoint = baselineId
-      ? metric.points.find((point) => point.workspaceId === baselineId)
-      : undefined
-
-    return {
-      id: metric.id,
-      label: metric.label,
-      descriptor: descriptorFor(meta?.unit, meta?.polarity, metric.hint),
-      cells: columns.map((column) => {
-        const point = metric.points.find(
-          (item) => item.workspaceId === column.workspaceId,
-        )
-        const delta = deltaAgainst(
-          point?.value ?? null,
-          baselinePoint?.value ?? null,
-          column.isBaseline,
-          meta?.polarity,
-        )
-        return {
-          workspaceId: column.workspaceId,
-          workspaceName: column.workspaceName,
-          value: point?.label ?? 'N/A',
-          state: point?.state ?? 'pending',
-          delta: delta.label,
-          deltaTone: delta.tone,
-        }
-      }),
+  const recordsByWorkspace = new Map<string, Map<string, ProjectQorMetricRecord>>()
+  const metricMeta = new Map<string, ProjectQorMetricRecord>()
+  for (const summary of workspaceSummaries) {
+    const byMetric = new Map<string, ProjectQorMetricRecord>()
+    for (const record of stepSnapshot(summary, step)?.metrics ?? []) {
+      if (record.stepRole === 'hidden') continue
+      byMetric.set(record.metricName, record)
+      if (!metricMeta.has(record.metricName)) metricMeta.set(record.metricName, record)
     }
-  })
+    recordsByWorkspace.set(summary.workspaceId, byMetric)
+  }
 
-  return { columns, rows }
+  const groups = new Map<string, StepCompareGroup>()
+  const tallies = new Map<string, StepCompareTally>()
+  for (const column of columns) {
+    tallies.set(column.workspaceId, { better: 0, worse: 0, same: 0, uncomparable: 0 })
+  }
+  let rowCount = 0
+  let differingCount = 0
+  for (const meta of [...metricMeta.values()].sort((left, right) =>
+    (left.displayName || left.metricName).localeCompare(
+      right.displayName || right.metricName,
+    ),
+  )) {
+    const baselineValue = baselineSummary
+      ? (recordsByWorkspace.get(baselineSummary.workspaceId)?.get(meta.metricName)
+          ?.value ?? null)
+      : null
+    const directional =
+      meta.polarity === 'lower_is_better' || meta.polarity === 'higher_is_better'
+    const leadingValue = leadingValueOf(
+      columns.map(
+        (column) =>
+          recordsByWorkspace.get(column.workspaceId)?.get(meta.metricName)?.value ?? null,
+      ),
+      directional ? meta.polarity : undefined,
+    )
+
+    let differs = false
+    const cells = columns.map((column) => {
+      const record = recordsByWorkspace.get(column.workspaceId)?.get(meta.metricName)
+      const value = record?.value ?? null
+      const delta = deltaAgainst({
+        value,
+        baselineValue,
+        isBaseline: column.isBaseline,
+        hasBaseline,
+        polarity: meta.polarity,
+        unit: meta.unit,
+      })
+      if (!column.isBaseline && value !== null && baselineValue !== null) {
+        differs = differs || value !== baselineValue
+      }
+      if (!column.isBaseline) {
+        const tally = tallies.get(column.workspaceId)
+        if (tally) {
+          if (delta.outcome) tally[delta.outcome] += 1
+          else tally.uncomparable += 1
+        }
+      }
+      return {
+        workspaceId: column.workspaceId,
+        workspaceName: column.workspaceName,
+        value: record ? formatScalar(value, meta.unit) : 'Not reported',
+        reported: record !== undefined && value !== null,
+        delta: delta.label,
+        deltaPercent: delta.percent,
+        deltaTone: delta.tone,
+        deltaNote: delta.note,
+        barRatio: delta.barRatio,
+        outcome: delta.outcome,
+        leads: leadingValue !== null && value === leadingValue,
+      }
+    })
+
+    rowCount += 1
+    if (differs) differingCount += 1
+    const row: StepCompareRow = {
+      id: meta.metricName,
+      label: meta.displayName || meta.metricName,
+      descriptor: descriptorFor(meta.unit, meta.polarity, meta.confidence),
+      cells,
+      differs,
+      directional,
+    }
+    const group = groups.get(meta.dimension)
+    if (group) {
+      group.rows.push(row)
+      continue
+    }
+    groups.set(meta.dimension, {
+      id: meta.dimension,
+      label: DIMENSION_LABELS[meta.dimension] ?? titleFromIdentifier(meta.dimension),
+      rows: [row],
+    })
+  }
+
+  return {
+    columns,
+    groups: [...groups.values()].sort(
+      (left, right) =>
+        (DIMENSION_ORDER[left.id] ?? 99) - (DIMENSION_ORDER[right.id] ?? 99) ||
+        left.label.localeCompare(right.label),
+    ),
+    rowCount,
+    differingCount,
+    verdicts: hasBaseline ? columns.map((column) => buildVerdict(column, tallies)) : [],
+    hasBaseline,
+  }
+}
+
+interface StepCompareTally {
+  better: number
+  worse: number
+  same: number
+  uncomparable: number
+}
+
+/**
+ * The value a reader would call best, taken only from the direction the metric reports.
+ * Nothing leads when fewer than two workspaces reported the metric, or when every
+ * reported value is the same, since calling one of a set of equals the winner is a
+ * claim the numbers do not make.
+ */
+function leadingValueOf(
+  values: readonly (number | null)[],
+  polarity: string | undefined,
+): number | null {
+  if (polarity !== 'lower_is_better' && polarity !== 'higher_is_better') return null
+  const reported = values.filter((value): value is number => value !== null)
+  if (reported.length < 2) return null
+  const leading =
+    polarity === 'lower_is_better' ? Math.min(...reported) : Math.max(...reported)
+  return reported.every((value) => value === leading) ? null : leading
+}
+
+function buildVerdict(
+  column: StepCompareColumn,
+  tallies: ReadonlyMap<string, StepCompareTally>,
+): StepCompareVerdict {
+  const tally = tallies.get(column.workspaceId) ?? {
+    better: 0,
+    worse: 0,
+    same: 0,
+    uncomparable: 0,
+  }
+  const base = {
+    workspaceId: column.workspaceId,
+    workspaceName: column.workspaceName,
+    isBaseline: column.isBaseline,
+    isBest: column.isBest,
+    ...tally,
+  }
+  if (column.isBaseline) {
+    return { ...base, segments: [], summary: 'Baseline for this step' }
+  }
+
+  const compared = tally.better + tally.worse + tally.same
+  if (compared === 0) {
+    return {
+      ...base,
+      segments: [],
+      summary: 'No metric of this step can be compared with the baseline',
+    }
+  }
+
+  const segments = (
+    [
+      { tone: 'good', outcome: 'better', count: tally.better },
+      { tone: 'bad', outcome: 'worse', count: tally.worse },
+      { tone: 'neutral', outcome: 'same', count: tally.same },
+    ] as const
+  )
+    .filter((segment) => segment.count > 0)
+    .map((segment) => ({ ...segment, percent: (segment.count / compared) * 100 }))
+
+  return {
+    ...base,
+    segments,
+    summary: [
+      `${tally.better} better`,
+      `${tally.worse} worse`,
+      `${tally.same} same`,
+      tally.uncomparable > 0 ? `${tally.uncomparable} not comparable` : null,
+    ]
+      .filter(Boolean)
+      .join(' · '),
+  }
+}
+
+/** Drops the rows every workspace matched, so the table can show only what moved. */
+export function filterStepCompareGroups(
+  groups: readonly StepCompareGroup[],
+  onlyDiffering: boolean,
+): StepCompareGroup[] {
+  if (!onlyDiffering) return [...groups]
+  return groups
+    .map((group) => ({ ...group, rows: group.rows.filter((row) => row.differs) }))
+    .filter((group) => group.rows.length > 0)
 }
 
 function buildMetricRow(
   record: ProjectQorMetricRecord,
   baselineRecord: ProjectQorMetricRecord | null,
   isBaselineWorkspace: boolean,
+  hasBaseline: boolean,
 ): StepMetricRow {
-  const delta = deltaAgainst(
-    record.value,
-    baselineRecord?.value ?? null,
-    isBaselineWorkspace,
-    record.polarity,
-  )
+  const delta = deltaAgainst({
+    value: record.value,
+    baselineValue: baselineRecord?.value ?? null,
+    isBaseline: isBaselineWorkspace,
+    hasBaseline,
+    polarity: record.polarity,
+    unit: record.unit,
+  })
   return {
     id: record.metricName,
     label: record.displayName || record.metricName,
@@ -941,47 +1208,100 @@ function buildMetricRow(
     corner: record.cornerContext?.label ?? record.corner,
     sourceFile: record.sourceFile,
     delta: delta.label,
+    deltaPercent: delta.percent,
     deltaTone: delta.tone,
+    deltaNote: delta.note,
   }
 }
 
-function deltaAgainst(
-  value: number | null,
-  baselineValue: number | null,
-  isBaseline: boolean,
-  polarity: string | undefined,
-): { label: string | null; tone: StepTone } {
-  if (isBaseline) {
-    return { label: value === null ? null : 'base', tone: 'neutral' }
+interface StepDelta {
+  /** Absolute change against the baseline, carrying the metric's own unit. */
+  label: string | null
+  /** The same change relative to the baseline value. Null when the baseline is zero. */
+  percent: string | null
+  tone: StepTone
+  /** Set when there is no delta and the reason itself is worth reading. */
+  note: string | null
+  barRatio: number | null
+  outcome: StepCompareOutcome | null
+}
+
+function deltaAgainst(options: {
+  value: number | null
+  baselineValue: number | null
+  isBaseline: boolean
+  hasBaseline: boolean
+  polarity: string | undefined
+  unit: string | undefined
+}): StepDelta {
+  const { value, baselineValue, isBaseline, hasBaseline, polarity, unit } = options
+  const blank: StepDelta = {
+    label: null,
+    percent: null,
+    tone: 'neutral',
+    note: null,
+    barRatio: null,
+    outcome: null,
   }
-  if (value === null || baselineValue === null) return { label: null, tone: 'neutral' }
+
+  // A zero-length bar on the baseline draws the line every other bar is measured from.
+  if (isBaseline) {
+    return value === null ? blank : { ...blank, label: 'base', barRatio: 0 }
+  }
+  // The value cell already reads "Not reported", so repeating that here adds nothing.
+  if (value === null) return blank
+  // Without this the cell looks identical whether the baseline lacks the metric or no
+  // baseline is set at all, and "the baseline never reported it" is itself an answer.
+  if (baselineValue === null) {
+    return hasBaseline ? { ...blank, note: 'base n/a' } : blank
+  }
 
   const delta = value - baselineValue
-  if (delta === 0) return { label: '±0', tone: 'neutral' }
+  const directional = polarity === 'lower_is_better' || polarity === 'higher_is_better'
+  if (delta === 0) {
+    return { ...blank, label: '±0', barRatio: 0, outcome: directional ? 'same' : null }
+  }
 
   // The surrounding header already names the baseline, so the sign carries the meaning.
-  const label = `${delta > 0 ? '+' : '-'}${formatNumber(Math.abs(delta))}`
-  if (polarity === 'lower_is_better') {
-    return { label, tone: delta < 0 ? 'good' : 'bad' }
+  const label = `${delta > 0 ? '+' : '-'}${formatScalar(Math.abs(delta), unit)}`
+  const percent = formatDeltaPercent(delta, baselineValue)
+  const improves = polarity === 'lower_is_better' ? delta < 0 : delta > 0
+  const barRatio = compareBarRatio(delta, baselineValue, polarity)
+  if (!directional) {
+    return { label, percent, tone: 'neutral', note: null, barRatio, outcome: null }
   }
-  if (polarity === 'higher_is_better') {
-    return { label, tone: delta > 0 ? 'good' : 'bad' }
+  return {
+    label,
+    percent,
+    tone: improves ? 'good' : 'bad',
+    note: null,
+    barRatio,
+    outcome: improves ? 'better' : 'worse',
   }
-  return { label, tone: 'neutral' }
 }
 
-function metricMeta(
-  workspaceSummaries: readonly ProjectWorkspaceSummary[],
-  step: FlowStep,
-  metricId: string,
-): ProjectQorMetricRecord | null {
-  for (const summary of workspaceSummaries) {
-    const record = stepSnapshot(summary, step)?.metrics.find(
-      (item) => item.metricName === metricId,
-    )
-    if (record) return record
-  }
-  return null
+/**
+ * Points the bar at the better side when the metric reports a direction, and at an
+ * increase when it does not. Null when the baseline is zero, where a relative change has
+ * no value to be relative to; the cell still prints the absolute delta.
+ */
+function compareBarRatio(
+  delta: number,
+  baselineValue: number,
+  polarity: string | undefined,
+): number | null {
+  if (baselineValue === 0) return null
+  const relative = (delta / Math.abs(baselineValue)) * 100
+  const oriented = polarity === 'lower_is_better' ? -relative : relative
+  const ratio = oriented / COMPARE_BAR_FULL_SCALE_PERCENT
+  return Math.max(-1, Math.min(1, ratio))
+}
+
+function formatDeltaPercent(delta: number, baselineValue: number): string | null {
+  if (baselineValue === 0) return null
+  const percent = (delta / Math.abs(baselineValue)) * 100
+  const digits = Math.abs(percent) < 10 ? 1 : 0
+  return `${percent > 0 ? '+' : '-'}${Math.abs(percent).toFixed(digits)}%`
 }
 
 function descriptorFor(

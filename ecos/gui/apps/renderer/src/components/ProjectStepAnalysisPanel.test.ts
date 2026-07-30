@@ -12,7 +12,7 @@ import {
 } from './projectStepAnalysis.fixture'
 import type { ProjectWorkspaceSummary } from '@/utils/projectManagement'
 
-function routeWorkspace(workspaceId: string): ProjectWorkspaceSummary {
+function routeWorkspace(workspaceId: string, wirelength = 1000): ProjectWorkspaceSummary {
   return workspaceSummaryFixture(workspaceId, {
     Route: stepSnapshotFixture({
       summaryStatus: 'blocked',
@@ -27,7 +27,7 @@ function routeWorkspace(workspaceId: string): ProjectWorkspaceSummary {
         metricRecordFixture({
           metricName: 'route_wirelength',
           displayName: 'Total wirelength',
-          value: 1000,
+          value: wirelength,
           unit: 'um',
         }),
       ],
@@ -51,35 +51,12 @@ function routeWorkspace(workspaceId: string): ProjectWorkspaceSummary {
   })
 }
 
-const routeCompareStep = compareSummaryFixture('Route', [
-  {
-    id: 'route_wirelength',
-    label: 'Total wirelength',
-    hint: 'shorter is better',
-    points: [
-      {
-        workspaceId: 'ws_a',
-        workspaceName: 'ws_a',
-        label: '1000 um',
-        value: 1000,
-        state: 'good',
-      },
-      {
-        workspaceId: 'ws_b',
-        workspaceName: 'ws_b',
-        label: '1100 um',
-        value: 1100,
-        state: 'warn',
-      },
-    ],
-  },
-])
-
 function mountPanel(overrides: Record<string, unknown> = {}) {
-  const workspaceSummaries = [routeWorkspace('ws_a'), routeWorkspace('ws_b')]
+  // ws_b is the baseline and routes 100 um longer, so the panel has a real delta to show.
+  const workspaceSummaries = [routeWorkspace('ws_a'), routeWorkspace('ws_b', 1100)]
   return mount(ProjectStepAnalysisPanel, {
     props: {
-      steps: [routeCompareStep, compareSummaryFixture('DRC')],
+      steps: [compareSummaryFixture('Route'), compareSummaryFixture('DRC')],
       workspaceSummaries,
       qorTrendSummary: trendSummaryFixture(
         [{ workspaceId: 'ws_a' }, { workspaceId: 'ws_b' }],
@@ -124,6 +101,12 @@ function mountStaPanel() {
       }),
     ],
   })
+}
+
+/** Comparison is the second reading of a step, so a test has to ask for it. */
+async function openCompare(wrapper: ReturnType<typeof mountPanel>) {
+  await wrapper.findAll('.mode-tab')[1].trigger('click')
+  return wrapper
 }
 
 describe('ProjectStepAnalysisPanel', () => {
@@ -316,38 +299,180 @@ describe('ProjectStepAnalysisPanel', () => {
     expect(wrapper.emitted('select-workspace')).toEqual([['ws_b']])
   })
 
-  it('keeps cross-workspace comparison collapsed until it is asked for', async () => {
+  it('opens on the findings of one workspace and switches to the comparison on request', async () => {
     const wrapper = mountPanel()
 
-    const toggle = wrapper.get('.compare-toggle')
-    expect(toggle.text()).toContain('Compare 2 workspaces on Route')
-    expect(toggle.attributes('aria-expanded')).toBe('false')
-    expect(wrapper.find('#step-compare-region').exists()).toBe(false)
+    const tabs = wrapper.findAll('.mode-tab')
+    expect(tabs.map((tab) => tab.text())).toEqual(['Findings 2', 'Compare 1'])
+    expect(tabs[0].attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('.step-body').exists()).toBe(true)
+    expect(wrapper.find('.compare-view').exists()).toBe(false)
+
+    await tabs[1].trigger('click')
+
+    expect(tabs[1].attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('.step-body').exists()).toBe(false)
+    const compare = wrapper.get('.compare-view')
+    expect(compare.findAll('.compare-head')).toHaveLength(2)
+    expect(compare.get('.compare-group').text()).toBe('Routability')
+
+    // Both metrics the workspaces reported get a row, not just a curated key metric.
+    expect(compare.findAll('.compare-metric').map((row) => row.text())).toEqual([
+      'Routing DRC violationscount / lower is better',
+      'Total wirelengthum / lower is better',
+    ])
+  })
+
+  it('says how many metrics differ from the baseline before any row is read', async () => {
+    const wrapper = await openCompare(mountPanel())
+
+    expect(wrapper.get('.compare-summary-head small').text()).toBe(
+      'baseline ws_b · 1 of 2 differ',
+    )
+  })
+
+  it('reports no difference rather than an empty caption when the rows all match', async () => {
+    const wrapper = await openCompare(
+      mountPanel({
+        workspaceSummaries: [routeWorkspace('ws_a'), routeWorkspace('ws_b')],
+      }),
+    )
+
+    expect(wrapper.get('.compare-summary-head small').text()).toBe(
+      'baseline ws_b · no metric differs',
+    )
+  })
+
+  it('leads with how each workspace came out against the baseline', async () => {
+    const wrapper = await openCompare(mountPanel())
+
+    const cards = wrapper.findAll('.verdict-card')
+    expect(cards[0].get('.verdict-card-summary').text()).toBe(
+      '1 better · 0 worse · 1 same',
+    )
+    // Half the comparable metrics improved and half held, so the bar splits in two.
+    const segments = cards[0].findAll('.win-bar i')
+    expect(segments.map((segment) => segment.classes())).toEqual([['good'], ['neutral']])
+    expect(segments.map((segment) => segment.attributes('style'))).toEqual([
+      'width: 50%;',
+      'width: 50%;',
+    ])
+    expect(cards[1].get('.verdict-card-summary').text()).toBe('Baseline for this step')
+    expect(cards[1].find('.win-bar').exists()).toBe(false)
+
+    await cards[1].trigger('click')
+    expect(wrapper.emitted('select-workspace')).toEqual([['ws_b']])
+  })
+
+  it('carries the unit, the relative change, and a bar on each compare delta', async () => {
+    const wrapper = await openCompare(mountPanel())
+
+    // Row order is DRC then wirelength, so the wirelength cells are the third and fourth.
+    const cells = wrapper.findAll('.compare-cell')
+    expect(cells[2].get('strong').text()).toBe('1000 um')
+    expect(cells[2].get('.compare-delta').text()).toBe('-100 um -9.1%')
+    expect(cells[2].get('.compare-delta').classes()).toContain('good')
+    // 9.1% of the 25% that fills a bar, drawn out of the centre toward the better side.
+    const fill = cells[2].get('.delta-bar-fill').attributes('style') ?? ''
+    expect(fill).toContain('left: 50%')
+    expect(Number.parseFloat(fill.split('width:')[1])).toBeCloseTo(18.18, 2)
+    // The baseline keeps the track so its centre line reads as the zero every bar shares.
+    expect(cells[3].get('.compare-delta').text()).toBe('base')
+    expect(cells[3].get('.delta-bar-fill').attributes('style')).toBe(
+      'left: 50%; width: 0%;',
+    )
+  })
+
+  it('marks the leading value of a row, and marks none when the values tie', async () => {
+    const wrapper = await openCompare(mountPanel())
+
+    const cells = wrapper.findAll('.compare-cell')
+    // Both workspaces report 12 DRC violations, so neither of them wins the row.
+    expect(cells[0].classes()).not.toContain('leads')
+    expect(cells[1].classes()).not.toContain('leads')
+    expect(cells[2].classes()).toContain('leads')
+    expect(cells[2].get('.lead-flag').text()).toBe('best')
+    expect(cells[2].get('button').attributes('title')).toBe(
+      'ws_a Total wirelength: 1000 um · -100 um (-9.1%) · best reported value (um / lower is better)',
+    )
+  })
+
+  it('hides the rows every workspace matched when only differences are asked for', async () => {
+    const wrapper = await openCompare(mountPanel())
+
+    const toggle = wrapper.get('.differ-toggle')
+    expect(toggle.text()).toBe('Only differing 1')
+    expect(wrapper.findAll('.compare-metric')).toHaveLength(2)
 
     await toggle.trigger('click')
 
-    expect(toggle.attributes('aria-expanded')).toBe('true')
-    const region = wrapper.get('#step-compare-region')
-    expect(region.findAll('.compare-head')).toHaveLength(2)
-    expect(region.get('.compare-metric').text()).toContain('Total wirelength')
+    expect(toggle.attributes('aria-pressed')).toBe('true')
+    expect(
+      wrapper.findAll('.compare-metric').map((row) => row.get('strong').text()),
+    ).toEqual(['Total wirelength'])
+    expect(wrapper.get('[role="grid"]').attributes('aria-rowcount')).toBe('3')
+  })
 
-    const cells = region.findAll('.compare-cell')
-    expect(cells[0].get('strong').text()).toBe('1000 um')
-    expect(cells[0].get('small').text()).toBe('-100')
-    expect(cells[1].get('small').text()).toBe('base')
+  it('offers no difference filter when it would empty the table or change nothing', async () => {
+    const allMatch = await openCompare(
+      mountPanel({
+        workspaceSummaries: [routeWorkspace('ws_a'), routeWorkspace('ws_b')],
+      }),
+    )
+
+    expect(allMatch.find('.differ-toggle').exists()).toBe(false)
   })
 
   it('exposes the comparison matrix as a semantic grid', async () => {
-    const wrapper = mountPanel()
-    await wrapper.get('.compare-toggle').trigger('click')
+    const wrapper = await openCompare(mountPanel())
 
     const grid = wrapper.get('[role="grid"]')
     expect(grid.attributes('aria-colcount')).toBe('3')
-    expect(grid.attributes('aria-rowcount')).toBe('2')
-    expect(grid.findAll('[role="row"]')).toHaveLength(2)
+    // One column header row, one dimension row, and one row per reported metric.
+    expect(grid.attributes('aria-rowcount')).toBe('4')
+    expect(grid.findAll('[role="row"]')).toHaveLength(4)
     expect(grid.findAll('[role="columnheader"]')).toHaveLength(3)
-    expect(grid.findAll('[role="rowheader"]')).toHaveLength(1)
-    expect(grid.findAll('[role="gridcell"]')).toHaveLength(2)
+    expect(grid.findAll('[role="rowheader"]')).toHaveLength(3)
+    expect(grid.findAll('[role="gridcell"]')).toHaveLength(4)
+  })
+
+  it('marks the cells the baseline never reported instead of leaving them blank', async () => {
+    const wrapper = await openCompare(
+      mountPanel({
+        workspaceSummaries: [
+          routeWorkspace('ws_a'),
+          workspaceSummaryFixture('ws_b', {
+            Route: stepSnapshotFixture({ metrics: [] }),
+          }),
+        ],
+      }),
+    )
+
+    const cells = wrapper.findAll('.compare-cell')
+    expect(cells[0].get('.compare-delta').text()).toBe('base n/a')
+    // Nothing to measure against, so the cell carries no bar rather than an empty track.
+    expect(cells[0].find('.delta-bar').exists()).toBe(false)
+    expect(cells[1].get('strong').text()).toBe('Not reported')
+    expect(cells[1].classes()).toContain('unreported')
+    expect(wrapper.findAll('.verdict-card-summary')[0].text()).toBe(
+      'No metric of this step can be compared with the baseline',
+    )
+  })
+
+  it('says a comparison is not on offer when the project has no baseline', async () => {
+    const wrapper = await openCompare(
+      mountPanel({
+        qorTrendSummary: trendSummaryFixture(
+          [{ workspaceId: 'ws_a' }, { workspaceId: 'ws_b' }],
+          null,
+        ),
+      }),
+    )
+
+    expect(wrapper.find('.verdict-cards').exists()).toBe(false)
+    expect(wrapper.get('.compare-no-baseline').text()).toBe(
+      'No baseline workspace is set, so no value here can be read as better or worse.',
+    )
   })
 
   it('explains an unanalyzed step instead of rendering an empty workbench', () => {
