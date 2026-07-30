@@ -831,9 +831,7 @@ export function buildStepDetailTables(
     const rows = detailRows(detail)
     const fields = detailFields(detail, rows)
     const drcEmptyState =
-      detail.presentation === 'rule_layer_table'
-        ? drcBreakdownEmptyState(snapshot)
-        : null
+      detail.presentation === 'rule_layer_table' ? drcBreakdownEmptyState(snapshot) : null
     return {
       id: detail.id,
       title:
@@ -850,7 +848,10 @@ export function buildStepDetailTables(
 
   // A DRC result is still useful when qor_metrics.json omitted its optional rule/layer
   // descriptor. Keep the evidence slot visible without claiming that an empty table is clean.
-  if (step === 'DRC' && !snapshot.details.some((detail) => detail.presentation === 'rule_layer_table')) {
+  if (
+    step === 'DRC' &&
+    !snapshot.details.some((detail) => detail.presentation === 'rule_layer_table')
+  ) {
     const drcEmptyState = drcBreakdownEmptyState(snapshot)
     tables.push({
       id: 'drc-rule-layer-breakdown',
@@ -1103,7 +1104,8 @@ function drcBreakdownEmptyState(snapshot: ProjectAnalysisStepSnapshot): {
   message: string
   detail: string | null
 } {
-  const count = snapshot.metrics.find((metric) => metric.metricName === 'drc_count')?.value ?? null
+  const count =
+    snapshot.metrics.find((metric) => metric.metricName === 'drc_count')?.value ?? null
   const summary = snapshot.summaryStatus ? `Summary: ${snapshot.summaryStatus}` : null
 
   if (count === null) {

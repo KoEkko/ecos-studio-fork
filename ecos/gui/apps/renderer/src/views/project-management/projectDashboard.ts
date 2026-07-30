@@ -348,8 +348,8 @@ export function buildDashboardAttention(
     workspaceName: risk.workspaceName,
     step: risk.step,
     title: risk.displayName || risk.metric,
-      detail: risk.message,
-      metric: risk.metric,
+    detail: risk.message,
+    metric: risk.metric,
   }))
 
   qorTrendSummary.regressions.forEach((regression, index) => {

@@ -369,7 +369,9 @@
               class="dash-attention-action"
               :aria-label="`Debug ${item.title} in ${item.workspaceId}`"
               :title="attentionMarkTitle(item)"
-              @click="drillDown(item.workspaceId, item.step, item.step ? item.metric : null)"
+              @click="
+                drillDown(item.workspaceId, item.step, item.step ? item.metric : null)
+              "
             >
               <span class="dash-attention-severity">{{ attentionMark(item) }}</span>
               <span class="dash-attention-origin">
@@ -661,7 +663,8 @@ function attentionMarkTitle(item: DashboardAttentionItem): string {
 }
 
 function issueCellTitle(row: DashboardWorkspaceRow): string {
-  if (row.analysisState !== 'findings') return `${row.workspaceName}: ${row.analysisLabel}`
+  if (row.analysisState !== 'findings')
+    return `${row.workspaceName}: ${row.analysisLabel}`
   if (row.findingCount === 0) return `${row.workspaceName}: no findings reported`
   return `${row.workspaceName}: ${row.findingCount} findings, ${row.blockingCount} listed as blocking by the analysis artifacts`
 }
@@ -675,7 +678,11 @@ function toggleDashboardSort(key: MetricTableSortKey): void {
 }
 
 /** Hands the user from the overview to the detail view already pointed at the finding. */
-function drillDown(workspaceId: string, step: FlowStep | null, metric: string | null = null): void {
+function drillDown(
+  workspaceId: string,
+  step: FlowStep | null,
+  metric: string | null = null,
+): void {
   emit('select-workspace', workspaceId)
   emit('select-analysis-tab', 'step')
   if (step) emit('select-step', step)

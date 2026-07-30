@@ -275,8 +275,12 @@ describe('ProjectStepAnalysisPanel', () => {
     const filters = wrapper.findAll('.severity-filters button')
     expect(filters).toHaveLength(1)
     expect(filters[0].classes()).toContain('selected')
-    expect(wrapper.get('.issue-pane .pane-empty').text()).toContain('No findings reported')
-    expect(wrapper.get('.evidence-pane > .pane-empty').text()).toContain('No findings reported')
+    expect(wrapper.get('.issue-pane .pane-empty').text()).toContain(
+      'No findings reported',
+    )
+    expect(wrapper.get('.evidence-pane > .pane-empty').text()).toContain(
+      'No findings reported',
+    )
   })
 
   it('selects the requested issue metric when Dashboard supplies one', () => {

@@ -7,7 +7,10 @@ import {
   trendSummaryWithScoresFixture,
   workspaceFixture,
 } from './projectDashboard.fixture'
-import { stepSnapshotFixture, workspaceSummaryFixture } from '@/components/projectStepAnalysis.fixture'
+import {
+  stepSnapshotFixture,
+  workspaceSummaryFixture,
+} from '@/components/projectStepAnalysis.fixture'
 import {
   buildDashboardAttention,
   buildDashboardHealth,

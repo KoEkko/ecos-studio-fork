@@ -1541,9 +1541,7 @@ function buildFlowMetricSummary(
       : [summary.flowMetrics.totalRuntimeSec],
   )
   const memories = workspaceSummaries.flatMap((summary) =>
-    summary.flowMetrics.peakMemoryMb === null
-      ? []
-      : [summary.flowMetrics.peakMemoryMb],
+    summary.flowMetrics.peakMemoryMb === null ? [] : [summary.flowMetrics.peakMemoryMb],
   )
   const checklist = workspaceSummaries.reduce(
     (totals, summary) => ({

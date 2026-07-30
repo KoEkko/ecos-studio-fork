@@ -225,9 +225,9 @@ describe('ProjectAnalysisPanel workspace comparison', () => {
   })
 
   it('does not present a workspace with no analysis artifacts as clean', () => {
-    expect(rowFor(mountPanel(), 'ws_c')?.find('.dash-issue-count.is-neutral').text()).toBe(
-      'not assessed',
-    )
+    expect(
+      rowFor(mountPanel(), 'ws_c')?.find('.dash-issue-count.is-neutral').text(),
+    ).toBe('not assessed')
   })
 
   it('reports findings as blocking over total rather than by invented severity', () => {
@@ -338,7 +338,9 @@ describe('ProjectAnalysisPanel needs attention', () => {
     )
 
     expect(wrapper.find('.dash-attention-list').exists()).toBe(false)
-    expect(wrapper.find('.dash-attention-empty').text()).toContain('Analysis coverage is incomplete')
+    expect(wrapper.find('.dash-attention-empty').text()).toContain(
+      'Analysis coverage is incomplete',
+    )
   })
 })
 

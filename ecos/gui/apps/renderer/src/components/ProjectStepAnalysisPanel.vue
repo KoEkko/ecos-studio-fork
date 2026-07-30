@@ -454,7 +454,8 @@ function stepTabBadge(tab: StepTab): string {
 }
 
 function stepTabTitle(tab: StepTab): string {
-  if (tab.analysisAvailability === 'unavailable') return `${tab.step}: analysis unavailable`
+  if (tab.analysisAvailability === 'unavailable')
+    return `${tab.step}: analysis unavailable`
   if (tab.analysisAvailability === 'incomplete') return `${tab.step}: analysis incomplete`
   return `${tab.step}: ${tab.findingCount} findings, ${tab.blockingCount} listed as blocking`
 }
@@ -468,7 +469,10 @@ function workspaceChipTitle(chip: StepWorkspaceChip): string {
   return `${chip.workspaceName} · ${chip.statusLabel}${suffix} · ${findings}`
 }
 
-function detailSourceLabel(sourceFile: string, status: 'available' | 'missing' | 'invalid'): string {
+function detailSourceLabel(
+  sourceFile: string,
+  status: 'available' | 'missing' | 'invalid',
+): string {
   return status === 'available' ? sourceFile : `QoR metrics: ${status}`
 }
 
