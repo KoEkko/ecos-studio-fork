@@ -404,6 +404,68 @@ describe('project management V3 model', () => {
     ).toBe('MAX - SS - 1.08 V - 125 C - Cworst')
   })
 
+  it('keeps absent runtime and memory metrics unavailable instead of manufacturing zeros', () => {
+    const model = buildProjectManagementProject(
+      project,
+      manifestWithWorkspace(),
+      { ws_0004: successStates },
+      { ws_0004: { stepMetricTexts: {} } },
+    )
+
+    expect(model.workspaceSummaries[0]?.flowMetrics).toMatchObject({
+      totalRuntimeSec: null,
+      peakMemoryMb: null,
+    })
+    expect(model.dashboardSummary.flowMetricSummary.runtimePoints).toEqual([
+      expect.objectContaining({ value: null, label: 'N/A', state: 'pending' }),
+    ])
+    expect(model.dashboardSummary.flowMetricSummary.memoryPoints).toEqual([
+      expect.objectContaining({ value: null, label: 'N/A', state: 'pending' }),
+    ])
+  })
+
+  it('preserves a measured zero runtime or memory value', () => {
+    const inputs = v3Inputs()
+    inputs.stepMetricTexts.Route = metricsArtifact('route', [
+      metric('runtime_seconds', 0, {
+        unit: 's',
+        category: 'runtime',
+        direction: 'lower_is_better',
+        project_role: 'trend',
+        step_role: 'secondary',
+        rating: { gate: false, score: false, trend: true },
+      }),
+    ])
+    inputs.stepMetricTexts.RCX = metricsArtifact('RCX', [
+      metric('peak_memory_mb', 0, {
+        unit: 'MB',
+        category: 'runtime',
+        direction: 'lower_is_better',
+        project_role: 'trend',
+        step_role: 'secondary',
+        rating: { gate: false, score: false, trend: true },
+      }),
+    ])
+
+    const model = buildProjectManagementProject(
+      project,
+      manifestWithWorkspace(),
+      { ws_0004: successStates },
+      { ws_0004: inputs },
+    )
+
+    expect(model.workspaceSummaries[0]?.flowMetrics).toMatchObject({
+      totalRuntimeSec: 0,
+      peakMemoryMb: 0,
+    })
+    expect(model.dashboardSummary.flowMetricSummary.runtimePoints).toEqual([
+      expect.objectContaining({ value: 0, label: '0 s', state: 'good' }),
+    ])
+    expect(model.dashboardSummary.flowMetricSummary.memoryPoints).toEqual([
+      expect.objectContaining({ value: 0, label: '0 MB', state: 'good' }),
+    ])
+  })
+
   it('marks a workspace not rated when RCX or STA signoff readiness is incomplete', () => {
     const manifest = manifestWithWorkspace()
     const model = buildProjectManagementProject(
