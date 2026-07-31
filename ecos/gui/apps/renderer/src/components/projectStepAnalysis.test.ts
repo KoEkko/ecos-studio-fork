@@ -610,6 +610,7 @@ describe('buildStepCompareMatrix', () => {
       delta: '+100 um',
       deltaPercent: '+10%',
       deltaTone: 'bad',
+      availability: 'reported',
       reported: true,
     })
   })
@@ -679,8 +680,87 @@ describe('buildStepCompareMatrix', () => {
     )
 
     const [baselineCell, otherCell] = matrix.groups[0].rows[0].cells
-    expect(baselineCell).toMatchObject({ value: 'Not reported', reported: false })
+    expect(baselineCell).toMatchObject({
+      value: 'Not reported',
+      availability: 'not-reported',
+      reported: false,
+    })
     expect(otherCell).toMatchObject({ delta: null, deltaNote: 'base n/a' })
+  })
+
+  it('uses N/A when the step did not complete, instead of treating it as an absent metric', () => {
+    const matrix = buildStepCompareMatrix(
+      [
+        workspaceSummaryFixture('ws_a', {
+          Route: stepSnapshotFixture({
+            metrics: [
+              metricRecordFixture({
+                metricName: 'route_wirelength',
+                displayName: 'Total wirelength',
+                unit: 'um',
+                value: 1000,
+              }),
+            ],
+          }),
+        }),
+        workspaceSummaryFixture('ws_b', {
+          Route: stepSnapshotFixture({ flowStatus: 'failed', metrics: [] }),
+        }),
+      ],
+      trend,
+      'ws_a',
+      'Route',
+    )
+
+    expect(matrix.groups[0].rows[0].cells[1]).toMatchObject({
+      value: 'N/A',
+      availability: 'not-applicable',
+      reported: false,
+      unavailableReason: 'Route failed',
+    })
+  })
+
+  it('excludes partial metrics from a failed step instead of comparing them as final values', () => {
+    const matrix = buildStepCompareMatrix(
+      [
+        workspaceSummaryFixture('ws_a', {
+          Route: stepSnapshotFixture({
+            metrics: [
+              metricRecordFixture({
+                metricName: 'route_wirelength',
+                displayName: 'Total wirelength',
+                unit: 'um',
+                value: 1000,
+              }),
+            ],
+          }),
+        }),
+        workspaceSummaryFixture('ws_b', {
+          Route: stepSnapshotFixture({
+            flowStatus: 'failed',
+            metrics: [
+              metricRecordFixture({
+                metricName: 'route_wirelength',
+                displayName: 'Total wirelength',
+                unit: 'um',
+                value: 900,
+              }),
+            ],
+          }),
+        }),
+      ],
+      trend,
+      'ws_a',
+      'Route',
+    )
+
+    const failedCell = matrix.groups[0].rows[0].cells[1]
+    expect(failedCell).toMatchObject({
+      value: 'N/A',
+      availability: 'not-applicable',
+      delta: null,
+      leads: false,
+    })
   })
 
   it('leaves the note off when no baseline is configured at all', () => {

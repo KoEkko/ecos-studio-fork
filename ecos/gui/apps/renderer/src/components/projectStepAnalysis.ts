@@ -136,13 +136,18 @@ export interface StepCompareColumn {
 
 /** How a workspace compares with the baseline, using only the direction the metric reports. */
 export type StepCompareOutcome = 'better' | 'worse' | 'same'
+export type StepCompareCellAvailability = 'reported' | 'not-reported' | 'not-applicable'
 
 export interface StepCompareCell {
   workspaceId: string
   workspaceName: string
   value: string
+  /** Distinguishes absent data from a step that cannot contribute a comparison. */
+  availability: StepCompareCellAvailability
   /** Whether this workspace reported the metric. Nothing here grades the value itself. */
   reported: boolean
+  /** Present only when the flow state makes this metric inapplicable to comparison. */
+  unavailableReason: string | null
   delta: string | null
   deltaPercent: string | null
   deltaTone: StepTone
@@ -169,6 +174,29 @@ export interface StepCompareRow {
   differs: boolean
   /** True when the metric reports a polarity, so better/worse is the artifact's own reading. */
   directional: boolean
+  /**
+   * Which end of this metric the artifact calls better. Null when it reports no
+   * direction, so a ranking on this row can only claim an order, not a winner.
+   */
+  higherIsBetter: boolean | null
+}
+
+/**
+ * What the column controls need to know about one workspace, independent of which
+ * columns the table currently renders. Deciding the filter, the order, and the search
+ * over the whole project rather than over the surviving columns is what lets a reader
+ * widen a comparison as easily as narrowing one.
+ */
+export interface StepCompareCandidate {
+  workspaceId: string
+  workspaceName: string
+  /** True when the workspace reported at least one comparable metric for this step. */
+  reported: boolean
+  /** True when one of its reported metrics differs from the baseline's value. */
+  differs: boolean
+  findingCount: number
+  /** Reported values by metric name, so a rank on any row needs no second read. */
+  metricValues: ReadonlyMap<string, number>
 }
 
 export interface StepCompareGroup {
@@ -961,6 +989,54 @@ export function buildStepDetailTables(
 }
 
 /**
+ * Every workspace of the project described the way the comparison's column controls read
+ * it. Built from the same snapshots as the matrix, but over the whole project, so a
+ * filter can report how many workspaces it would show before any of them is a column.
+ */
+export function buildStepCompareCandidates(
+  workspaceSummaries: readonly ProjectWorkspaceSummary[],
+  qorTrendSummary: ProjectQorTrendSummary,
+  step: FlowStep,
+): StepCompareCandidate[] {
+  const baselineId = qorTrendSummary.baselineWorkspaceId
+  const valuesByWorkspace = new Map<string, Map<string, number>>(
+    workspaceSummaries.map((summary) => {
+      const snapshot = stepSnapshot(summary, step)
+      const values = new Map<string, number>()
+      if (canCompareStep(snapshot?.flowStatus)) {
+        for (const record of snapshot?.metrics ?? []) {
+          if (record.stepRole === 'hidden' || record.value === null) continue
+          values.set(record.metricName, record.value)
+        }
+      }
+      return [summary.workspaceId, values]
+    }),
+  )
+  const baselineValues = baselineId ? (valuesByWorkspace.get(baselineId) ?? null) : null
+
+  return workspaceSummaries.map((summary) => {
+    const metricValues = valuesByWorkspace.get(summary.workspaceId) ?? new Map()
+    // Only metrics both sides reported can be called equal or different. A metric one
+    // side never reported is unknown, not a difference.
+    const differs =
+      baselineValues !== null &&
+      summary.workspaceId !== baselineId &&
+      [...metricValues].some(([metricName, value]) => {
+        const baselineValue = baselineValues.get(metricName)
+        return baselineValue !== undefined && baselineValue !== value
+      })
+    return {
+      workspaceId: summary.workspaceId,
+      workspaceName: summary.workspaceName,
+      reported: metricValues.size > 0,
+      differs,
+      findingCount: countStepIssues(buildStepIssues(summary, step)).total,
+      metricValues,
+    }
+  })
+}
+
+/**
  * Cross-workspace comparison over the metrics the workspaces actually reported for this
  * step, read from the same snapshots and grouped by the same QoR dimensions as the
  * Metrics pane. Sourcing the rows from a curated per-step allowlist instead would let a
@@ -986,13 +1062,18 @@ export function buildStepCompareMatrix(
   const hasBaseline = baselineSummary !== null
 
   const recordsByWorkspace = new Map<string, Map<string, ProjectQorMetricRecord>>()
+  const snapshotsByWorkspace = new Map<string, ProjectAnalysisStepSnapshot | null>()
   const metricMeta = new Map<string, ProjectQorMetricRecord>()
   for (const summary of workspaceSummaries) {
+    const snapshot = stepSnapshot(summary, step)
+    snapshotsByWorkspace.set(summary.workspaceId, snapshot)
     const byMetric = new Map<string, ProjectQorMetricRecord>()
-    for (const record of stepSnapshot(summary, step)?.metrics ?? []) {
-      if (record.stepRole === 'hidden') continue
-      byMetric.set(record.metricName, record)
-      if (!metricMeta.has(record.metricName)) metricMeta.set(record.metricName, record)
+    if (canCompareStep(snapshot?.flowStatus)) {
+      for (const record of snapshot?.metrics ?? []) {
+        if (record.stepRole === 'hidden') continue
+        byMetric.set(record.metricName, record)
+        if (!metricMeta.has(record.metricName)) metricMeta.set(record.metricName, record)
+      }
     }
     recordsByWorkspace.set(summary.workspaceId, byMetric)
   }
@@ -1027,6 +1108,8 @@ export function buildStepCompareMatrix(
     const cells = columns.map((column) => {
       const record = recordsByWorkspace.get(column.workspaceId)?.get(meta.metricName)
       const value = record?.value ?? null
+      const snapshot = snapshotsByWorkspace.get(column.workspaceId) ?? null
+      const availability = compareCellAvailability(record, value, snapshot?.flowStatus)
       const delta = deltaAgainst({
         value,
         baselineValue,
@@ -1048,8 +1131,18 @@ export function buildStepCompareMatrix(
       return {
         workspaceId: column.workspaceId,
         workspaceName: column.workspaceName,
-        value: record ? formatScalar(value, meta.unit) : 'Not reported',
-        reported: record !== undefined && value !== null,
+        value:
+          availability === 'not-applicable'
+            ? 'N/A'
+            : record
+              ? formatScalar(value, meta.unit)
+              : 'Not reported',
+        availability,
+        reported: availability === 'reported',
+        unavailableReason:
+          availability === 'not-applicable'
+            ? `${step} ${flowStatusLabel(snapshot?.flowStatus)}`
+            : null,
         delta: delta.label,
         deltaPercent: delta.percent,
         deltaTone: delta.tone,
@@ -1069,6 +1162,7 @@ export function buildStepCompareMatrix(
       cells,
       differs,
       directional,
+      higherIsBetter: directional ? meta.polarity === 'higher_is_better' : null,
     }
     const group = groups.get(meta.dimension)
     if (group) {
@@ -1093,6 +1187,35 @@ export function buildStepCompareMatrix(
     differingCount,
     verdicts: hasBaseline ? columns.map((column) => buildVerdict(column, tallies)) : [],
     hasBaseline,
+  }
+}
+
+function compareCellAvailability(
+  record: ProjectQorMetricRecord | undefined,
+  value: number | null,
+  flowStatus: ProjectAnalysisStepSnapshot['flowStatus'],
+): StepCompareCellAvailability {
+  if (!canCompareStep(flowStatus)) return 'not-applicable'
+  if (record !== undefined && value !== null) return 'reported'
+  return 'not-reported'
+}
+
+function canCompareStep(flowStatus: ProjectAnalysisStepSnapshot['flowStatus']): boolean {
+  return flowStatus === undefined || flowStatus === 'success' || flowStatus === 'reused'
+}
+
+function flowStatusLabel(status: ProjectAnalysisStepSnapshot['flowStatus']): string {
+  switch (status) {
+    case 'failed':
+      return 'failed'
+    case 'skipped':
+      return 'was skipped'
+    case 'unstart':
+      return 'did not start'
+    case 'running':
+      return 'is still running'
+    default:
+      return 'did not complete'
   }
 }
 
@@ -1248,7 +1371,7 @@ function deltaAgainst(options: {
   if (isBaseline) {
     return value === null ? blank : { ...blank, label: 'base', barRatio: 0 }
   }
-  // The value cell already reads "Not reported", so repeating that here adds nothing.
+  // The value cell already explains absent or inapplicable metrics, so repeat neither here.
   if (value === null) return blank
   // Without this the cell looks identical whether the baseline lacks the metric or no
   // baseline is set at all, and "the baseline never reported it" is itself an answer.

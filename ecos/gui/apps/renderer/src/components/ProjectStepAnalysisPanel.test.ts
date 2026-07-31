@@ -287,16 +287,55 @@ describe('ProjectStepAnalysisPanel', () => {
   it('offers workspace switching with per-workspace issue counts', async () => {
     const wrapper = mountPanel()
 
-    const chips = wrapper.findAll('.workspace-chip')
-    expect(chips).toHaveLength(2)
-    expect(chips[0].classes()).toContain('selected')
-    expect(chips[0].get('.chip-count').text()).toBe('2')
-    expect(chips[0].get('.chip-count').classes()).toContain('bad')
-    expect(chips[1].text()).toContain('base')
-    expect(chips[1].text()).toContain('best')
+    const selector = wrapper.get('.workspace-selector')
+    expect(selector.text()).toContain('ws_a')
+    expect(selector.get('.chip-count').text()).toBe('2')
+    expect(selector.get('.chip-count').classes()).toContain('bad')
 
-    await chips[1].trigger('click')
+    await selector.trigger('click')
+
+    const options = wrapper.findAll('.workspace-picker-option')
+    expect(options).toHaveLength(2)
+    expect(options[0].classes()).toContain('selected')
+    expect(options[1].text()).toContain('base')
+    expect(options[1].text()).toContain('best')
+
+    await options[1].trigger('click')
     expect(wrapper.emitted('select-workspace')).toEqual([['ws_b']])
+  })
+
+  it('keeps a large workspace picker compact and makes every workspace searchable', async () => {
+    const workspaceIds = Array.from(
+      { length: 50 },
+      (_, index) => `ws_${String(index + 1).padStart(4, '0')}`,
+    )
+    const wrapper = mountPanel({
+      workspaceSummaries: workspaceIds.map((workspaceId, index) =>
+        routeWorkspace(workspaceId, 1000 + index),
+      ),
+      qorTrendSummary: trendSummaryFixture(
+        workspaceIds.map((workspaceId) => ({ workspaceId })),
+        'ws_0001',
+      ),
+      bestWorkspaceId: 'ws_0002',
+      selectedWorkspaceId: 'ws_0050',
+    })
+
+    expect(wrapper.get('.workspace-picker-total').text()).toBe('50 workspaces')
+    expect(wrapper.get('.workspace-selector').text()).toContain('ws_0050')
+    expect(wrapper.find('.workspace-picker-popover').exists()).toBe(false)
+
+    await wrapper.get('.workspace-selector').trigger('click')
+    expect(wrapper.findAll('.workspace-picker-option')).toHaveLength(16)
+
+    await wrapper.get('.workspace-picker-search input').setValue('ws_0049')
+    const matched = wrapper.findAll('.workspace-picker-option')
+    expect(matched).toHaveLength(1)
+    expect(matched[0].text()).toContain('ws_0049')
+
+    await matched[0].trigger('click')
+    expect(wrapper.emitted('select-workspace')).toEqual([['ws_0049']])
+    expect(wrapper.find('.workspace-picker-popover').exists()).toBe(false)
   })
 
   it('opens on the findings of one workspace and switches to the comparison on request', async () => {
@@ -326,9 +365,7 @@ describe('ProjectStepAnalysisPanel', () => {
   it('says how many metrics differ from the baseline before any row is read', async () => {
     const wrapper = await openCompare(mountPanel())
 
-    expect(wrapper.get('.compare-summary-head small').text()).toBe(
-      'baseline ws_b · 1 of 2 differ',
-    )
+    expect(wrapper.get('.compare-caption').text()).toBe('baseline ws_b · 1 of 2 differ')
   })
 
   it('reports no difference rather than an empty caption when the rows all match', async () => {
@@ -338,47 +375,63 @@ describe('ProjectStepAnalysisPanel', () => {
       }),
     )
 
-    expect(wrapper.get('.compare-summary-head small').text()).toBe(
+    expect(wrapper.get('.compare-caption').text()).toBe(
       'baseline ws_b · no metric differs',
     )
   })
 
-  it('leads with how each workspace came out against the baseline', async () => {
+  it('leads with the selected workspace outcome without adding a card for every column', async () => {
     const wrapper = await openCompare(mountPanel())
 
-    const cards = wrapper.findAll('.verdict-card')
-    expect(cards[0].get('.verdict-card-summary').text()).toBe(
-      '1 better · 0 worse · 1 same',
-    )
+    expect(wrapper.findAll('.verdict-card')).toHaveLength(1)
+    const card = wrapper.get('.verdict-card')
+    expect(card.get('.verdict-card-summary').text()).toBe('1 better · 0 worse · 1 same')
     // Half the comparable metrics improved and half held, so the bar splits in two.
-    const segments = cards[0].findAll('.win-bar i')
+    const segments = card.findAll('.win-bar i')
     expect(segments.map((segment) => segment.classes())).toEqual([['good'], ['neutral']])
     expect(segments.map((segment) => segment.attributes('style'))).toEqual([
       'width: 50%;',
       'width: 50%;',
     ])
-    expect(cards[1].get('.verdict-card-summary').text()).toBe('Baseline for this step')
-    expect(cards[1].find('.win-bar').exists()).toBe(false)
 
-    await cards[1].trigger('click')
-    expect(wrapper.emitted('select-workspace')).toEqual([['ws_b']])
+    await wrapper.setProps({ selectedWorkspaceId: 'ws_b' })
+    const baselineCard = wrapper.get('.verdict-card')
+    expect(baselineCard.get('.verdict-card-summary').text()).toBe(
+      'Baseline for this step',
+    )
+    expect(baselineCard.find('.win-bar').exists()).toBe(false)
+  })
+
+  it('leads with the baseline column so a scrolled comparison keeps its reference', async () => {
+    const wrapper = await openCompare(mountPanel())
+
+    // ws_b is the baseline and ws_a the current workspace, whatever order the project
+    // lists them in, and only the baseline column is frozen beside the metric column.
+    expect(wrapper.findAll('.compare-head-name').map((head) => head.text())).toEqual([
+      'ws_b',
+      'ws_a',
+    ])
+    const heads = wrapper.findAll('.compare-head')
+    expect(heads[0].classes()).toContain('pinned')
+    expect(heads[1].classes()).not.toContain('pinned')
+    expect(wrapper.findAll('.compare-cell')[0].classes()).toContain('pinned')
   })
 
   it('carries the unit, the relative change, and a bar on each compare delta', async () => {
     const wrapper = await openCompare(mountPanel())
 
-    // Row order is DRC then wirelength, so the wirelength cells are the third and fourth.
+    // Row order is DRC then wirelength, and the baseline leads each row's cells.
     const cells = wrapper.findAll('.compare-cell')
-    expect(cells[2].get('strong').text()).toBe('1000 um')
-    expect(cells[2].get('.compare-delta').text()).toBe('-100 um -9.1%')
-    expect(cells[2].get('.compare-delta').classes()).toContain('good')
+    expect(cells[3].get('strong').text()).toBe('1000 um')
+    expect(cells[3].get('.compare-delta').text()).toBe('-100 um -9.1%')
+    expect(cells[3].get('.compare-delta').classes()).toContain('good')
     // 9.1% of the 25% that fills a bar, drawn out of the centre toward the better side.
-    const fill = cells[2].get('.delta-bar-fill').attributes('style') ?? ''
+    const fill = cells[3].get('.delta-bar-fill').attributes('style') ?? ''
     expect(fill).toContain('left: 50%')
     expect(Number.parseFloat(fill.split('width:')[1])).toBeCloseTo(18.18, 2)
     // The baseline keeps the track so its centre line reads as the zero every bar shares.
-    expect(cells[3].get('.compare-delta').text()).toBe('base')
-    expect(cells[3].get('.delta-bar-fill').attributes('style')).toBe(
+    expect(cells[2].get('.compare-delta').text()).toBe('base')
+    expect(cells[2].get('.delta-bar-fill').attributes('style')).toBe(
       'left: 50%; width: 0%;',
     )
   })
@@ -390,9 +443,9 @@ describe('ProjectStepAnalysisPanel', () => {
     // Both workspaces report 12 DRC violations, so neither of them wins the row.
     expect(cells[0].classes()).not.toContain('leads')
     expect(cells[1].classes()).not.toContain('leads')
-    expect(cells[2].classes()).toContain('leads')
-    expect(cells[2].get('.lead-flag').text()).toBe('best')
-    expect(cells[2].get('button').attributes('title')).toBe(
+    expect(cells[3].classes()).toContain('leads')
+    expect(cells[3].get('.lead-flag').text()).toBe('best')
+    expect(cells[3].get('button').attributes('title')).toBe(
       'ws_a Total wirelength: 1000 um · -100 um (-9.1%) · best reported value (um / lower is better)',
     )
   })
@@ -448,15 +501,187 @@ describe('ProjectStepAnalysisPanel', () => {
       }),
     )
 
+    // The baseline column leads, and it is the one that reported nothing.
     const cells = wrapper.findAll('.compare-cell')
-    expect(cells[0].get('.compare-delta').text()).toBe('base n/a')
+    expect(cells[0].get('strong').text()).toBe('Not reported')
+    expect(cells[0].classes()).toContain('unreported')
+    expect(cells[1].get('.compare-delta').text()).toBe('base n/a')
     // Nothing to measure against, so the cell carries no bar rather than an empty track.
-    expect(cells[0].find('.delta-bar').exists()).toBe(false)
-    expect(cells[1].get('strong').text()).toBe('Not reported')
-    expect(cells[1].classes()).toContain('unreported')
+    expect(cells[1].find('.delta-bar').exists()).toBe(false)
     expect(wrapper.findAll('.verdict-card-summary')[0].text()).toBe(
       'No metric of this step can be compared with the baseline',
     )
+  })
+
+  it('renders N/A for a failed step and keeps not-reported for a successful step', async () => {
+    const wrapper = await openCompare(
+      mountPanel({
+        workspaceSummaries: [
+          routeWorkspace('ws_a'),
+          workspaceSummaryFixture('ws_b', {
+            Route: stepSnapshotFixture({ flowStatus: 'failed', metrics: [] }),
+          }),
+        ],
+      }),
+    )
+
+    const failedCell = wrapper.findAll('.compare-cell')[0]
+    expect(failedCell.get('strong').text()).toBe('N/A')
+    expect(failedCell.classes()).toContain('not-applicable')
+    expect(failedCell.classes()).not.toContain('unreported')
+    expect(failedCell.get('button').attributes('title')).toContain(
+      'Not applicable: Route failed',
+    )
+  })
+
+  /** Eight workspaces, so the table is wider than any panel and every control matters. */
+  function mountWideCompare(count = 8) {
+    const workspaceIds = Array.from({ length: count }, (_, index) => `ws_${index}`)
+    return openCompare(
+      mountPanel({
+        workspaceSummaries: workspaceIds.map((workspaceId, index) =>
+          routeWorkspace(workspaceId, 1000 + index * 10),
+        ),
+        qorTrendSummary: trendSummaryFixture(
+          workspaceIds.map((workspaceId) => ({ workspaceId })),
+          'ws_1',
+        ),
+        bestWorkspaceId: 'ws_2',
+        selectedWorkspaceId: 'ws_0',
+      }),
+    )
+  }
+
+  function columnNames(wrapper: ReturnType<typeof mountPanel>) {
+    return wrapper.findAll('.compare-head-name').map((head) => head.text())
+  }
+
+  it('gives every workspace of the project a column instead of rationing them', async () => {
+    const wrapper = await mountWideCompare()
+
+    expect(columnNames(wrapper)).toEqual([
+      // Baseline and current workspace lead; the rest keep the project's own order.
+      'ws_1',
+      'ws_0',
+      'ws_2',
+      'ws_3',
+      'ws_4',
+      'ws_5',
+      'ws_6',
+      'ws_7',
+    ])
+    expect(wrapper.get('.compare-column-count').text()).toBe('8 workspaces')
+    expect(
+      wrapper.findAll('.compare-column-filters button').map((button) => button.text()),
+    ).toEqual(['All 8', 'Reported 8', 'Differing 7', 'Findings 8'])
+  })
+
+  it('narrows the columns by search without dropping the baseline or current workspace', async () => {
+    const wrapper = await mountWideCompare()
+
+    await wrapper.get('.compare-column-search input').setValue('ws_5')
+
+    expect(columnNames(wrapper)).toEqual(['ws_1', 'ws_0', 'ws_5'])
+    expect(wrapper.get('.compare-column-count').text()).toBe('3 of 8 workspaces')
+
+    await wrapper.get('.scope-reset').trigger('click')
+    expect(columnNames(wrapper)).toHaveLength(8)
+    expect(wrapper.find('.scope-reset').exists()).toBe(false)
+  })
+
+  it('says why the reference columns survive a search that matches nothing', async () => {
+    const wrapper = await mountWideCompare()
+
+    await wrapper.get('.compare-column-search input').setValue('nothing-like-this')
+
+    expect(columnNames(wrapper)).toEqual(['ws_1', 'ws_0'])
+    expect(wrapper.get('.compare-column-count').text()).toBe(
+      'no match · reference columns only',
+    )
+    // Narrowing further could only ever remove a reference column, so it is not on offer.
+    expect(
+      wrapper
+        .findAll('.compare-column-filters button')
+        .map((button) => button.attributes('disabled') !== undefined),
+    ).toEqual([false, true, true, true])
+  })
+
+  it('ranks the columns by the metric a reader presses, then reverses and clears it', async () => {
+    const wrapper = await mountWideCompare()
+    // Wirelength rises with the workspace index and lower is better on this metric.
+    const wirelength = () => wrapper.findAll('.compare-metric')[1]
+
+    await wirelength().get('button').trigger('click')
+    expect(wirelength().classes()).toContain('ranked')
+    expect(columnNames(wrapper)).toEqual([
+      'ws_1',
+      'ws_0',
+      'ws_2',
+      'ws_3',
+      'ws_4',
+      'ws_5',
+      'ws_6',
+      'ws_7',
+    ])
+
+    await wirelength().get('button').trigger('click')
+    expect(columnNames(wrapper)).toEqual([
+      'ws_1',
+      'ws_0',
+      'ws_7',
+      'ws_6',
+      'ws_5',
+      'ws_4',
+      'ws_3',
+      'ws_2',
+    ])
+
+    await wirelength().get('button').trigger('click')
+    expect(wirelength().classes()).not.toContain('ranked')
+    expect(columnNames(wrapper)[2]).toBe('ws_2')
+  })
+
+  // A wide comparison is narrowed by ranking and filtering, never by cells that quietly
+  // drop what they report to fit more of them on screen.
+  it('keeps the relative change in every cell however wide the comparison gets', async () => {
+    const wrapper = await mountWideCompare(20)
+
+    expect(wrapper.findAll('.compare-delta em').length).toBeGreaterThan(0)
+  })
+
+  it('sinks a workspace with nothing to compare, and drops it on request', async () => {
+    const wrapper = await openCompare(
+      mountPanel({
+        workspaceSummaries: [
+          workspaceSummaryFixture('ws_failed', {
+            Route: stepSnapshotFixture({ flowStatus: 'failed', metrics: [] }),
+          }),
+          routeWorkspace('ws_a'),
+          routeWorkspace('ws_b', 1100),
+        ],
+        qorTrendSummary: trendSummaryFixture(
+          [
+            { workspaceId: 'ws_failed' },
+            { workspaceId: 'ws_a' },
+            { workspaceId: 'ws_b' },
+          ],
+          'ws_b',
+        ),
+        selectedWorkspaceId: 'ws_a',
+      }),
+    )
+
+    // The project lists it first, but a column of N/A belongs after the ones with values.
+    expect(columnNames(wrapper)).toEqual(['ws_b', 'ws_a', 'ws_failed'])
+
+    const reported = wrapper
+      .findAll('.compare-column-filters button')
+      .find((button) => button.text().startsWith('Reported'))
+    expect(reported?.text()).toBe('Reported 2')
+    await reported?.trigger('click')
+
+    expect(columnNames(wrapper)).toEqual(['ws_b', 'ws_a'])
+    expect(wrapper.get('.compare-column-count').text()).toBe('2 of 3 workspaces')
   })
 
   it('says a comparison is not on offer when the project has no baseline', async () => {
