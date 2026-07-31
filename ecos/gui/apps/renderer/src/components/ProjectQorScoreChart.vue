@@ -9,7 +9,7 @@
         </strong>
         <strong v-else class="qor-best-chip muted">NR</strong>
       </div>
-      <small>{{ trendPoints.length }} workspaces · baseline {{ baselineLabel }}</small>
+      <small>{{ chartCaption }}</small>
     </header>
 
     <div
@@ -101,10 +101,10 @@
             :class="pointClasses(point)"
             :cx="point.x"
             :cy="point.y"
-            :r="point.isSelected ? 2.4 : 1.85"
+            :r="point.isSelected ? selectedPointRadius : pointRadius"
           />
           <text
-            v-if="!point.isNotRated"
+            v-if="!point.isNotRated && point.showValueLabel"
             class="qor-chart-value-label"
             :class="pointClasses(point)"
             :x="point.x"
@@ -113,34 +113,44 @@
           >
             {{ formatScore(point.score) }}
           </text>
-          <g v-else class="qor-chart-nr-marker">
-            <rect
-              class="qor-chart-nr-pill"
-              :x="point.x - 4.2"
-              :y="point.y - 2.6"
-              width="8.4"
-              height="5.2"
-              rx="1.4"
+          <g v-if="point.isNotRated" class="qor-chart-nr-marker">
+            <template v-if="notRatedPillFits || point.isEmphasized">
+              <rect
+                class="qor-chart-nr-pill"
+                :x="point.x - NOT_RATED_PILL_WIDTH / 2"
+                :y="point.y - 2.6"
+                :width="NOT_RATED_PILL_WIDTH"
+                height="5.2"
+                rx="1.4"
+              />
+              <text
+                class="qor-chart-not-rated"
+                :x="point.x"
+                :y="point.y"
+                text-anchor="middle"
+                dominant-baseline="middle"
+              >
+                NR
+              </text>
+            </template>
+            <circle
+              v-else
+              class="qor-chart-nr-dot"
+              :cx="point.x"
+              :cy="point.y"
+              :r="pointRadius"
             />
-            <text
-              class="qor-chart-not-rated"
-              :x="point.x"
-              :y="point.y"
-              text-anchor="middle"
-              dominant-baseline="middle"
-            >
-              NR
-            </text>
           </g>
           <g class="qor-chart-tick" :transform="`translate(${point.x}, ${CHART_BOTTOM})`">
             <line class="qor-chart-x-tick" x1="0" y1="0" x2="0" y2="2.4" />
             <text
+              v-if="point.showAxisLabel"
               class="qor-chart-workspace-label"
               :class="pointClasses(point)"
               x="0"
               y="9.2"
               text-anchor="end"
-              transform="rotate(-40)"
+              :transform="`rotate(-${AXIS_LABEL_ROTATION_DEGREES})`"
             >
               {{ shortenLabel(point.label) }}
             </text>
@@ -179,14 +189,31 @@ const CHART_RIGHT = 8
 const CHART_TOP = 10
 const CHART_BOTTOM = 68
 const CHART_NOT_RATED_Y = 56
+const VALUE_LABEL_FONT_SIZE = 3.6
+const AXIS_LABEL_FONT_SIZE = 3.1
+const AXIS_LABEL_ROTATION_DEGREES = 40
+const AXIS_LABEL_MAX_CHARS = 8
+/** Line box as a multiple of font size, the clearance one rotated label needs. */
+const AXIS_LABEL_LINE_SPACING = 1.3
+/** Advance width of one character as a fraction of font size, for the fonts in use here. */
+const CHARACTER_ADVANCE_RATIO = 0.62
+/** Clear space a label needs beside the next one before the two read as one word. */
+const LABEL_GAP = 1.1
+const POINT_RADIUS = 1.85
+const SELECTED_POINT_RADIUS = 2.4
+const NOT_RATED_PILL_WIDTH = 8.4
 
 interface ChartPoint extends ProjectQorTrendPoint {
   isBest: boolean
   isNotRated: boolean
   isSelected: boolean
   isBaseline: boolean
+  /** Selected, baseline, or best: the points a reader is tracking by name. */
+  isEmphasized: boolean
   x: number
   y: number
+  showValueLabel: boolean
+  showAxisLabel: boolean
 }
 
 const props = defineProps<{
@@ -240,28 +267,162 @@ const chartCoordinateWidth = computed(() => {
 const chartPlotRight = computed(() => chartCoordinateWidth.value - CHART_RIGHT)
 const chartViewBox = computed(() => `0 0 ${chartCoordinateWidth.value.toFixed(2)} 100`)
 
-const chartPoints = computed<ChartPoint[]>(() => {
-  const points = props.trendPoints
-  const plotWidth = chartPlotRight.value - CHART_LEFT
-  return points.map((point, index) => ({
-    ...point,
-    isBest: point.score !== null && point.score === highestScore.value,
-    isNotRated: point.score === null,
-    isSelected: point.workspaceId === props.selectedWorkspaceId,
-    isBaseline: point.workspaceId === props.baselineWorkspaceId,
-    x:
-      points.length <= 1
-        ? CHART_LEFT
-        : CHART_LEFT + (index / (points.length - 1)) * plotWidth,
-    y: point.score === null ? CHART_NOT_RATED_Y : scoreToChartY(point.score),
-  }))
+/**
+ * Horizontal room one workspace owns. Every density decision below is made against this
+ * rather than against the workspace count, because the count alone cannot say whether a
+ * label fits: the same fifty workspaces are legible in a wide panel and illegible in a
+ * narrow one.
+ */
+const pointSlot = computed(() => {
+  const plotWidth = Math.max(0, chartPlotRight.value - CHART_LEFT)
+  return props.trendPoints.length === 0 ? plotWidth : plotWidth / props.trendPoints.length
 })
 
+/** Width one printed score needs, taken from the longest score actually on the chart. */
+const valueLabelWidth = computed(() => {
+  const widest = props.trendPoints.reduce(
+    (chars, point) =>
+      point.score === null ? chars : Math.max(chars, formatScore(point.score).length),
+    0,
+  )
+  return widest * VALUE_LABEL_FONT_SIZE * CHARACTER_ADVANCE_RATIO
+})
+
+/**
+ * Horizontal distance two axis labels need between them. Rotating the labels is what buys
+ * the axis its density: neighbours are parallel lines of text, so what has to clear is the
+ * height of a line across their perpendicular separation, not the length of the name.
+ */
+const axisLabelMinimumGap = computed(
+  () =>
+    (AXIS_LABEL_FONT_SIZE * AXIS_LABEL_LINE_SPACING) /
+    Math.sin((AXIS_LABEL_ROTATION_DEGREES * Math.PI) / 180),
+)
+
+/**
+ * Whether every score can be printed above its own point. When it cannot, only the points
+ * a reader is tracking keep a printed value; the rest are read off the axis and the
+ * threshold line, with the exact number on hover.
+ */
+const valueLabelsFit = computed(
+  () =>
+    valueLabelWidth.value === 0 || pointSlot.value >= valueLabelWidth.value + LABEL_GAP,
+)
+
+interface PlacedPoint extends ProjectQorTrendPoint {
+  index: number
+  isBest: boolean
+  isNotRated: boolean
+  isSelected: boolean
+  isBaseline: boolean
+  isEmphasized: boolean
+  x: number
+  y: number
+}
+
+const placedPoints = computed<PlacedPoint[]>(() => {
+  const slot = pointSlot.value
+  return props.trendPoints.map((point, index) => {
+    const isSelected = point.workspaceId === props.selectedWorkspaceId
+    const isBaseline = point.workspaceId === props.baselineWorkspaceId
+    const isBest = point.score !== null && point.score === highestScore.value
+    return {
+      ...point,
+      index,
+      isBest,
+      isNotRated: point.score === null,
+      isSelected,
+      isBaseline,
+      isEmphasized: isSelected || isBaseline || isBest,
+      // Centred in its own slot, so the first lollipop does not sit on the value axis.
+      x: CHART_LEFT + slot * (index + 0.5),
+      y: point.score === null ? CHART_NOT_RATED_Y : scoreToChartY(point.score),
+    }
+  })
+})
+
+/**
+ * Thinning by a stride alone still collides, because the points a reader is tracking are
+ * kept regardless of where they land and are often neighbours: a baseline beside the
+ * selected workspace beside the first column. Labels are therefore placed one at a time,
+ * most important first, and a label is only drawn where nothing already occupies the
+ * room it needs.
+ */
+function placeLabels(
+  candidates: PlacedPoint[],
+  minimumGapX: number,
+  minimumGapY: number,
+): Set<number> {
+  const byImportance = [...candidates].sort(
+    (left, right) => importance(left) - importance(right) || left.index - right.index,
+  )
+  const placed: PlacedPoint[] = []
+  for (const point of byImportance) {
+    const collides = placed.some(
+      (other) =>
+        Math.abs(other.x - point.x) < minimumGapX &&
+        Math.abs(other.y - point.y) < minimumGapY,
+    )
+    if (!collides) placed.push(point)
+  }
+  return new Set(placed.map((point) => point.index))
+}
+
+/** Selected first, then baseline, then best, then left to right. */
+function importance(point: PlacedPoint): number {
+  if (point.isSelected) return 0
+  if (point.isBaseline) return 1
+  if (point.isBest) return 2
+  return 3
+}
+
+const shownValueLabels = computed(() => {
+  const rated = placedPoints.value.filter((point) => !point.isNotRated)
+  if (valueLabelsFit.value) return new Set(rated.map((point) => point.index))
+  // Two scores at different heights do not collide even when their points are neighbours.
+  return placeLabels(
+    rated.filter((point) => point.isEmphasized),
+    valueLabelWidth.value + LABEL_GAP,
+    VALUE_LABEL_FONT_SIZE + LABEL_GAP,
+  )
+})
+
+// Axis labels all sit on one row, so only their horizontal room can separate them.
+const shownAxisLabels = computed(() =>
+  placeLabels(placedPoints.value, axisLabelMinimumGap.value, Number.POSITIVE_INFINITY),
+)
+
+const chartPoints = computed<ChartPoint[]>(() =>
+  placedPoints.value.map((point) => ({
+    ...point,
+    showValueLabel: shownValueLabels.value.has(point.index),
+    showAxisLabel: shownAxisLabels.value.has(point.index),
+  })),
+)
+
+/** Shrinks the marker rather than letting neighbours collide once slots get tight. */
+const pointRadius = computed(() => Math.min(POINT_RADIUS, pointSlot.value * 0.36))
+const selectedPointRadius = computed(() =>
+  Math.min(
+    SELECTED_POINT_RADIUS,
+    Math.max(pointRadius.value * 1.3, pointSlot.value * 0.46),
+  ),
+)
+/** The NR pill needs its own width; below that the unrated point keeps only a marker. */
+const notRatedPillFits = computed(
+  () => pointSlot.value >= NOT_RATED_PILL_WIDTH + LABEL_GAP,
+)
+
 // Widens the pointer target so thin lollipops stay clickable at any workspace count.
-const hitHalfWidth = computed(() => {
-  const plotWidth = chartPlotRight.value - CHART_LEFT
-  if (props.trendPoints.length <= 1) return Math.min(12, plotWidth / 2)
-  return Math.min(12, plotWidth / (props.trendPoints.length - 1) / 2)
+const hitHalfWidth = computed(() => Math.min(12, pointSlot.value / 2))
+
+/**
+ * Says where the scores went when the plot is too dense to print them, so a reader does
+ * not read the missing labels as missing data.
+ */
+const chartCaption = computed(() => {
+  const scope = `${props.trendPoints.length} workspaces · baseline ${props.baselineLabel}`
+  return valueLabelsFit.value ? scope : `${scope} · hover a point for its score`
 })
 
 const accessibleSummary = computed(() => {
@@ -302,7 +463,9 @@ function pointDescription(point: ChartPoint): string {
 }
 
 function shortenLabel(label: string): string {
-  return label.length > 8 ? `${label.slice(0, 8)}...` : label
+  return label.length > AXIS_LABEL_MAX_CHARS
+    ? `${label.slice(0, AXIS_LABEL_MAX_CHARS)}...`
+    : label
 }
 
 function formatScore(score: number | null): string {
@@ -442,8 +605,16 @@ function formatScore(score: number | null): string {
   font-weight: 760;
 }
 
+/*
+ * A halo in the panel colour, so the few labels that survive a dense plot stay readable
+ * where they land on a stem or crowd each other.
+ */
 .qor-chart-value-label {
+  paint-order: stroke fill;
   fill: var(--accent-color);
+  stroke: var(--bg-primary);
+  stroke-width: 0.9;
+  stroke-linejoin: round;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 3.6px;
   font-weight: 760;
@@ -564,6 +735,15 @@ function formatScore(score: number | null): string {
   font-size: 2.9px;
   font-weight: 780;
   letter-spacing: 0.06em;
+}
+
+/* Stands in for the NR pill where a pill would overlap its neighbours. */
+.qor-chart-nr-dot {
+  fill: color-mix(in srgb, var(--text-secondary) 10%, var(--bg-primary));
+  stroke: color-mix(in srgb, var(--text-secondary) 46%, var(--border-color));
+  stroke-width: 1;
+  stroke-dasharray: 1.6 1.2;
+  vector-effect: non-scaling-stroke;
 }
 
 .qor-chart-legend {

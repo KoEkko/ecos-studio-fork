@@ -2,10 +2,15 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import ProjectAnalysisPanel from './ProjectAnalysisPanel.vue'
-import { projectFixture } from './projectDashboard.fixture'
+import {
+  dashboardSummaryFixture,
+  projectFixture,
+  workspaceFixture,
+} from './projectDashboard.fixture'
 import {
   evidenceFixture,
   stepSnapshotFixture,
+  trendSummaryFixture,
   workspaceSummaryFixture,
 } from '@/components/projectStepAnalysis.fixture'
 import type { ProjectManagementProject } from '@/utils/projectManagement'
@@ -34,11 +39,13 @@ function rowFor(wrapper: ReturnType<typeof mountPanel>, workspaceId: string) {
 }
 
 describe('ProjectAnalysisPanel dashboard health', () => {
-  it('renders flow progress against the configured step count', () => {
+  it('renders flow progress as workspaces complete, with the steps left as detail', () => {
     const wrapper = mountPanel()
 
-    expect(wrapper.find('.dash-progress-headline strong').text()).toBe('8/12')
-    expect(wrapper.find('.dash-progress-headline small').text()).toContain('3 workspaces')
+    expect(wrapper.find('.dash-progress-headline strong').text()).toBe('2/3')
+    const detail = wrapper.find('.dash-progress-headline small').text()
+    expect(detail).toContain('workspaces completed every step')
+    expect(detail).toContain('4 of 12 steps left')
   })
 
   it('renders one run-state bar segment per state, sized by percent', () => {
@@ -299,6 +306,46 @@ describe('ProjectAnalysisPanel workspace comparison', () => {
     expect(grid.attributes('aria-colcount')).toBe('13')
     expect(wrapper.findAll('[role="columnheader"]')).toHaveLength(13)
     expect(rowFor(wrapper, 'ws_a')?.find('[role="rowheader"]').exists()).toBe(true)
+  })
+
+  it('virtualizes large workspace sets and narrows the rendered rows with search', async () => {
+    const workspaceIds = [
+      'ws_b',
+      ...Array.from({ length: 29 }, (_, index) => `ws_${index}`),
+    ]
+    const project = projectFixture({
+      workspaces: workspaceIds.map((workspaceId) => workspaceFixture(workspaceId)),
+      workspaceSummaries: workspaceIds.map((workspaceId) =>
+        workspaceSummaryFixture(workspaceId, {}),
+      ),
+      qorTrendSummary: trendSummaryFixture(
+        workspaceIds.map((workspaceId) => ({ workspaceId })),
+        'ws_0',
+      ),
+      bestWorkspaceId: 'ws_b',
+      comparisonSummary: {
+        bestWorkspaceId: 'ws_b',
+        bestReason: '',
+        riskLabels: [],
+        parameterDiffs: [],
+        metricDiffs: [],
+      },
+      dashboardSummary: dashboardSummaryFixture({ workspaceCount: workspaceIds.length }),
+    })
+    const wrapper = mountPanel(project)
+    const grid = wrapper.get('.dash-compare-table')
+
+    expect(grid.attributes('aria-rowcount')).toBe('31')
+    expect(wrapper.findAll('.dash-compare-row:not(.is-head)')).toHaveLength(20)
+
+    await wrapper.get('.dash-workspace-search input').setValue('ws_28')
+
+    expect(grid.attributes('aria-rowcount')).toBe('2')
+    expect(
+      wrapper
+        .findAll('.dash-compare-row:not(.is-head) .dash-workspace-id')
+        .map((cell) => cell.text()),
+    ).toEqual(['ws_28'])
   })
 })
 

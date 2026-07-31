@@ -50,10 +50,15 @@ export interface DashboardRunSegment {
 
 export interface DashboardHealth {
   workspaceCount: number
-  stepsDone: number
-  stepsTotal: number
-  stepsLabel: string
-  stepsPercent: number
+  flowCompleteCount: number
+  /** Workspaces that ran everything, over the same denominator as the checks beside it. */
+  flowLabel: string
+  /**
+   * The step-cell tally, kept below the headline. On its own it cannot say whether one
+   * workspace died early or many are each one step short, so it reads as a sense of the
+   * work left rather than as the measure of progress.
+   */
+  stepsNote: string | null
   runSegments: DashboardRunSegment[]
   checks: DashboardCheck[]
 }
@@ -166,6 +171,7 @@ export function buildDashboardHealth(
 ): DashboardHealth {
   const {
     workspaceCount,
+    flowCompleteWorkspaceCount,
     configuredStepCount,
     successStepCount,
     drcCleanCount,
@@ -176,15 +182,13 @@ export function buildDashboardHealth(
     runStateSlices,
   } = dashboardSummary
 
+  const stepsLeft = configuredStepCount - successStepCount
+
   return {
     workspaceCount,
-    stepsDone: successStepCount,
-    stepsTotal: configuredStepCount,
-    stepsLabel: `${successStepCount}/${configuredStepCount}`,
-    stepsPercent:
-      configuredStepCount === 0
-        ? 0
-        : Math.round((successStepCount / configuredStepCount) * 100),
+    flowCompleteCount: flowCompleteWorkspaceCount,
+    flowLabel: `${flowCompleteWorkspaceCount}/${workspaceCount}`,
+    stepsNote: stepsLeft > 0 ? `${stepsLeft} of ${configuredStepCount} steps left` : null,
     runSegments: runStateSlices.map((slice) => ({
       state: slice.state,
       label: slice.label || RUN_STATE_LABELS[slice.state],

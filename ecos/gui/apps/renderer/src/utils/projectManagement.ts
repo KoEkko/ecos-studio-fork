@@ -280,6 +280,12 @@ export interface ProjectFlowMetricSummary extends ProjectWorkspaceFlowMetrics {
 
 export interface ProjectDashboardSummary {
   workspaceCount: number
+  /**
+   * Workspaces that finished every step they configure. Counted per workspace rather
+   * than per step cell so it reads against the same denominator as the signoff checks
+   * beside it, and so an incomplete project points at workspaces a reader can open.
+   */
+  flowCompleteWorkspaceCount: number
   configuredStepCount: number
   successStepCount: number
   failedStepCount: number
@@ -1451,12 +1457,17 @@ function buildProjectDashboardSummary(
   timingClosure: ProjectQorTimingSummary,
   qorTrendSummary: ProjectQorTrendSummary,
 ): ProjectDashboardSummary {
+  const isStepComplete = (cell: ProjectStepCell): boolean =>
+    cell.status === 'success' || cell.status === 'reused'
   const configuredCells = workspaces.flatMap((workspace) =>
     workspace.steps.filter((cell) => cell.status !== 'skipped'),
   )
-  const successStepCount = configuredCells.filter(
-    (cell) => cell.status === 'success' || cell.status === 'reused',
-  ).length
+  const successStepCount = configuredCells.filter(isStepComplete).length
+  // A workspace configuring no step at all has nothing to finish, so it does not count.
+  const flowCompleteWorkspaceCount = workspaces.filter((workspace) => {
+    const configured = workspace.steps.filter((cell) => cell.status !== 'skipped')
+    return configured.length > 0 && configured.every(isStepComplete)
+  }).length
   const failedStepCount = configuredCells.filter(
     (cell) => cell.status === 'failed',
   ).length
@@ -1479,6 +1490,7 @@ function buildProjectDashboardSummary(
 
   return {
     workspaceCount: workspaces.length,
+    flowCompleteWorkspaceCount,
     configuredStepCount,
     successStepCount,
     failedStepCount,

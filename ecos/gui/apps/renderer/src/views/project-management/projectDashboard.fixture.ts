@@ -70,6 +70,7 @@ export function dashboardSummaryFixture(
 ): ProjectDashboardSummary {
   return {
     workspaceCount: 3,
+    flowCompleteWorkspaceCount: 2,
     configuredStepCount: 12,
     successStepCount: 8,
     failedStepCount: 2,

@@ -56,8 +56,11 @@
         <div class="dash-progress">
           <span class="dash-eyebrow">Flow progress</span>
           <p class="dash-progress-headline">
-            <strong>{{ health.stepsLabel }}</strong>
-            <small>steps complete across {{ health.workspaceCount }} workspaces</small>
+            <strong>{{ health.flowLabel }}</strong>
+            <small>
+              workspaces completed every step
+              <em v-if="health.stepsNote">· {{ health.stepsNote }}</em>
+            </small>
           </p>
           <div class="dash-runbar" role="img" :aria-label="runStateSummaryLabel">
             <i
@@ -185,14 +188,45 @@
       <section class="dash-compare" aria-label="Workspace comparison">
         <header class="dash-section-head">
           <span>Workspace comparison</span>
-          <small>{{ workspaceRows.length }} workspaces · sort any column</small>
+          <small>{{ dashboardWorkspaceResultLabel }}</small>
         </header>
+        <div class="dash-compare-controls">
+          <label class="dash-workspace-search">
+            <i class="ri-search-line" aria-hidden="true"></i>
+            <input
+              v-model="dashboardWorkspaceQuery"
+              type="search"
+              placeholder="Search workspace"
+              aria-label="Search workspace comparison"
+            />
+          </label>
+          <button
+            type="button"
+            class="dash-attention-filter"
+            :class="{ selected: dashboardAttentionOnly }"
+            :aria-pressed="dashboardAttentionOnly"
+            @click="dashboardAttentionOnly = !dashboardAttentionOnly"
+          >
+            Attention only
+          </button>
+          <button
+            v-if="dashboardWorkspaceQuery || dashboardAttentionOnly"
+            type="button"
+            class="dash-compare-reset"
+            title="Reset workspace comparison filters"
+            @click="resetDashboardWorkspaceFilters"
+          >
+            Reset
+          </button>
+        </div>
         <div
+          ref="dashboardCompareTable"
           class="dash-compare-table"
           role="grid"
           aria-label="Workspace comparison"
-          :aria-rowcount="displayedWorkspaceRows.length + 1"
+          :aria-rowcount="filteredDashboardWorkspaceRows.length + 1"
           :aria-colcount="dashboardMetricRows.length + 6"
+          @scroll.passive="handleDashboardCompareScroll"
         >
           <div
             class="dash-compare-row is-head"
@@ -253,98 +287,102 @@
             </div>
           </div>
 
-          <div
-            v-for="row in displayedWorkspaceRows"
-            :key="row.workspaceId"
-            class="dash-compare-row"
-            role="row"
-            :class="{ selected: row.workspaceId === selectedWorkspaceId }"
-            :aria-selected="row.workspaceId === selectedWorkspaceId"
-            :style="{ gridTemplateColumns: compareColumnsTemplate }"
-          >
-            <div role="rowheader" class="dash-compare-cell is-workspace">
-              <button
-                type="button"
-                class="dash-cell-action"
-                :aria-label="`Select workspace ${row.workspaceId}`"
-                @click="selectWorkspace(row.workspaceId)"
-              >
-                <i
-                  class="dash-status-dot"
-                  :class="dashboardToneClass(row.statusTone)"
-                  :title="row.statusLabel"
-                  aria-hidden="true"
-                ></i>
-                <span class="dash-workspace-id">{{ row.workspaceId }}</span>
-                <em v-if="row.isRecommended" class="dash-badge is-best">best</em>
-                <em v-if="row.isBaseline" class="dash-badge is-baseline">base</em>
-              </button>
-            </div>
-            <div role="gridcell" class="dash-compare-cell is-progress">
-              <span class="dash-progress-value">{{ row.stepsLabel }}</span>
-              <span class="dash-minibar" aria-hidden="true">
-                <i :style="{ width: `${row.stepsPercent}%` }"></i>
-              </span>
-            </div>
+          <div class="dash-compare-virtual-body" :style="dashboardVirtualBodyStyle">
             <div
-              role="gridcell"
-              class="dash-compare-cell is-score"
-              :class="dashboardToneClass(row.scoreTone)"
+              v-for="entry in visibleDashboardWorkspaceRows"
+              :key="entry.row.workspaceId"
+              class="dash-compare-row is-virtual"
+              role="row"
+              :class="{ selected: entry.row.workspaceId === selectedWorkspaceId }"
+              :aria-selected="entry.row.workspaceId === selectedWorkspaceId"
+              :style="dashboardVirtualRowStyle(entry.index)"
             >
-              {{ row.score }}
-            </div>
-            <div
-              role="gridcell"
-              class="dash-compare-cell is-issues"
-              :title="issueCellTitle(row)"
-            >
-              <template v-if="row.analysisState === 'findings'">
-                <span
-                  class="dash-issue-count"
-                  :class="row.blockingCount > 0 ? 'is-critical' : 'is-neutral'"
-                  >{{ row.blockingCount }}</span
+              <template v-for="row in [entry.row]" :key="row.workspaceId">
+                <div role="rowheader" class="dash-compare-cell is-workspace">
+                  <button
+                    type="button"
+                    class="dash-cell-action"
+                    :aria-label="`Select workspace ${row.workspaceId}`"
+                    @click="selectWorkspace(row.workspaceId)"
+                  >
+                    <i
+                      class="dash-status-dot"
+                      :class="dashboardToneClass(row.statusTone)"
+                      :title="row.statusLabel"
+                      aria-hidden="true"
+                    ></i>
+                    <span class="dash-workspace-id">{{ row.workspaceId }}</span>
+                    <em v-if="row.isRecommended" class="dash-badge is-best">best</em>
+                    <em v-if="row.isBaseline" class="dash-badge is-baseline">base</em>
+                  </button>
+                </div>
+                <div role="gridcell" class="dash-compare-cell is-progress">
+                  <span class="dash-progress-value">{{ row.stepsLabel }}</span>
+                  <span class="dash-minibar" aria-hidden="true">
+                    <i :style="{ width: `${row.stepsPercent}%` }"></i>
+                  </span>
+                </div>
+                <div
+                  role="gridcell"
+                  class="dash-compare-cell is-score"
+                  :class="dashboardToneClass(row.scoreTone)"
                 >
-                <span class="dash-issue-total">/{{ row.findingCount }}</span>
+                  {{ row.score }}
+                </div>
+                <div
+                  role="gridcell"
+                  class="dash-compare-cell is-issues"
+                  :title="issueCellTitle(row)"
+                >
+                  <template v-if="row.analysisState === 'findings'">
+                    <span
+                      class="dash-issue-count"
+                      :class="row.blockingCount > 0 ? 'is-critical' : 'is-neutral'"
+                      >{{ row.blockingCount }}</span
+                    >
+                    <span class="dash-issue-total">/{{ row.findingCount }}</span>
+                  </template>
+                  <span
+                    v-else
+                    class="dash-issue-count"
+                    :class="{
+                      'is-clean': row.analysisState === 'clean',
+                      'is-neutral': row.analysisState !== 'clean',
+                    }"
+                    >{{ row.analysisLabel }}</span
+                  >
+                </div>
+                <div
+                  role="gridcell"
+                  class="dash-compare-cell is-signoff"
+                  :class="dashboardToneClass(row.signoffTone)"
+                >
+                  {{ row.signoffLabel }}
+                </div>
+                <div
+                  v-for="cell in row.cells"
+                  :key="`${row.workspaceId}-${cell.metric.id}`"
+                  role="gridcell"
+                  class="dash-compare-cell is-metric"
+                  :class="[
+                    metricValueClass(cell.point.state),
+                    { 'is-sparse': !metricHasComparableData(cell.metric) },
+                  ]"
+                  :title="metricCellTitle(row.workspaceId, cell.metric.label, cell.point)"
+                >
+                  {{ cell.point.label }}
+                </div>
+                <div role="gridcell" class="dash-compare-cell is-action">
+                  <button
+                    type="button"
+                    class="dash-drill-action"
+                    :aria-label="`Debug ${row.workspaceId} in Step Analysis`"
+                    @click="drillDown(row.workspaceId, null)"
+                  >
+                    Debug
+                  </button>
+                </div>
               </template>
-              <span
-                v-else
-                class="dash-issue-count"
-                :class="{
-                  'is-clean': row.analysisState === 'clean',
-                  'is-neutral': row.analysisState !== 'clean',
-                }"
-                >{{ row.analysisLabel }}</span
-              >
-            </div>
-            <div
-              role="gridcell"
-              class="dash-compare-cell is-signoff"
-              :class="dashboardToneClass(row.signoffTone)"
-            >
-              {{ row.signoffLabel }}
-            </div>
-            <div
-              v-for="cell in row.cells"
-              :key="`${row.workspaceId}-${cell.metric.id}`"
-              role="gridcell"
-              class="dash-compare-cell is-metric"
-              :class="[
-                metricValueClass(cell.point.state),
-                { 'is-sparse': !metricHasComparableData(cell.metric) },
-              ]"
-              :title="metricCellTitle(row.workspaceId, cell.metric.label, cell.point)"
-            >
-              {{ cell.point.label }}
-            </div>
-            <div role="gridcell" class="dash-compare-cell is-action">
-              <button
-                type="button"
-                class="dash-drill-action"
-                :aria-label="`Debug ${row.workspaceId} in Step Analysis`"
-                @click="drillDown(row.workspaceId, null)"
-              >
-                Debug
-              </button>
             </div>
           </div>
         </div>
@@ -452,7 +490,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import ProjectQorScoreChart from '@/components/ProjectQorScoreChart.vue'
 import ProjectStepAnalysisPanel from '@/components/ProjectStepAnalysisPanel.vue'
 import {
@@ -489,6 +527,9 @@ import {
 type AnalysisTab = 'dashboard' | 'step'
 
 const ATTENTION_PREVIEW_COUNT = 6
+const DASHBOARD_ROW_HEIGHT = 39
+const DASHBOARD_VIRTUAL_VIEWPORT_HEIGHT = 390
+const DASHBOARD_VIRTUAL_OVERSCAN = 5
 
 const FIXED_COMPARE_COLUMNS = [
   { key: 'workspace', label: 'Workspace' },
@@ -527,6 +568,10 @@ const emit = defineEmits<{
 const dashboardSort = ref<MetricTableSortState | null>(null)
 const attentionExpanded = ref(false)
 const baselineConfirmId = ref<string | null>(null)
+const dashboardWorkspaceQuery = ref('')
+const dashboardAttentionOnly = ref(false)
+const dashboardCompareScrollTop = ref(0)
+const dashboardCompareTable = ref<HTMLElement | null>(null)
 
 const hasProjectData = computed(() => props.project.workspaces.length > 0)
 const analysisSubtitle = computed(() => {
@@ -583,9 +628,59 @@ const workspaceRows = computed(() =>
     props.project.bestWorkspaceId,
   ),
 )
-const displayedWorkspaceRows = computed(() =>
+const sortedDashboardWorkspaceRows = computed(() =>
   sortDashboardWorkspaceRows(workspaceRows.value, dashboardSort.value),
 )
+const filteredDashboardWorkspaceRows = computed(() => {
+  const query = dashboardWorkspaceQuery.value.trim().toLocaleLowerCase()
+  return sortedDashboardWorkspaceRows.value.filter((row) => {
+    if (dashboardAttentionOnly.value && row.analysisState !== 'findings') return false
+    if (!query) return true
+    return [
+      row.workspaceId,
+      row.workspaceName,
+      row.statusLabel,
+      row.analysisLabel,
+      row.signoffLabel,
+    ]
+      .join(' ')
+      .toLocaleLowerCase()
+      .includes(query)
+  })
+})
+const dashboardVirtualWindowStart = computed(() =>
+  Math.max(
+    0,
+    Math.floor(dashboardCompareScrollTop.value / DASHBOARD_ROW_HEIGHT) -
+      DASHBOARD_VIRTUAL_OVERSCAN,
+  ),
+)
+const dashboardVirtualWindowEnd = computed(() =>
+  Math.min(
+    filteredDashboardWorkspaceRows.value.length,
+    dashboardVirtualWindowStart.value +
+      Math.ceil(DASHBOARD_VIRTUAL_VIEWPORT_HEIGHT / DASHBOARD_ROW_HEIGHT) +
+      DASHBOARD_VIRTUAL_OVERSCAN * 2,
+  ),
+)
+const visibleDashboardWorkspaceRows = computed(() =>
+  filteredDashboardWorkspaceRows.value
+    .slice(dashboardVirtualWindowStart.value, dashboardVirtualWindowEnd.value)
+    .map((row, offset) => ({
+      row,
+      index: dashboardVirtualWindowStart.value + offset,
+    })),
+)
+const dashboardVirtualBodyStyle = computed(() => ({
+  height: `${filteredDashboardWorkspaceRows.value.length * DASHBOARD_ROW_HEIGHT}px`,
+}))
+const dashboardWorkspaceResultLabel = computed(() => {
+  const shown = filteredDashboardWorkspaceRows.value.length
+  const total = workspaceRows.value.length
+  return shown === total
+    ? `${total} workspaces · sort any column`
+    : `${shown} of ${total} workspaces`
+})
 const compareColumnsTemplate = computed(() =>
   dashboardGridTemplate(dashboardMetricRows.value),
 )
@@ -626,6 +721,34 @@ const canSetBaseline = computed(
   () =>
     Boolean(props.selectedWorkspaceId) &&
     props.selectedWorkspaceId !== props.project.qorTrendSummary.baselineWorkspaceId,
+)
+
+watch([dashboardWorkspaceQuery, dashboardAttentionOnly, dashboardSort], () => {
+  dashboardCompareScrollTop.value = 0
+  if (dashboardCompareTable.value) dashboardCompareTable.value.scrollTop = 0
+})
+
+watch(
+  [filteredDashboardWorkspaceRows, () => props.selectedWorkspaceId],
+  async ([rows]) => {
+    const selectedIndex = rows.findIndex(
+      (row) => row.workspaceId === props.selectedWorkspaceId,
+    )
+    if (selectedIndex < 0) return
+    await nextTick()
+    const container = dashboardCompareTable.value
+    if (!container) return
+    const selectedTop = selectedIndex * DASHBOARD_ROW_HEIGHT
+    const selectedBottom = selectedTop + DASHBOARD_ROW_HEIGHT
+    const viewportTop = container.scrollTop
+    const viewportBottom =
+      viewportTop + (container.clientHeight || DASHBOARD_VIRTUAL_VIEWPORT_HEIGHT)
+    if (selectedTop < viewportTop || selectedBottom > viewportBottom) {
+      container.scrollTop = Math.max(0, selectedTop - DASHBOARD_ROW_HEIGHT)
+      dashboardCompareScrollTop.value = container.scrollTop
+    }
+  },
+  { flush: 'post' },
 )
 const setBaselineTitle = computed(() =>
   canSetBaseline.value
@@ -675,6 +798,22 @@ function sortIconClass(direction: MetricTableSortDirection): string {
 
 function toggleDashboardSort(key: MetricTableSortKey): void {
   dashboardSort.value = nextMetricSortState(dashboardSort.value, key)
+}
+
+function handleDashboardCompareScroll(event: Event): void {
+  dashboardCompareScrollTop.value = (event.currentTarget as HTMLElement).scrollTop
+}
+
+function dashboardVirtualRowStyle(index: number): Record<string, string> {
+  return {
+    gridTemplateColumns: compareColumnsTemplate.value,
+    transform: `translateY(${index * DASHBOARD_ROW_HEIGHT}px)`,
+  }
+}
+
+function resetDashboardWorkspaceFilters(): void {
+  dashboardWorkspaceQuery.value = ''
+  dashboardAttentionOnly.value = false
 }
 
 /** Hands the user from the overview to the detail view already pointed at the finding. */

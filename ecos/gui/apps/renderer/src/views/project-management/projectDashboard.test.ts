@@ -26,8 +26,8 @@ describe('buildDashboardHealth', () => {
   it('summarizes flow progress, run states, and readiness coverage', () => {
     const health = buildDashboardHealth(dashboardSummaryFixture())
 
-    expect(health.stepsLabel).toBe('8/12')
-    expect(health.stepsPercent).toBe(67)
+    expect(health.flowLabel).toBe('2/3')
+    expect(health.stepsNote).toBe('4 of 12 steps left')
     expect(health.runSegments.map((segment) => segment.state)).toEqual([
       'success',
       'failed',
@@ -72,12 +72,48 @@ describe('buildDashboardHealth', () => {
     expect(health.checks[0].hint).toBe('Workspaces reporting zero DRC violations')
   })
 
-  it('avoids dividing by zero when the project has no configured steps', () => {
+  // The headline counts workspaces, matching the checks beside it, because a step-cell
+  // total cannot tell one stalled workspace apart from many that are each one step short.
+  it('counts flow progress in workspaces rather than step cells', () => {
     const health = buildDashboardHealth(
-      dashboardSummaryFixture({ configuredStepCount: 0, successStepCount: 0 }),
+      dashboardSummaryFixture({
+        workspaceCount: 50,
+        flowCompleteWorkspaceCount: 47,
+        configuredStepCount: 600,
+        successStepCount: 583,
+      }),
     )
 
-    expect(health.stepsPercent).toBe(0)
+    expect(health.flowLabel).toBe('47/50')
+    expect(health.stepsNote).toBe('17 of 600 steps left')
+  })
+
+  it('drops the step note once nothing is left to run', () => {
+    const health = buildDashboardHealth(
+      dashboardSummaryFixture({
+        workspaceCount: 50,
+        flowCompleteWorkspaceCount: 50,
+        configuredStepCount: 600,
+        successStepCount: 600,
+      }),
+    )
+
+    expect(health.flowLabel).toBe('50/50')
+    expect(health.stepsNote).toBeNull()
+  })
+
+  it('reports no progress rather than dividing by zero without configured steps', () => {
+    const health = buildDashboardHealth(
+      dashboardSummaryFixture({
+        workspaceCount: 3,
+        flowCompleteWorkspaceCount: 0,
+        configuredStepCount: 0,
+        successStepCount: 0,
+      }),
+    )
+
+    expect(health.flowLabel).toBe('0/3')
+    expect(health.stepsNote).toBeNull()
   })
 })
 
