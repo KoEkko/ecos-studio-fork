@@ -84,12 +84,52 @@
               aria-label="Project list"
             >
               <article
-                v-for="project in projectCards"
+                v-for="project in visibleProjectCards"
                 :key="project.source.id"
                 class="project-workspace-tree"
-                :class="{ selected: project.model.id === selectedProjectId }"
+                :class="{
+                  selected: project.model.id === selectedProjectId,
+                  collapsed:
+                    project.model.id === selectedProjectId &&
+                    !projectWorkspaceListExpanded(project.model.id),
+                }"
               >
                 <div class="project-tree-row-shell">
+                  <button
+                    v-if="
+                      project.model.id === selectedProjectId &&
+                      project.model.workspaces.length > 0
+                    "
+                    type="button"
+                    class="circle-action project-collapse-toggle"
+                    :aria-expanded="projectWorkspaceListExpanded(project.model.id)"
+                    :aria-controls="projectWorkspaceListId(project.model.id)"
+                    :aria-label="
+                      projectWorkspaceListExpanded(project.model.id)
+                        ? `Collapse workspaces for ${project.model.name}`
+                        : `Expand workspaces for ${project.model.name}`
+                    "
+                    :title="
+                      projectWorkspaceListExpanded(project.model.id)
+                        ? 'Collapse workspaces'
+                        : 'Expand workspaces'
+                    "
+                    @click="toggleProjectWorkspaceList(project.model.id)"
+                  >
+                    <i
+                      :class="
+                        projectWorkspaceListExpanded(project.model.id)
+                          ? 'ri-arrow-down-s-line'
+                          : 'ri-arrow-right-s-line'
+                      "
+                      aria-hidden="true"
+                    ></i>
+                  </button>
+                  <span
+                    v-else
+                    class="project-tree-disclosure-spacer"
+                    aria-hidden="true"
+                  ></span>
                   <button
                     type="button"
                     class="resource-row project-tree-row mockup-project-row"
@@ -158,14 +198,18 @@
 
                 <div
                   v-if="
-                    project.model.id === selectedProjectId &&
+                    projectWorkspaceListExpanded(project.model.id) &&
                     project.model.workspaces.length > 0
                   "
+                  :id="projectWorkspaceListId(project.model.id)"
                   class="workspace-tree-list"
+                  :class="{
+                    'has-preview-control': workspaceListCanToggle(project.model),
+                  }"
                   aria-label="Project workspaces"
                 >
                   <div
-                    v-for="workspace in project.model.workspaces"
+                    v-for="workspace in visibleProjectWorkspaces(project.model)"
                     :key="workspace.id"
                     class="workspace-tree-item"
                     :class="flowStatusHintClass(workspace.flowStatusHint.state)"
@@ -284,10 +328,39 @@
                       </button>
                     </div>
                   </div>
+                  <button
+                    v-if="workspaceListCanToggle(project.model)"
+                    type="button"
+                    class="list-preview-toggle workspace-list-preview-toggle"
+                    :aria-expanded="workspacePreviewShowsAll(project.model.id)"
+                    :aria-label="
+                      workspacePreviewShowsAll(project.model.id)
+                        ? `Show fewer workspaces in ${project.model.name}`
+                        : `Show all ${project.model.workspaces.length} workspaces in ${project.model.name}`
+                    "
+                    @click="toggleWorkspacePreview(project.model.id)"
+                  >
+                    <i
+                      :class="
+                        workspacePreviewShowsAll(project.model.id)
+                          ? 'ri-arrow-up-s-line'
+                          : 'ri-arrow-down-s-line'
+                      "
+                      aria-hidden="true"
+                    ></i>
+                    <span>{{
+                      workspacePreviewShowsAll(project.model.id)
+                        ? 'Show fewer workspaces'
+                        : `Show all ${project.model.workspaces.length} workspaces`
+                    }}</span>
+                  </button>
                 </div>
 
                 <div
-                  v-else-if="project.model.id === selectedProjectId"
+                  v-else-if="
+                    projectWorkspaceListExpanded(project.model.id) &&
+                    project.model.id === selectedProjectId
+                  "
                   class="workspace-tree-empty"
                 >
                   <strong>No workspaces yet</strong>
@@ -310,6 +383,31 @@
                   </div>
                 </div>
               </article>
+
+              <button
+                v-if="projectListCanToggle"
+                type="button"
+                class="list-preview-toggle project-list-preview-toggle"
+                :aria-expanded="projectPreviewShowsAll"
+                :aria-label="
+                  projectPreviewShowsAll
+                    ? 'Show fewer projects'
+                    : `Show all ${projectCards.length} projects`
+                "
+                @click="projectPreviewShowsAll = !projectPreviewShowsAll"
+              >
+                <i
+                  :class="
+                    projectPreviewShowsAll ? 'ri-arrow-up-s-line' : 'ri-arrow-down-s-line'
+                  "
+                  aria-hidden="true"
+                ></i>
+                <span>{{
+                  projectPreviewShowsAll
+                    ? 'Show fewer projects'
+                    : `Show all ${projectCards.length} projects`
+                }}</span>
+              </button>
 
               <div v-if="projectCards.length === 0" class="empty-state">
                 <template v-if="searchQuery.trim()">
@@ -618,6 +716,7 @@ import { useRouter } from 'vue-router'
 import type { Project, ProjectStatus } from '../types'
 import { useWorkspace } from '../composables/useWorkspace'
 import ProjectAnalysisPanel from './project-management/ProjectAnalysisPanel.vue'
+import { previewList } from './project-management/projectListPreview'
 import {
   readProjectWorkspaceAnalysisInputs,
   readProjectWorkspaceFlowStates,
@@ -653,6 +752,10 @@ import { serializeProjectQorTrendReport } from '@/utils/projectQorTrend'
 
 type BranchDraft = WorkspaceBranchDraft
 type ModalId = 'new-project' | 'workspace-draft' | 'delete-workspace' | 'delete-project'
+type ProjectCard = { source: Project; model: ProjectManagementProject }
+
+const PROJECT_PREVIEW_LIMIT = 20
+const WORKSPACE_PREVIEW_LIMIT = 20
 
 const router = useRouter()
 const { openProject, showToast } = useWorkspace()
@@ -660,6 +763,9 @@ const { openProject, showToast } = useWorkspace()
 const searchQuery = ref('')
 const selectedProjectId = ref<string | null>(null)
 const selectedWorkspaceId = ref('')
+const collapsedProjectIds = ref<Set<string>>(new Set())
+const workspacePreviewProjectIds = ref<Set<string>>(new Set())
+const projectPreviewShowsAll = ref(false)
 const selectedStep = ref<FlowStep>('DRC')
 const selectedIssueMetric = ref<string | null>(null)
 const selectedAnalysisTab = ref<'dashboard' | 'step'>('dashboard')
@@ -732,7 +838,7 @@ watch(activeModal, async (modal, previousModal) => {
   if (trigger?.isConnected) trigger.focus()
 })
 
-const projectCards = computed(() => {
+const projectCards = computed<ProjectCard[]>(() => {
   const query = searchQuery.value.trim().toLowerCase()
   const cards = [...projectSources.value]
     .sort(
@@ -753,10 +859,20 @@ const projectCards = computed(() => {
   return cards.filter((project) => projectCardMatchesSearch(project, query))
 })
 
-function projectCardMatchesSearch(
-  project: { source: Project; model: ProjectManagementProject },
-  query: string,
-): boolean {
+const searchShowsAll = computed(() => Boolean(searchQuery.value.trim()))
+const visibleProjectCards = computed(() =>
+  previewList(projectCards.value, {
+    limit: PROJECT_PREVIEW_LIMIT,
+    showAll: searchShowsAll.value || projectPreviewShowsAll.value,
+    selectedId: selectedProjectId.value,
+    getId: (project) => project.model.id,
+  }),
+)
+const projectListCanToggle = computed(
+  () => !searchShowsAll.value && projectCards.value.length > PROJECT_PREVIEW_LIMIT,
+)
+
+function projectCardMatchesSearch(project: ProjectCard, query: string): boolean {
   const projectFields = [
     project.source.name,
     project.source.path,
@@ -867,9 +983,68 @@ watch(projectSources, () => {
 
 function selectProject(projectId: string) {
   selectedProjectId.value = projectId
+  expandProjectWorkspaceList(projectId)
   branchDraft.value = null
   popoverWorkspaceId.value = ''
   closeRowActionMenus()
+}
+
+function workspacePreviewShowsAll(projectId: string): boolean {
+  return searchShowsAll.value || workspacePreviewProjectIds.value.has(projectId)
+}
+
+function visibleProjectWorkspaces(project: ProjectManagementProject): ProjectWorkspace[] {
+  return previewList(project.workspaces, {
+    limit: WORKSPACE_PREVIEW_LIMIT,
+    showAll: workspacePreviewShowsAll(project.id),
+    selectedId:
+      project.id === selectedProjectId.value ? selectedWorkspaceId.value || null : null,
+    getId: (workspace) => workspace.id,
+  })
+}
+
+function workspaceListCanToggle(project: ProjectManagementProject): boolean {
+  return !searchShowsAll.value && project.workspaces.length > WORKSPACE_PREVIEW_LIMIT
+}
+
+function toggleWorkspacePreview(projectId: string): void {
+  const expanded = new Set(workspacePreviewProjectIds.value)
+  if (expanded.has(projectId)) {
+    expanded.delete(projectId)
+  } else {
+    expanded.add(projectId)
+  }
+  workspacePreviewProjectIds.value = expanded
+}
+
+function projectWorkspaceListExpanded(projectId: string): boolean {
+  return (
+    projectId === selectedProjectId.value && !collapsedProjectIds.value.has(projectId)
+  )
+}
+
+function projectWorkspaceListId(projectId: string): string {
+  return `project-workspaces-${projectId.replace(/[^a-zA-Z0-9_-]/g, '-')}`
+}
+
+function expandProjectWorkspaceList(projectId: string): void {
+  if (!collapsedProjectIds.value.has(projectId)) return
+  const expanded = new Set(collapsedProjectIds.value)
+  expanded.delete(projectId)
+  collapsedProjectIds.value = expanded
+}
+
+function toggleProjectWorkspaceList(projectId: string): void {
+  const collapsed = new Set(collapsedProjectIds.value)
+  if (collapsed.has(projectId)) {
+    collapsed.delete(projectId)
+  } else {
+    collapsed.add(projectId)
+    popoverWorkspaceId.value = ''
+    branchDraft.value = null
+    closeRowActionMenus()
+  }
+  collapsedProjectIds.value = collapsed
 }
 
 function writeFailureDetail(fileName: string, error: unknown): string {

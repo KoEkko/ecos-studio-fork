@@ -103,6 +103,28 @@ describe('ProjectsView project management surface', () => {
     expect(projectStyles).toContain('overflow: visible;')
   })
 
+  it('caps long project and workspace lists without hiding the active selection', () => {
+    expect(source).toContain('v-for="project in visibleProjectCards"')
+    expect(source).toContain('visibleProjectWorkspaces(project.model)')
+    expect(source).toContain('const PROJECT_PREVIEW_LIMIT = 20')
+    expect(source).toContain('const WORKSPACE_PREVIEW_LIMIT = 20')
+    expect(source).toContain('const projectPreviewShowsAll = ref(false)')
+    expect(source).toContain(
+      'const workspacePreviewProjectIds = ref<Set<string>>(new Set())',
+    )
+    expect(source).toContain('previewList(projectCards.value')
+    expect(source).toContain('selectedId: selectedProjectId.value')
+    expect(normalizedSource).toContain(
+      'selectedId: project.id === selectedProjectId.value ? selectedWorkspaceId.value || null : null',
+    )
+    expect(source).toContain('Show all ${projectCards.length} projects')
+    expect(source).toContain('Show all ${project.model.workspaces.length} workspaces')
+    expect(source).toContain('class="list-preview-toggle project-list-preview-toggle"')
+    expect(source).toContain('class="list-preview-toggle workspace-list-preview-toggle"')
+    expect(projectStyles).toContain('.workspace-tree-list.has-preview-control::before')
+    expect(projectStyles).toContain('.list-preview-toggle')
+  })
+
   it('provides a maximize toggle for the project management dialog', () => {
     expect(source).toContain(':class="{ maximized: isDialogMaximized }"')
     expect(source).toContain('toggleDialogMaximized')
@@ -141,6 +163,32 @@ describe('ProjectsView project management surface', () => {
     expect(projectStyles).not.toContain('.project-tree-row:hover .row-action-secondary')
   })
 
+  it('lets the selected project collapse its workspace list without hiding its summary', () => {
+    expect(source).toContain('class="circle-action project-collapse-toggle"')
+    expect(source).toContain('projectWorkspaceListExpanded(project.model.id)')
+    expect(source).toContain('toggleProjectWorkspaceList(project.model.id)')
+    expect(source).toContain('projectWorkspaceListId(project.model.id)')
+    expect(source).toContain('Collapse workspaces')
+    expect(source).toContain('Expand workspaces')
+    expect(source).toContain('ri-arrow-down-s-line')
+    expect(source).toContain('ri-arrow-right-s-line')
+    expect(source).toContain('const collapsedProjectIds = ref<Set<string>>(new Set())')
+    expect(source).toContain('expandProjectWorkspaceList(projectId)')
+    expect(projectStyles).toContain('.project-workspace-tree.selected.collapsed')
+    expect(projectStyles).toContain(".project-collapse-toggle[aria-expanded='true']")
+    expect(source).toContain('class="project-tree-disclosure-spacer"')
+    const treeShellStart = source.indexOf('class="project-tree-row-shell"')
+    const disclosureStart = source.indexOf(
+      'class="circle-action project-collapse-toggle"',
+    )
+    const projectRowStart = source.indexOf(
+      'class="resource-row project-tree-row mockup-project-row"',
+    )
+    expect(disclosureStart).toBeGreaterThan(treeShellStart)
+    expect(disclosureStart).toBeLessThan(projectRowStart)
+    expect(projectStyles).toContain('grid-template-columns: 24px minmax(0, 1fr) auto;')
+  })
+
   it('keeps explicit Import and New Project commands in the Projects list header', () => {
     const titleStart = source.indexOf('class="project-list-toolbar"')
     const titleEnd = source.indexOf('</div>\n            <div', titleStart)
@@ -161,7 +209,9 @@ describe('ProjectsView project management surface', () => {
   })
 
   it('renders keyboard-reachable workspace selection and separate row actions', () => {
-    expect(source).toContain('v-for="workspace in project.model.workspaces"')
+    expect(source).toContain(
+      'v-for="workspace in visibleProjectWorkspaces(project.model)"',
+    )
     expect(source).toContain('workspaceDepthStyle(workspace)')
     expect(source).toContain('workspace.flowStatusHint.label')
     expect(source).toContain('flowStatusHintClass(workspace.flowStatusHint.state)')

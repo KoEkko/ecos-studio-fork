@@ -259,6 +259,39 @@
   overflow: visible;
 }
 
+.list-preview-toggle {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px dashed color-mix(in srgb, var(--border-color) 86%, transparent);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-primary) 46%, transparent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.list-preview-toggle:hover,
+.list-preview-toggle:focus-visible {
+  border-color: color-mix(in srgb, var(--accent-color) 62%, var(--border-color));
+  color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 8%, var(--bg-primary));
+  outline: none;
+}
+
+.list-preview-toggle i {
+  font-size: 13px;
+}
+
+.project-list-preview-toggle {
+  width: 100%;
+  margin-top: 2px;
+}
+
 .project-workspace-tree {
   position: relative;
   display: grid;
@@ -275,13 +308,29 @@
   box-shadow: none;
 }
 
-.project-tree-row-shell,
+.project-workspace-tree.selected.collapsed {
+  padding-bottom: 8px;
+}
+
+.project-tree-row-shell {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .workspace-tree-row-shell {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
   min-width: 0;
+}
+
+.project-tree-disclosure-spacer {
+  width: 24px;
+  height: 24px;
 }
 
 .project-tree-row {
@@ -302,6 +351,12 @@
   justify-content: flex-end;
   gap: 5px;
   min-width: 58px;
+}
+
+.project-collapse-toggle[aria-expanded='true'] {
+  color: var(--accent-color);
+  border-color: color-mix(in srgb, var(--accent-color) 44%, transparent);
+  background: color-mix(in srgb, var(--accent-color) 8%, var(--bg-primary));
 }
 
 .row-primary-action {
@@ -503,6 +558,14 @@
   width: 1.3px;
   background: color-mix(in srgb, var(--text-secondary) 30%, transparent);
   content: '';
+}
+
+.workspace-tree-list.has-preview-control::before {
+  bottom: 44px;
+}
+
+.workspace-list-preview-toggle {
+  margin-top: 2px;
 }
 
 .workspace-tree-item {
