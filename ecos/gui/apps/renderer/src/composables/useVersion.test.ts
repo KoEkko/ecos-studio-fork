@@ -102,9 +102,6 @@ function createDesktopBridge(getVersions: DesktopApi['app']['getVersions']) {
       addDesignFiles: async () => ({ added: [], skipped: [] }),
       removeDesignFile: async () => null,
     },
-    layoutViewer: {
-      open: async () => ({ layoutPackagePath: '', packageRoot: '', spawned: true }),
-    },
     workspaceResources: {
       getIndex: async () => ({
         design: '',
@@ -220,6 +217,13 @@ function createDesktopBridge(getVersions: DesktopApi['app']['getVersions']) {
       kill: async () => undefined,
       onData: () => () => undefined,
       onExit: () => () => undefined,
+    },
+    chipViewer: {
+      open: async () => ({
+        geometryManifestPath: '/tmp/geometry/geometry.manifest',
+        spawned: true,
+        workspaceStepDirectory: '/tmp/Floorplan_ecc',
+      }),
     },
   } satisfies DesktopApi
 }

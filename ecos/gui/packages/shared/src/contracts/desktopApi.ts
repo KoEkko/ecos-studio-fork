@@ -131,15 +131,17 @@ export interface DesktopProjectDirectoryEntry {
   type: 'file' | 'directory'
 }
 
-export interface LayoutViewerOpenRequest {
+export interface ChipViewerOpenRequest {
   projectPath: string
-  viewJsonPackageRoot: string
-  rebuildPackage?: boolean
+  step: string
+  mode?: 'view' | 'edit'
 }
 
-export interface LayoutViewerOpenResult {
-  packageRoot: string
-  layoutPackagePath: string
+export interface ChipViewerOpenResult {
+  editCommandDirectory?: string
+  editResultDirectory?: string
+  geometryManifestPath: string
+  workspaceStepDirectory: string
   spawned: boolean
 }
 
@@ -248,8 +250,8 @@ export interface DesktopApi {
       listener: (event: DesktopProjectFileChangedEvent) => void,
     ): Promise<DesktopEventUnsubscribe>
   }
-  layoutViewer: {
-    open(request: LayoutViewerOpenRequest): Promise<LayoutViewerOpenResult>
+  chipViewer: {
+    open(request: ChipViewerOpenRequest): Promise<ChipViewerOpenResult>
   }
   workspaceResources: {
     getIndex(): Promise<WorkspaceResourceIndex>

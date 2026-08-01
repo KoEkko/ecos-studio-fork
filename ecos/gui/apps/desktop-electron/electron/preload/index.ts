@@ -9,7 +9,7 @@ import type {
   EccRuntimeEvent,
   DesktopFileDialogOptions,
   DesktopRtlSourceDialogOptions,
-  LayoutViewerOpenRequest,
+  ChipViewerOpenRequest,
   DesktopMenuEventId,
   DesktopProjectFileChangedEvent,
   DesktopProjectLogTailEvent,
@@ -266,9 +266,9 @@ const desktopApi: DesktopApi = {
       }
     },
   },
-  layoutViewer: {
-    open: (request: LayoutViewerOpenRequest) =>
-      invokeDesktop(desktopApiIpcChannels.layoutViewerOpen, request),
+  chipViewer: {
+    open: (request: ChipViewerOpenRequest) =>
+      invokeDesktop(desktopApiIpcChannels.chipViewerOpen, request),
   },
   workspaceResources: {
     getIndex: () => invokeDesktop(desktopApiIpcChannels.workspaceResourcesGetIndex),

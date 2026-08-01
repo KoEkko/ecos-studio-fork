@@ -134,9 +134,6 @@ const desktopBridge = {
     addDesignFiles: async () => ({ added: [], skipped: [] }),
     removeDesignFile: async () => null,
   },
-  layoutViewer: {
-    open: async () => ({ layoutPackagePath: '', packageRoot: '', spawned: true }),
-  },
   workspaceResources: {
     getIndex: async () => ({
       design: '',
@@ -246,6 +243,13 @@ const desktopBridge = {
     kill: async () => undefined,
     onData: () => () => undefined,
     onExit: () => () => undefined,
+  },
+  chipViewer: {
+    open: async () => ({
+      geometryManifestPath: '/tmp/geometry/geometry.manifest',
+      spawned: true,
+      workspaceStepDirectory: '/tmp/Floorplan_ecc',
+    }),
   },
 } satisfies DesktopApi
 

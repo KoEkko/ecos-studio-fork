@@ -34,8 +34,8 @@ import {
   type DesktopProjectTextFileTail,
   type DesktopProjectTextFileUpdate,
   type DesktopSettingsValue,
-  type LayoutViewerOpenRequest,
-  type LayoutViewerOpenResult,
+  type ChipViewerOpenRequest,
+  type ChipViewerOpenResult,
   type RemoteContentFile,
   type RemoteContentListFilesRequest,
   type RemoteContentReadJsonFileRequest,
@@ -164,8 +164,8 @@ export interface DesktopBridgeServices {
     writeProjectTextFile(path: string, content: string): Promise<void>
     listProjectDirectory(path: string): Promise<DesktopProjectDirectoryEntry[]>
   }
-  layoutViewerService: {
-    open(request: LayoutViewerOpenRequest): Promise<LayoutViewerOpenResult>
+  chipViewerService: {
+    open(request: ChipViewerOpenRequest): Promise<ChipViewerOpenResult>
   }
   workspaceResourceService: {
     getIndex(): Promise<WorkspaceResourceIndex>
@@ -1111,8 +1111,8 @@ export function registerIpc(
     },
   )
 
-  handle(desktopApiIpcChannels.layoutViewerOpen, async (_event, request) => {
-    return await services.layoutViewerService.open(request as LayoutViewerOpenRequest)
+  handle(desktopApiIpcChannels.chipViewerOpen, async (_event, request) => {
+    return await services.chipViewerService.open(request as ChipViewerOpenRequest)
   })
 
   handle(desktopApiIpcChannels.workspaceResourcesGetIndex, async () => {
