@@ -1,4 +1,4 @@
-import { computed, ref, shallowRef, watch, onUnmounted } from 'vue'
+import { computed, effectScope, ref, shallowRef, watch, type Ref } from 'vue'
 import { useWorkspace } from './useWorkspace'
 import { useDesktopRuntime } from './useDesktopRuntime'
 import {
@@ -15,11 +15,14 @@ import {
   readOptionalProjectTextFile,
   readOptionalProjectTextFileTail,
   readOptionalProjectTextFileUpdate,
+  assetGenerationKey,
   readProjectBlobUrl,
   readProjectTextFile,
+  statProjectFile,
   subscribeProjectLogTail,
   watchProjectFile,
 } from '@/utils/projectFiles'
+import { invalidateObservation } from '@/composables/workspace-observation/bus'
 import { requestProjectPathAccess, resolveProjectPathAccess } from '@/utils/projectFs'
 import { convertRemoteToLocalPath } from '@/utils/projectPaths'
 import { mergePlannedFlowLogSegments } from './flowLogSegmentPlan'
@@ -374,7 +377,7 @@ function currentFlowLogStepName(segments: FlowLogSegment[]): string {
   return ''
 }
 
-// ============ Home 资源（monitor / checklist / layout / metrics）模块级持久化 ============
+// ============ Home 资源（checklist / layout / metrics）模块级持久化 ============
 //
 // HomeView 不在 KeepAlive：原实现每次 mount 都会
 //   1) 重读 checklist.json
@@ -387,20 +390,29 @@ function currentFlowLogStepName(segments: FlowLogSegment[]): string {
 // Blob URL 的 revoke 从"onUnmounted"推迟到"被新 blob 替换 / 项目切换"，
 // 确保 remount 时 <img :src> 拿到的依旧是活的 URL。
 
-const monitorDataState = ref<MonitorData | null>(null)
 const checklistItemsState = ref<ChecklistItem[]>([])
 const layoutBlobUrlState = ref<string>('')
 const analysisChartsState = ref<AnalysisChartItem[]>([])
 const HOME_DATA_RESOURCE_VERSION_KEYS = ['home', 'flow', 'logs', 'all'] as const
+
+/**
+ * Read-only view of the loaded checklist. The bottom panel is mounted app-wide, so it
+ * must be able to render the checklist without calling `useHomeData()` — that would
+ * install Home's watchers and live file polling on every route.
+ */
+export function useSharedChecklistItems(): Readonly<Ref<ChecklistItem[]>> {
+  return checklistItemsState
+}
 
 /** 记录当前持有的 blob URL，替换 / 失效时用来 revoke */
 let _currentLayoutBlobUrl: string | null = null
 let _currentMetricsBlobUrls: string[] = []
 
 /** 上一次成功加载的源路径签名；命中时跳过整个 IO 流程 */
-let _loadedChecklistPath = ''
-let _loadedLayoutPath = ''
-let _loadedMetricsSignature = ''
+/** path@mtimeMs:size — path-only equality is NOT freshness. */
+let _loadedChecklistIdentity = ''
+let _loadedLayoutIdentity = ''
+let _loadedMetricsIdentity = ''
 let _loadedHomeResourceVersionSignature = ''
 let _rerunStartupWatchHandledForWorkspace = ''
 let _pendingRerunResetConfirmationWorkspace = ''
@@ -434,16 +446,6 @@ function homeMonitorSignature(monitor: MonitorData | null | undefined): string {
   )
 }
 
-function homeAssetSourceSignature(data: HomeData | null): string {
-  if (!data) return '__none__'
-  const metrics = homeMetricSourceEntries(data.metrics)
-  return JSON.stringify({
-    checklist: data.checklist ?? '',
-    layout: data.layout ?? '',
-    metrics,
-  })
-}
-
 function homeRerunContentSignature(data: HomeData | null): string {
   if (!data) return '__none__'
   return JSON.stringify({
@@ -458,10 +460,9 @@ function currentDisplayedHomeRerunContentSignature(): string {
   const sharedSignature = homeRerunContentSignature(sharedHomeData.value)
   if (sharedSignature !== '__none__') return sharedSignature
   return JSON.stringify({
-    checklist: _loadedChecklistPath,
-    layout: _loadedLayoutPath,
-    metrics: _loadedMetricsSignature,
-    monitor: homeMonitorSignature(monitorDataState.value),
+    checklist: _loadedChecklistIdentity,
+    layout: _loadedLayoutIdentity,
+    metrics: _loadedMetricsIdentity,
   })
 }
 
@@ -472,7 +473,7 @@ function invalidateLayoutCache(): void {
     _currentLayoutBlobUrl = null
   }
   layoutBlobUrlState.value = ''
-  _loadedLayoutPath = ''
+  _loadedLayoutIdentity = ''
 }
 
 function invalidateMetricsCache(): void {
@@ -481,12 +482,12 @@ function invalidateMetricsCache(): void {
   }
   _currentMetricsBlobUrls = []
   analysisChartsState.value = []
-  _loadedMetricsSignature = ''
+  _loadedMetricsIdentity = ''
 }
 
 function invalidateChecklistCache(): void {
   checklistItemsState.value = []
-  _loadedChecklistPath = ''
+  _loadedChecklistIdentity = ''
 }
 
 /** 项目切换 / 显式 reset 时一把梭 */
@@ -494,7 +495,6 @@ function invalidateHomeAssetCache(): void {
   invalidateLayoutCache()
   invalidateMetricsCache()
   invalidateChecklistCache()
-  monitorDataState.value = null
   _loadedHomeResourceVersionSignature = ''
 }
 
@@ -503,9 +503,13 @@ function invalidateHomeAssetCache(): void {
  * 但 blob URL / UI 展示保持不变，等新数据到位再平滑替换，避免闪白。
  */
 function markHomeAssetSignaturesStale(): void {
-  _loadedChecklistPath = ''
-  _loadedLayoutPath = ''
-  _loadedMetricsSignature = ''
+  _loadedChecklistIdentity = ''
+  _loadedLayoutIdentity = ''
+  _loadedMetricsIdentity = ''
+}
+
+export function markHomeAssetsStaleFromObservation(): void {
+  markHomeAssetSignaturesStale()
 }
 
 /**
@@ -759,20 +763,106 @@ export function resetSharedHomeDataProjectState() {
   invalidateHomeAssetCache()
 }
 
+// ============ Home observation controller（模块单例） ============
+//
+// Phase 0：watch/poll/tail 只绑定一次。多个 useHomeData() 调用共享同一控制器；
+// 组件卸载不得拆掉观测（那是多实例竞态的根因）。
+
+const homeIsLoading = ref(false)
+const homeError = ref<string | null>(null)
+
+/** flow log 渐进刷新会话：递增后旧异步回调全部失效 */
+let liveSession = 0
+let pollFlowJsonTimer: ReturnType<typeof setInterval> | null = null
+let pollHomeJsonTimer: ReturnType<typeof setInterval> | null = null
+let pollLogFallbackTimer: ReturnType<typeof setInterval> | null = null
+let unwatchFlowJsonFile: (() => void) | null = null
+let unwatchHomeJsonFile: (() => void) | null = null
+let unwatchParametersJsonFile: (() => void) | null = null
+let unwatchLogFile: (() => void) | null = null
+let liveLogPatchTimer: ReturnType<typeof setTimeout> | null = null
+let liveLogPatchInFlight = false
+let liveLogPatchQueued = false
+let liveProjectPath: string | null = null
+let liveHomeDataRefreshSession = 0
+let homeDataLoadSession = 0
+let lastOngoingKey: string | null = null
+let unregisterLiveLifecycleCleanup: (() => void) | null = null
+let unregisterHomeRunArtifactReset: (() => void) | null = null
+let homeObservationBound = false
+let homeObservationApi: ReturnType<typeof buildHomeObservationApi> | null = null
+/** Detached：不被任意组件 effectScope.stop() 拆掉。 */
+let homeObservationScope = effectScope(true)
+
+/**
+ * 测试用：拆掉 home 观测绑定，配合 vi.resetModules 之外的同模块复用场景。
+ * 生产路径不得调用。
+ */
+export function resetHomeObservationForTests(): void {
+  liveSession++
+  unregisterLiveLifecycleCleanup?.()
+  unregisterLiveLifecycleCleanup = null
+  unregisterHomeRunArtifactReset?.()
+  unregisterHomeRunArtifactReset = null
+  if (pollFlowJsonTimer) {
+    clearInterval(pollFlowJsonTimer)
+    pollFlowJsonTimer = null
+  }
+  if (pollHomeJsonTimer) {
+    clearInterval(pollHomeJsonTimer)
+    pollHomeJsonTimer = null
+  }
+  if (pollLogFallbackTimer) {
+    clearInterval(pollLogFallbackTimer)
+    pollLogFallbackTimer = null
+  }
+  if (liveLogPatchTimer) {
+    clearTimeout(liveLogPatchTimer)
+    liveLogPatchTimer = null
+  }
+  unwatchFlowJsonFile?.()
+  unwatchFlowJsonFile = null
+  unwatchHomeJsonFile?.()
+  unwatchHomeJsonFile = null
+  unwatchParametersJsonFile?.()
+  unwatchParametersJsonFile = null
+  unwatchLogFile?.()
+  unwatchLogFile = null
+  liveLogPatchInFlight = false
+  liveLogPatchQueued = false
+  liveProjectPath = null
+  lastOngoingKey = null
+  homeObservationBound = false
+  homeObservationApi = null
+  homeObservationScope.stop()
+  homeObservationScope = effectScope(true)
+}
+
 // ============ Composable ============
 
 /**
- * Home 页面数据管理 Hook
- * 负责从 home.json 加载监控数据、checklist、layout 图片
+ * Home 数据 facade。观测副作用由模块单例持有，见 ensureHomeObservationBound。
  */
 export function useHomeData() {
+  return ensureHomeObservationBound()
+}
+
+/** @internal Phase 0 bind 入口；App / workspace-observation 调用。幂等。 */
+export function ensureHomeObservationBound() {
+  if (homeObservationApi) return homeObservationApi
+  homeObservationScope.run(() => {
+    homeObservationApi = buildHomeObservationApi()
+  })
+  return homeObservationApi!
+}
+
+function buildHomeObservationApi() {
   const { isDesktopRuntimeAvailable } = useDesktopRuntime()
   const { currentProject, runtimeEvents, resourceVersions } = useWorkspace()
   const workspaceLifecycle = useWorkspaceLifecycle()
 
   // 响应式数据全部走模块级——HomeView remount 时直接复用上一次加载结果，
   // 只有源数据真的变了（项目切换 / runtime event 推送 / 本地 flow 执行）才触发重读。
-  const monitorData = monitorDataState
   const checklistItems = checklistItemsState
   const layoutBlobUrl = layoutBlobUrlState
   const analysisCharts = analysisChartsState
@@ -785,27 +875,8 @@ export function useHomeData() {
   const currentWorkspaceFlowExecutionActive = computed(() =>
     isFlowExecutionActiveForWorkspace(currentProject.value?.path),
   )
-  const isLoading = ref(false)
-  const error = ref<string | null>(null)
-
-  /** flow log 渐进刷新会话：递增后旧异步回调全部失效 */
-  let liveSession = 0
-  let pollFlowJsonTimer: ReturnType<typeof setInterval> | null = null
-  let pollHomeJsonTimer: ReturnType<typeof setInterval> | null = null
-  let pollLogFallbackTimer: ReturnType<typeof setInterval> | null = null
-  let unwatchFlowJsonFile: (() => void) | null = null
-  let unwatchHomeJsonFile: (() => void) | null = null
-  let unwatchParametersJsonFile: (() => void) | null = null
-  let unwatchLogFile: (() => void) | null = null
-  let liveLogPatchTimer: ReturnType<typeof setTimeout> | null = null
-  let liveLogPatchInFlight = false
-  let liveLogPatchQueued = false
-  let liveProjectPath: string | null = null
-  let liveHomeDataRefreshSession = 0
-  let homeDataLoadSession = 0
-  let lastOngoingKey: string | null = null
-  let unregisterLiveLifecycleCleanup: (() => void) | null = null
-  let unregisterHomeRunArtifactReset: (() => void) | null = null
+  const isLoading = homeIsLoading
+  const error = homeError
 
   /**
    * 将远程路径转换为本地项目路径
@@ -818,10 +889,8 @@ export function useHomeData() {
   }
 
   /**
-   * 加载 layout PNG 图片并转为 blob URL
-   *
-   * 去重：与模块级 `_loadedLayoutPath` 一致且当前 blob 仍在，则直接返回。
-   * Runtime event 触发时 `updateSharedHomeData` 会提前清签名，loader 被再次调用会真读磁盘。
+   * 加载 layout PNG 图片并转为 blob URL。
+   * 新鲜度键 = path@mtimeMs:size；同路径原地改写会换 generation。
    */
   async function loadLayoutImage(
     layoutPath: string,
@@ -830,10 +899,6 @@ export function useHomeData() {
     if (!isCurrent()) return
     if (!layoutPath) {
       invalidateLayoutCache()
-      return
-    }
-    // 模块级短路：同路径 + blob 还活着 → 零 IPC 复用
-    if (layoutPath === _loadedLayoutPath && layoutBlobUrlState.value) {
       return
     }
 
@@ -846,6 +911,13 @@ export function useHomeData() {
         return
       }
 
+      const fileStat = await statProjectFile(resolvedPath)
+      if (!isCurrent()) return
+      const identity = assetGenerationKey(resolvedPath, fileStat)
+      if (identity === _loadedLayoutIdentity && layoutBlobUrlState.value) {
+        return
+      }
+
       const nextBlobUrl = await readProjectBlobUrl(resolvedPath, {
         mimeType: 'image/png',
       })
@@ -854,11 +926,10 @@ export function useHomeData() {
         return
       }
 
-      // 新 blob 落位后，再 revoke 旧的——<img :src> 不会出现瞬断
       const prevBlobUrl = _currentLayoutBlobUrl
       _currentLayoutBlobUrl = nextBlobUrl
       layoutBlobUrlState.value = nextBlobUrl
-      _loadedLayoutPath = layoutPath
+      _loadedLayoutIdentity = identity
       if (prevBlobUrl?.startsWith('blob:')) URL.revokeObjectURL(prevBlobUrl)
       console.log('Layout blob URL created:', nextBlobUrl)
     } catch (err) {
@@ -868,10 +939,7 @@ export function useHomeData() {
   }
 
   /**
-   * 加载 metrics 指标图片
-   * metrics 格式: { "label": "/path/to/image.png", ... }
-   *
-   * 去重：label+path 组合签名一致 → 跳过（常见 mount 场景）。
+   * 加载 metrics 指标图片。新鲜度含每个文件的 generation。
    */
   async function loadMetricsImages(
     metrics: Record<string, any>,
@@ -889,11 +957,25 @@ export function useHomeData() {
       return
     }
 
-    const signature = entries
-      .map(([label, p]) => `${label}=${p as string}`)
+    const resolvedEntries = await Promise.all(
+      entries.map(async ([label, imagePath]) => {
+        const localPath = convertToLocalPath(imagePath as string)
+        const resolvedPath = await resolvedPathMemo(localPath)
+        const fileStat = resolvedPath ? await statProjectFile(resolvedPath) : null
+        return {
+          label,
+          resolvedPath,
+          identity: assetGenerationKey(resolvedPath ?? localPath, fileStat),
+        }
+      }),
+    )
+    if (!isCurrent()) return
+
+    const identity = resolvedEntries
+      .map((entry) => `${entry.label}=${entry.identity}`)
       .sort()
       .join('\u001f')
-    if (signature === _loadedMetricsSignature && analysisChartsState.value.length > 0) {
+    if (identity === _loadedMetricsIdentity && analysisChartsState.value.length > 0) {
       return
     }
 
@@ -901,10 +983,8 @@ export function useHomeData() {
     const newBlobUrls: string[] = []
 
     const results = await Promise.allSettled(
-      entries.map(async ([label, imagePath]) => {
+      resolvedEntries.map(async ({ label, resolvedPath }) => {
         try {
-          const localPath = convertToLocalPath(imagePath as string)
-          const resolvedPath = await resolvedPathMemo(localPath)
           if (!resolvedPath) return { label, blobUrl: '' }
           if (!isCurrent()) return { label, blobUrl: '' }
           const blobUrl = await readProjectBlobUrl(resolvedPath)
@@ -932,22 +1012,17 @@ export function useHomeData() {
       return
     }
 
-    // 新 blob 全部就位后再 revoke 旧的，避免 <img> 在 render 期间拿到失效 URL
     const prevBlobUrls = _currentMetricsBlobUrls
     _currentMetricsBlobUrls = newBlobUrls
     analysisChartsState.value = charts
-    _loadedMetricsSignature = signature
+    _loadedMetricsIdentity = identity
     for (const url of prevBlobUrls) {
       if (url.startsWith('blob:')) URL.revokeObjectURL(url)
     }
     console.log('Metrics images loaded:', charts.length)
   }
 
-  /**
-   * 加载 checklist 数据
-   *
-   * 去重：同路径且已有数据 → 跳过。
-   */
+  /** 加载 checklist。新鲜度 = path@mtimeMs:size。 */
   async function loadChecklist(
     checklistPath: string,
     isCurrent: HomeAssetLoadGuard = () => true,
@@ -955,9 +1030,6 @@ export function useHomeData() {
     if (!isCurrent()) return
     if (!checklistPath) {
       invalidateChecklistCache()
-      return
-    }
-    if (checklistPath === _loadedChecklistPath && checklistItemsState.value.length > 0) {
       return
     }
 
@@ -970,12 +1042,19 @@ export function useHomeData() {
         return
       }
 
+      const fileStat = await statProjectFile(resolvedPath)
+      if (!isCurrent()) return
+      const identity = assetGenerationKey(resolvedPath, fileStat)
+      if (identity === _loadedChecklistIdentity && checklistItemsState.value.length > 0) {
+        return
+      }
+
       const fileContent = await readProjectTextFile(resolvedPath)
       const data: ChecklistData = JSON.parse(fileContent)
       if (!isCurrent()) return
 
       checklistItemsState.value = data.checklist || []
-      _loadedChecklistPath = checklistPath
+      _loadedChecklistIdentity = identity
     } catch (err) {
       console.error('Failed to load checklist:', err)
       if (isCurrent()) invalidateChecklistCache()
@@ -1391,6 +1470,10 @@ export function useHomeData() {
       const key = ongoing ? `${ongoing.stepName}|${ongoing.tool}` : null
       if (key !== lastOngoingKey) {
         lastOngoingKey = key
+        // Step advance: refresh Home assets + QoR via the shared observation bus.
+        invalidateObservation(['home-assets', 'qor', 'logs'], 'step-advance')
+        markHomeAssetSignaturesStale()
+        void refreshHomeAssetsFromCurrentHomeFile(sid)
         cleanupLogWatchOnly()
         if (ongoing?.logPath) {
           await bindLogFileWatch(sid, ongoing.logPath)
@@ -1598,9 +1681,6 @@ export function useHomeData() {
   ): Promise<void> {
     const isCurrent = options.isCurrent ?? (() => true)
     if (!isCurrent()) return
-    if (homeData.monitor) {
-      monitorData.value = homeData.monitor
-    }
 
     const loaders: Array<Promise<void>> = [
       loadChecklist(homeData.checklist, isCurrent),
@@ -1813,11 +1893,9 @@ export function useHomeData() {
         return false
       }
 
-      updateSharedHomeData(homeData, {
-        markAssetsStale:
-          homeAssetSourceSignature(sharedHomeData.value) !==
-          homeAssetSourceSignature(homeData),
-      })
+      // Asset loaders decide freshness via path@mtime:size — do not gate on path-only
+      // home.json signatures (same path in-place updates must still reload).
+      updateSharedHomeData(homeData, { markAssetsStale: false })
       await loadHomeAssetsFromData(homeData, { includeFlowLogs: false, isCurrent })
       return isCurrent()
     } catch (err) {
@@ -2024,47 +2102,42 @@ export function useHomeData() {
     },
   )
 
-  unregisterHomeRunArtifactReset = onHomeRunArtifactReset((projectPath) => {
-    const currentProjectPath = currentProject.value?.path
-    if (
-      !currentProjectPath ||
-      normalizeWorkspaceEventPath(projectPath) !==
-        normalizeWorkspaceEventPath(currentProjectPath)
-    ) {
-      return
-    }
+  if (!homeObservationBound) {
+    homeObservationBound = true
+    unregisterHomeRunArtifactReset = onHomeRunArtifactReset((projectPath) => {
+      const currentProjectPath = currentProject.value?.path
+      if (
+        !currentProjectPath ||
+        normalizeWorkspaceEventPath(projectPath) !==
+          normalizeWorkspaceEventPath(currentProjectPath)
+      ) {
+        return
+      }
 
-    const hasLiveWatchForProject =
-      liveProjectPath === currentProjectPath &&
-      Boolean(
-        unwatchFlowJsonFile ||
-        unwatchHomeJsonFile ||
-        pollFlowJsonTimer ||
-        pollHomeJsonTimer,
-      )
-    consumePendingHomeRunArtifactReset(currentProjectPath)
-    clearHomeRunArtifactsForRerun(currentProjectPath)
-    if (!hasLiveWatchForProject) {
-      void startFlowLogLiveWatchForCurrentProject({ force: true, initialRefresh: false })
-    }
-  })
+      const hasLiveWatchForProject =
+        liveProjectPath === currentProjectPath &&
+        Boolean(
+          unwatchFlowJsonFile ||
+          unwatchHomeJsonFile ||
+          pollFlowJsonTimer ||
+          pollHomeJsonTimer,
+        )
+      consumePendingHomeRunArtifactReset(currentProjectPath)
+      clearHomeRunArtifactsForRerun(currentProjectPath)
+      if (!hasLiveWatchForProject) {
+        void startFlowLogLiveWatchForCurrentProject({
+          force: true,
+          initialRefresh: false,
+        })
+      }
+    })
+  }
 
-  // 组件卸载：只停掉本实例挂载的 live watcher / 定时器；
-  // **不** 清模块级缓存或 revoke blob —— 下次 mount 直接复用 home.json、
-  // checklist、layout blob、metrics blob、flowLogSegments。
-  // Blob 的 revoke 改由"被新 blob 替换"或"项目切换"两个时机负责；
-  // 在 onUnmounted 里 revoke 会导致下一次 mount 的 <img :src> 拿到已失效的 URL。
-  // 数据新鲜度由 runtime events（markHomeAssetSignaturesStale）+ 项目切换里的 reset 负责。
-  onUnmounted(() => {
-    unregisterHomeRunArtifactReset?.()
-    unregisterHomeRunArtifactReset = null
-    liveSession++
-    cleanupFlowLogLiveWatch()
-  })
+  // 观测绑定是模块单例：组件卸载不得拆 watch/poll/tail。
+  // 拆卸只发生在项目关闭、session lifecycle cleanup、或测试 reset。
 
   return {
     // 状态
-    monitorData,
     checklistItems,
     layoutBlobUrl,
     analysisCharts,

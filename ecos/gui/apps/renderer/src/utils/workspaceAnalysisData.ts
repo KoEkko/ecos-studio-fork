@@ -139,7 +139,7 @@ export async function readProjectWorkspaceAnalysisInputs(
   return Object.fromEntries(entries)
 }
 
-async function readWorkspaceAnalysisInput(
+export async function readWorkspaceAnalysisInput(
   workspacePath: string,
 ): Promise<ProjectWorkspaceAnalysisInput> {
   const [

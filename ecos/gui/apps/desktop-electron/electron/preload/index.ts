@@ -4,6 +4,7 @@ import {
   desktopApiIpcChannels,
 } from '../../../../packages/shared/src/constants/ipcChannels.ts'
 import type {
+  DesktopAgentEvent,
   DesktopApi,
   DesktopDirectoryDialogOptions,
   EccRuntimeEvent,
@@ -207,6 +208,8 @@ const desktopApi: DesktopApi = {
     },
     readProjectBinaryFile: (path) =>
       invokeDesktop(desktopApiIpcChannels.workspaceReadProjectBinaryFile, path),
+    statProjectFile: (path) =>
+      invokeDesktop(desktopApiIpcChannels.workspaceStatProjectFile, path),
     writeProjectTextFile: (path, content) =>
       invokeDesktop(desktopApiIpcChannels.workspaceWriteProjectTextFile, path, content),
     listProjectDirectory: (path) =>
@@ -346,6 +349,22 @@ const desktopApi: DesktopApi = {
       syncConfig: (request) =>
         invokeDesktop(desktopApiIpcChannels.eccWorkspaceSyncConfig, request),
     },
+  },
+  agent: {
+    getStatus: (request) => invokeDesktop(desktopApiIpcChannels.agentGetStatus, request),
+    startSession: (request) =>
+      invokeDesktop(desktopApiIpcChannels.agentStartSession, request),
+    sendMessage: (request) =>
+      invokeDesktop(desktopApiIpcChannels.agentSendMessage, request),
+    interrupt: (request) => invokeDesktop(desktopApiIpcChannels.agentInterrupt, request),
+    stop: (request) => invokeDesktop(desktopApiIpcChannels.agentStop, request),
+    onEvent: (listener) =>
+      subscribeToDesktopEvent(
+        desktopApiEventChannels.agentEvent,
+        (_event, payload: unknown) => {
+          listener(payload as DesktopAgentEvent)
+        },
+      ),
   },
   shell: {
     createSession: (options: DesktopShellSessionOptions) =>

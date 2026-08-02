@@ -45,6 +45,14 @@ export function reconcileSelectedFlowLogKey(
   return getDefaultSelectedFlowLogKey(segments)
 }
 
+export function formatFlowLogSize(totalChars: number | undefined): string {
+  if (!totalChars || totalChars <= 0) return '?'
+  const kb = totalChars / 1024
+  if (kb < 1) return `${totalChars} B`
+  if (kb < 1024) return `${Math.round(kb)} KB`
+  return `${(kb / 1024).toFixed(1)} MB`
+}
+
 export function toFlowLogListItems(
   segments: readonly FlowLogSegment[],
 ): FlowLogListItem[] {

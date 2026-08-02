@@ -19,6 +19,15 @@ import type {
 import type { RemoteContentApi } from './remoteContent.ts'
 import type { EccRuntimeApi } from './eccRuntime.ts'
 import type {
+  DesktopAgentEvent,
+  DesktopAgentProviderRequest,
+  DesktopAgentSendMessageRequest,
+  DesktopAgentSendMessageResponse,
+  DesktopAgentStartSessionRequest,
+  DesktopAgentStartSessionResponse,
+  DesktopAgentStatus,
+} from './desktopAgent.ts'
+import type {
   ProjectManifestMutationRequest,
   ProjectManifestMutationResult,
 } from '../utils/projectManifest.ts'
@@ -131,6 +140,12 @@ export interface DesktopProjectDirectoryEntry {
   type: 'file' | 'directory'
 }
 
+/** Used by Home asset freshness (path + generation) instead of path-only caching. */
+export interface DesktopProjectFileStat {
+  mtimeMs: number
+  size: number
+}
+
 export interface LayoutViewerOpenRequest {
   projectPath: string
   viewJsonPackageRoot: string
@@ -230,6 +245,8 @@ export interface DesktopApi {
       listener: (event: DesktopProjectLogTailEvent) => void,
     ): Promise<DesktopEventUnsubscribe>
     readProjectBinaryFile(path: string): Promise<Uint8Array>
+    /** Returns null when the path is missing; throws on other IO errors. */
+    statProjectFile?(path: string): Promise<DesktopProjectFileStat | null>
     writeProjectTextFile(path: string, content: string): Promise<void>
     listProjectDirectory(path: string): Promise<DesktopProjectDirectoryEntry[]>
     prepareProjectDirectoryReplacement(
@@ -276,6 +293,18 @@ export interface DesktopApi {
     onProgress(listener: (event: ResourceJob) => void): DesktopEventUnsubscribe
   }
   ecc: EccRuntimeApi
+  agent: {
+    getStatus(request?: DesktopAgentProviderRequest): Promise<DesktopAgentStatus>
+    startSession(
+      request: DesktopAgentStartSessionRequest,
+    ): Promise<DesktopAgentStartSessionResponse>
+    sendMessage(
+      request: DesktopAgentSendMessageRequest,
+    ): Promise<DesktopAgentSendMessageResponse>
+    interrupt(request?: DesktopAgentProviderRequest): Promise<void>
+    stop(request?: DesktopAgentProviderRequest): Promise<void>
+    onEvent(listener: (event: DesktopAgentEvent) => void): DesktopEventUnsubscribe
+  }
   shell: {
     createSession(options: DesktopShellSessionOptions): Promise<DesktopShellSession>
     write(sessionId: string, data: string): Promise<void>

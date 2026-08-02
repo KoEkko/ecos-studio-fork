@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import source from './ProjectsView.vue?raw'
 import analysisSource from './project-management/ProjectAnalysisPanel.vue?raw'
 import presentationSource from './project-management/projectAnalysisPresentation.ts?raw'
-import analysisDataSource from './project-management/projectWorkspaceAnalysisData.ts?raw'
+import analysisDataSource from '../utils/workspaceAnalysisData.ts?raw'
 
 const normalizedSource = source.replace(/\s+/g, ' ')
 const projectStyles = readFileSync(

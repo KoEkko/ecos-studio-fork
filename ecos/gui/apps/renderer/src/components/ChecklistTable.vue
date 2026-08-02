@@ -154,7 +154,7 @@ const passedCount = computed(
 }
 
 .checklist-table tbody tr:hover {
-  background: rgba(var(--accent-rgb, 59, 130, 246), 0.04);
+  background: color-mix(in srgb, var(--text-secondary) 8%, transparent);
 }
 
 .col-step {

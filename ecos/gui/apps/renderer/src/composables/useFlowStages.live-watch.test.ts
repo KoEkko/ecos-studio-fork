@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick, ref, type Ref } from 'vue'
 
 const testState = vi.hoisted(() => ({
@@ -59,9 +59,18 @@ vi.mock('@/utils/projectFs', () => ({
   resolveProjectPathAccess: testState.resolveProjectPathAccess,
 }))
 
+let activeFlowStagesObservation: typeof import('./workspace-observation/flowStagesObservation') | null =
+  null
+
 async function importFreshFlowStagesModule() {
+  activeFlowStagesObservation?.resetFlowStagesObservationForTests()
+  activeFlowStagesObservation = null
   vi.resetModules()
-  return await import('./useFlowStages')
+  const flowStages = await import('./useFlowStages')
+  activeFlowStagesObservation = await import(
+    './workspace-observation/flowStagesObservation'
+  )
+  return flowStages
 }
 
 async function startLifecycleSession(projectRoot: string) {
@@ -90,6 +99,11 @@ function flowJsonFor(states: Record<string, string>) {
 }
 
 describe('useFlowStages live project file watchers', () => {
+  afterEach(() => {
+    activeFlowStagesObservation?.resetFlowStagesObservationForTests()
+    activeFlowStagesObservation = null
+  })
+
   beforeEach(() => {
     testState.currentProject = ref({ path: '/workspace/a' })
     testState.runtimeEvents = ref([])
@@ -286,6 +300,26 @@ describe('useFlowStages live project file watchers', () => {
     lifecycle.closeSession()
 
     expect(flowWatch!.unwatch).toHaveBeenCalledTimes(1)
+  })
+
+  it('shares one flow.json watcher across multiple useFlowStages facades', async () => {
+    const { useFlowStages } = await importFreshFlowStagesModule()
+    await startLifecycleSession('/workspace/a')
+    testState.readProjectTextFile.mockResolvedValue(
+      flowJsonFor({
+        Synthesis: 'Ongoing',
+      }),
+    )
+
+    const first = useFlowStages()
+    const second = useFlowStages()
+
+    await vi.waitFor(() => {
+      expect(first.dynamicFlowStages.value.length).toBeGreaterThan(0)
+    })
+
+    expect(second.dynamicFlowStages).toBe(first.dynamicFlowStages)
+    expect(testState.projectFileWatchers).toHaveLength(1)
   })
 
   it('resets run stage states when a full-flow rerun reset is requested for the current workspace', async () => {

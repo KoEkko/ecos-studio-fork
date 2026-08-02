@@ -23,6 +23,8 @@ const testState = vi.hoisted(() => ({
   readOptionalProjectTextFileUpdate: vi.fn(),
   readProjectTextFile: vi.fn(),
   readProjectTextFileTail: vi.fn(),
+  statProjectFile: vi.fn(),
+  fileGenerations: new Map<string, { mtimeMs: number; size: number }>(),
   watchProjectFile: vi.fn(),
   requestProjectPathAccess: vi.fn(),
   resolveProjectPathAccess: vi.fn(),
@@ -99,6 +101,11 @@ vi.mock('@/utils/projectFiles', () => ({
   readOptionalProjectTextFileUpdate: testState.readOptionalProjectTextFileUpdate,
   readProjectTextFile: testState.readProjectTextFile,
   readProjectTextFileTail: testState.readProjectTextFileTail,
+  statProjectFile: testState.statProjectFile,
+  assetGenerationKey: (
+    path: string,
+    stat: { mtimeMs: number; size: number } | null,
+  ) => (stat ? `${path}@${stat.mtimeMs}:${stat.size}` : `${path}@missing`),
   watchProjectFile: testState.watchProjectFile,
   subscribeProjectLogTail: testState.subscribeProjectLogTail,
 }))
@@ -148,9 +155,14 @@ function flowLogKey(stepName: string, tool = 'yosys'): string {
   return `${stepName}\u001f${tool}`
 }
 
+let activeHomeDataModule: typeof import('./useHomeData') | null = null
+
 async function importFreshHomeDataModule() {
+  activeHomeDataModule?.resetHomeObservationForTests()
+  activeHomeDataModule = null
   vi.resetModules()
-  return await import('./useHomeData')
+  activeHomeDataModule = await import('./useHomeData')
+  return activeHomeDataModule
 }
 
 async function startLifecycleSession(projectRoot: string) {
@@ -192,10 +204,21 @@ describe('useHomeData live project file watchers', () => {
     testState.readOptionalProjectTextFileUpdate.mockReset()
     testState.readProjectTextFile.mockReset()
     testState.readProjectTextFileTail.mockReset()
+    testState.statProjectFile.mockReset()
+    testState.fileGenerations.clear()
     testState.watchProjectFile.mockReset()
     testState.requestProjectPathAccess.mockReset()
     testState.resolveProjectPathAccess.mockReset()
     testState.subscribeProjectLogTail.mockReset()
+
+    testState.statProjectFile.mockImplementation(async (path: string) => {
+      return (
+        testState.fileGenerations.get(path) ?? {
+          mtimeMs: 1_000,
+          size: 100,
+        }
+      )
+    })
 
     testState.readWorkspaceHomeResourceApi.mockImplementation(async () => {
       const projectPath = testState.currentProject!.value?.path ?? '/workspace/a'
@@ -338,6 +361,10 @@ describe('useHomeData live project file watchers', () => {
   })
 
   afterEach(() => {
+    // Detached observation keeps poll timers alive across consumer unmount;
+    // tear them down explicitly so the next test is not poisoned.
+    activeHomeDataModule?.resetHomeObservationForTests()
+    activeHomeDataModule = null
     for (const callback of testState.unmountCallbacks.splice(0)) {
       callback()
     }
@@ -634,10 +661,6 @@ describe('useHomeData live project file watchers', () => {
     expect(home.checklistItems.value).toEqual([
       { step: 'Floorplan', type: 'drc', item: 'v2', state: 'ok' },
     ])
-    expect(home.monitorData.value).toEqual({
-      step: ['Synthesis'],
-      frequency: [2],
-    })
   })
 
   it('watches parameters.json during live execution and invalidates parameter data when it changes', async () => {
@@ -766,10 +789,6 @@ describe('useHomeData live project file watchers', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(home.layoutBlobUrl.value).toBe('blob:/workspace/a/home/layout-3.png')
-    expect(home.monitorData.value).toEqual({
-      step: ['Synthesis'],
-      frequency: [3],
-    })
   })
 
   it('does not leave a stale flow polling timer when live startup is superseded during home watch setup', async () => {
@@ -884,15 +903,15 @@ describe('useHomeData live project file watchers', () => {
         const projectPath = path.replace(/\/home\/home\.json$/, '')
         return JSON.stringify({
           ...homeDataFor(projectPath),
-          monitor: {
-            step: ['Synthesis'],
-            frequency: [version],
-          },
+          layout: `${projectPath}/home/layout-${version}.png`,
         })
       }
       if (path === '/workspace/a/home/flow.json') return flowJsonFor('Synthesis')
       return '{}'
     })
+    testState.readProjectBlobUrl.mockImplementation(
+      async (path: string) => `blob:${path}`,
+    )
 
     const { useHomeData } = await importFreshHomeDataModule()
     await startLifecycleSession('/workspace/a')
@@ -901,10 +920,7 @@ describe('useHomeData live project file watchers', () => {
     const home = useHomeData()
 
     await vi.waitFor(() => {
-      expect(home.monitorData.value).toEqual({
-        step: ['Synthesis'],
-        frequency: [1],
-      })
+      expect(home.layoutBlobUrl.value).toBe('blob:/workspace/a/home/layout-1.png')
     })
 
     version = 2
@@ -914,14 +930,11 @@ describe('useHomeData live project file watchers', () => {
     }
 
     await vi.waitFor(() => {
-      expect(home.monitorData.value).toEqual({
-        step: ['Synthesis'],
-        frequency: [2],
-      })
+      expect(home.layoutBlobUrl.value).toBe('blob:/workspace/a/home/layout-2.png')
     })
   })
 
-  it('refreshes stale cached Home assets when remounted after resource versions changed', async () => {
+  it('keeps home observation alive across consumer unmount and refreshes when resource versions change', async () => {
     let version = 1
     testState.readProjectTextFile.mockImplementation(async (path: string) => {
       if (path.endsWith('/home/home.json')) {
@@ -958,6 +971,7 @@ describe('useHomeData live project file watchers', () => {
       { label: 'metric-1', imageBlobUrl: 'blob:/workspace/a/home/metric-1.png' },
     ])
 
+    // Consumer unmount must not tear down the detached observation scope.
     firstScope.stop()
     for (const callback of testState.unmountCallbacks.splice(0)) {
       callback()
@@ -969,21 +983,19 @@ describe('useHomeData live project file watchers', () => {
       home: testState.resourceVersions!.value.home + 1,
     }
 
+    await vi.waitFor(() => {
+      expect(firstHome.layoutBlobUrl.value).toBe('blob:/workspace/a/home/layout-2.png')
+    })
+
     const secondScope = effectScope()
     const remountedHome = secondScope.run(() => useHomeData())!
-
-    await vi.waitFor(() => {
-      expect(remountedHome.layoutBlobUrl.value).toBe(
-        'blob:/workspace/a/home/layout-2.png',
-      )
-    })
+    expect(remountedHome).toBe(firstHome)
+    expect(remountedHome.layoutBlobUrl.value).toBe(
+      'blob:/workspace/a/home/layout-2.png',
+    )
     expect(remountedHome.analysisCharts.value).toEqual([
       { label: 'metric-2', imageBlobUrl: 'blob:/workspace/a/home/metric-2.png' },
     ])
-    expect(remountedHome.monitorData.value).toEqual({
-      step: ['Synthesis'],
-      frequency: [2],
-    })
 
     secondScope.stop()
   })
@@ -1039,7 +1051,6 @@ describe('useHomeData live project file watchers', () => {
 
     expect(remountedHome.layoutBlobUrl.value).toBe('')
     expect(remountedHome.analysisCharts.value).toEqual([])
-    expect(remountedHome.monitorData.value).toBeNull()
 
     secondScope.stop()
   })
@@ -1135,10 +1146,6 @@ describe('useHomeData live project file watchers', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(home.layoutBlobUrl.value).toBe('blob:/workspace/a/home/layout-3.png')
-    expect(home.monitorData.value).toEqual({
-      step: ['Synthesis'],
-      frequency: [3],
-    })
   })
 
   it('clears stale Home run artifacts when a full-flow rerun has started', async () => {
@@ -1193,10 +1200,6 @@ describe('useHomeData live project file watchers', () => {
         imageBlobUrl: 'blob:/workspace/a/home/instances-old.png',
       },
     ])
-    expect(home.monitorData.value).toEqual({
-      step: ['Synthesis'],
-      frequency: [50],
-    })
 
     testState.runtimeEvents!.value = [
       {
@@ -1217,7 +1220,6 @@ describe('useHomeData live project file watchers', () => {
       expect(home.layoutBlobUrl.value).toBe('')
     })
     expect(home.analysisCharts.value).toEqual([])
-    expect(home.monitorData.value).toBeNull()
     expect(home.checklistItems.value).toEqual([])
     expect(home.flowLogSegments.value).toEqual([])
     expect(home.flowLogContentByKey.value).toEqual({})
@@ -1298,7 +1300,6 @@ describe('useHomeData live project file watchers', () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(home.layoutBlobUrl.value).toBe('')
     expect(home.analysisCharts.value).toEqual([])
-    expect(home.monitorData.value).toBeNull()
   })
 
   it('restarts live log watching when rerun starts after seeing old completed flow state', async () => {
@@ -1474,10 +1475,6 @@ describe('useHomeData live project file watchers', () => {
     expect(home.analysisCharts.value).toEqual([
       { label: 'new chart', imageBlobUrl: 'blob:/workspace/a/home/new-chart.png' },
     ])
-    expect(home.monitorData.value).toEqual({
-      step: ['Floorplan'],
-      frequency: [55],
-    })
   })
 
   it('loads new Home artifacts while a full-flow rerun is still running', async () => {
@@ -1609,10 +1606,6 @@ describe('useHomeData live project file watchers', () => {
     expect(home.checklistItems.value).toEqual([
       { step: 'Floorplan', type: 'Area', item: 'new check', state: 'Accepted' },
     ])
-    expect(home.monitorData.value).toEqual({
-      step: ['Floorplan'],
-      frequency: [55],
-    })
   })
 
   it('polls home.json for new Home artifacts while a full-flow rerun is still running', async () => {
@@ -1706,10 +1699,6 @@ describe('useHomeData live project file watchers', () => {
     expect(home.analysisCharts.value).toEqual([
       { label: 'new chart', imageBlobUrl: 'blob:/workspace/a/home/new-chart.png' },
     ])
-    expect(home.monitorData.value).toEqual({
-      step: ['Floorplan'],
-      frequency: [55],
-    })
   })
 
   it('does not restore stale Home artifacts from home.json reads that race ahead of backend rerun reset', async () => {
@@ -1781,7 +1770,6 @@ describe('useHomeData live project file watchers', () => {
 
     expect(home.layoutBlobUrl.value).toBe('')
     expect(home.analysisCharts.value).toEqual([])
-    expect(home.monitorData.value).toBeNull()
 
     homeVersion = 'empty'
     await vi.advanceTimersByTimeAsync(1600)
@@ -1796,10 +1784,6 @@ describe('useHomeData live project file watchers', () => {
     expect(home.analysisCharts.value).toEqual([
       { label: 'new chart', imageBlobUrl: 'blob:/workspace/a/home/new-chart.png' },
     ])
-    expect(home.monitorData.value).toEqual({
-      step: ['Floorplan'],
-      frequency: [55],
-    })
   })
 
   it('does not clear Home artifacts from an empty live home.json read before backend rerun start', async () => {
@@ -1865,10 +1849,6 @@ describe('useHomeData live project file watchers', () => {
     expect(home.analysisCharts.value).toEqual([
       { label: 'old chart', imageBlobUrl: 'blob:/workspace/a/home/old-chart.png' },
     ])
-    expect(home.monitorData.value).toEqual({
-      step: ['Filler'],
-      frequency: [814.3],
-    })
 
     testState.runtimeEvents!.value = [
       {
@@ -1888,7 +1868,6 @@ describe('useHomeData live project file watchers', () => {
       expect(home.layoutBlobUrl.value).toBe('')
     })
     expect(home.analysisCharts.value).toEqual([])
-    expect(home.monitorData.value).toBeNull()
   })
 
   it('keeps suppressing stale Home artifacts when the backend rerun start is observed twice', async () => {
@@ -1951,7 +1930,6 @@ describe('useHomeData live project file watchers', () => {
 
     expect(home.layoutBlobUrl.value).toBe('')
     expect(home.analysisCharts.value).toEqual([])
-    expect(home.monitorData.value).toBeNull()
   })
 
   it('does not treat stale completed flow.json as terminal during rerun startup', async () => {
@@ -2029,7 +2007,7 @@ describe('useHomeData live project file watchers', () => {
     expect(testState.flowExecutionActive!.value).toBe(true)
   })
 
-  it('does not reload unchanged Home artifacts on each live home.json poll', async () => {
+  it('does not reload Home artifacts on live home.json poll when file generation is unchanged', async () => {
     vi.useFakeTimers()
     let flowState = 'Success'
     testState.readProjectTextFile.mockImplementation(async (path: string) => {
@@ -2056,6 +2034,14 @@ describe('useHomeData live project file watchers', () => {
     testState.readProjectBlobUrl.mockImplementation(
       async (path: string) => `blob:${path}`,
     )
+    testState.fileGenerations.set('/workspace/a/home/layout-stable.png', {
+      mtimeMs: 10,
+      size: 20,
+    })
+    testState.fileGenerations.set('/workspace/a/home/stable-chart.png', {
+      mtimeMs: 10,
+      size: 30,
+    })
 
     const { useHomeData } = await importFreshHomeDataModule()
     await startLifecycleSession('/workspace/a')
@@ -2087,6 +2073,59 @@ describe('useHomeData live project file watchers', () => {
       { label: 'stable chart', imageBlobUrl: 'blob:/workspace/a/home/stable-chart.png' },
     ])
     expect(testState.readProjectBlobUrl).not.toHaveBeenCalled()
+  })
+
+  it('reloads Home artifacts when the same path gets a new file generation', async () => {
+    vi.useFakeTimers()
+    testState.readProjectTextFile.mockImplementation(async (path: string) => {
+      if (path.endsWith('/home/home.json')) {
+        const projectPath = path.replace(/\/home\/home\.json$/, '')
+        return JSON.stringify({
+          ...homeDataFor(projectPath),
+          layout: `${projectPath}/home/layout.png`,
+          metrics: {},
+          monitor: { step: ['Synthesis'], frequency: [1] },
+        })
+      }
+      if (path === '/workspace/a/home/flow.json')
+        return flowJsonWithState('Synthesis', 'Ongoing')
+      return '{}'
+    })
+    testState.readProjectBlobUrl.mockImplementation(
+      async (path: string) => `blob:${path}?g=${testState.fileGenerations.get(path)?.mtimeMs ?? 0}`,
+    )
+    testState.fileGenerations.set('/workspace/a/home/layout.png', {
+      mtimeMs: 1,
+      size: 10,
+    })
+
+    const { useHomeData } = await importFreshHomeDataModule()
+    await startLifecycleSession('/workspace/a')
+    testState.currentProject!.value = { path: '/workspace/a' }
+    testState.flowExecutionActive!.value = true
+
+    const home = useHomeData()
+    await vi.waitFor(() => {
+      expect(home.layoutBlobUrl.value).toBe('blob:/workspace/a/home/layout.png?g=1')
+    })
+
+    testState.fileGenerations.set('/workspace/a/home/layout.png', {
+      mtimeMs: 2,
+      size: 10,
+    })
+    const homeWatch = testState.projectFileWatchers.find(
+      (entry) => entry.path === '/workspace/a/home/home.json',
+    )
+    expect(homeWatch).toBeDefined()
+    homeWatch!.listener({
+      subscriptionId: 'home-watch',
+      path: '/workspace/a/home/home.json',
+      eventType: 'change',
+    })
+
+    await vi.waitFor(() => {
+      expect(home.layoutBlobUrl.value).toBe('blob:/workspace/a/home/layout.png?g=2')
+    })
   })
 
   it('allows Home run artifacts to load again after the full-flow rerun finishes', async () => {
@@ -2167,10 +2206,6 @@ describe('useHomeData live project file watchers', () => {
         imageBlobUrl: 'blob:/workspace/a/home/instances-final.png',
       },
     ])
-    expect(home.monitorData.value).toEqual({
-      step: ['Filler'],
-      frequency: [55],
-    })
   })
 
   it('ignores stale home data reads after the workspace session changes', async () => {
@@ -2189,6 +2224,9 @@ describe('useHomeData live project file watchers', () => {
       if (path === '/workspace/b/home/flow.json') return flowJsonFor('Floorplan')
       return '{}'
     })
+    testState.readProjectBlobUrl.mockImplementation(
+      async (path: string) => `blob:${path}`,
+    )
 
     const { useHomeData } = await importFreshHomeDataModule()
     await startLifecycleSession('/workspace/a')
@@ -2212,18 +2250,12 @@ describe('useHomeData live project file watchers', () => {
       .resolve(
         JSON.stringify({
           ...homeDataFor('/workspace/b'),
-          monitor: {
-            step: ['Floorplan'],
-            frequency: [2],
-          },
+          layout: '/workspace/b/home/layout-b.png',
         }),
       )
 
     await vi.waitFor(() => {
-      expect(home.monitorData.value).toEqual({
-        step: ['Floorplan'],
-        frequency: [2],
-      })
+      expect(home.layoutBlobUrl.value).toBe('blob:/workspace/b/home/layout-b.png')
     })
 
     delayedReads
@@ -2231,17 +2263,11 @@ describe('useHomeData live project file watchers', () => {
       .resolve(
         JSON.stringify({
           ...homeDataFor('/workspace/a'),
-          monitor: {
-            step: ['Synthesis'],
-            frequency: [1],
-          },
+          layout: '/workspace/a/home/layout-a.png',
         }),
       )
     await Promise.resolve()
 
-    expect(home.monitorData.value).toEqual({
-      step: ['Floorplan'],
-      frequency: [2],
-    })
+    expect(home.layoutBlobUrl.value).toBe('blob:/workspace/b/home/layout-b.png')
   })
 })

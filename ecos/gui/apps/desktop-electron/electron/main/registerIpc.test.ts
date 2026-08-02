@@ -3,6 +3,7 @@ import {
   desktopApiEventChannels,
   desktopApiIpcChannels,
   desktopMenuEventIds,
+  type DesktopAgentEvent,
   type EccRuntimeEvent,
 } from '@ecos-studio/shared'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -97,6 +98,7 @@ function registerHandlers() {
       clearProjectRoot: vi.fn(),
       isProjectDirectory: vi.fn(),
       readProjectBinaryFile: vi.fn(),
+      statProjectFile: vi.fn(),
       readOptionalProjectTextFile: vi.fn(),
       readOptionalProjectTextFileTail: vi.fn(),
       readOptionalProjectTextFileUpdate: vi.fn(),
@@ -168,6 +170,14 @@ function registerHandlers() {
       kill: vi.fn(),
       resize: vi.fn(),
       write: vi.fn(),
+    },
+    agentService: {
+      getStatus: vi.fn(),
+      interrupt: vi.fn(),
+      onEvent: vi.fn((_listener: (event: DesktopAgentEvent) => void) => () => undefined),
+      sendMessage: vi.fn(),
+      startSession: vi.fn(),
+      stop: vi.fn(),
     },
     layoutViewerService: {
       open: vi.fn(),

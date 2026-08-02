@@ -209,6 +209,14 @@ function createDesktopBridge(getVersions: DesktopApi['app']['getVersions']) {
         }),
       },
     },
+    agent: {
+      getStatus: async () => ({ providerId: 'test', state: 'stopped' as const }),
+      startSession: async () => ({ sessionId: 'test-agent' }),
+      sendMessage: async () => ({ sessionId: 'test-agent' }),
+      interrupt: async () => undefined,
+      stop: async () => undefined,
+      onEvent: () => () => undefined,
+    },
     shell: {
       createSession: async () => ({
         pid: 0,

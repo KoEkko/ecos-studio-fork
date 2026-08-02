@@ -116,6 +116,12 @@ export interface ProjectQorBlockingIssue {
   evidence: ProjectQorFindingEvidence
 }
 
+export interface ProjectQorGateTally {
+  total: number
+  blocked: number
+  warning: number
+}
+
 export interface ProjectQorMissingMetric {
   step: FlowStep
   metricName: string
@@ -3051,6 +3057,34 @@ export function normalizeQorSummaryBlockingIssues(
       },
     ]
   })
+}
+
+/**
+ * How many gates were declared, and how they came out. `blockingIssues` only carries the
+ * failures, so a card that wants to say "0 of 5" has no way to reach the 5.
+ *
+ * A gate never reports `warning`: the schema states `pass`, `failed` and `unavailable`,
+ * and anything else is read as incomplete elsewhere in this file. So `warning` here means
+ * the gate reached no verdict, which is the same reading the QoR card already gives an
+ * `incomplete` gate status when it paints it with the warn colour.
+ */
+export function buildQorGateTally(
+  summaryTexts: ProjectQorWorkspaceInput['stepSummaryTexts'],
+): ProjectQorGateTally {
+  const tally = { total: 0, blocked: 0, warning: 0 }
+  for (const step of QOR_FLOW_STEPS) {
+    const record = parseJsonObject(summaryTexts?.[step])
+    if (record?.schema_version !== 4 || !Array.isArray(record.gates)) continue
+    for (const gate of record.gates) {
+      if (!isRecord(gate) || !stringValue(gate.id)) continue
+      const state = stringValue(gate.state)
+      if (!state) continue
+      tally.total += 1
+      if (state === 'failed') tally.blocked += 1
+      else if (state !== 'pass') tally.warning += 1
+    }
+  }
+  return tally
 }
 
 export function normalizeQorSummaryMissingMetrics(

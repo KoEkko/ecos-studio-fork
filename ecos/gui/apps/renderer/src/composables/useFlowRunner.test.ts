@@ -14,6 +14,8 @@ const {
   requestHomeRunArtifactReset,
   markHomeRunArtifactResetAwaitingBackendStart,
   clearHomeRunArtifactResetAwaitingBackendStart,
+  setFirstRunStepOngoing,
+  setRunStepOngoingByPath,
 } = vi.hoisted(() => ({
   ensureDesktopRuntime: vi.fn(() => false),
   ensureApiReady: vi.fn(() => Promise.resolve(true)),
@@ -43,6 +45,8 @@ const {
   requestHomeRunArtifactReset: vi.fn(),
   markHomeRunArtifactResetAwaitingBackendStart: vi.fn(),
   clearHomeRunArtifactResetAwaitingBackendStart: vi.fn(),
+  setFirstRunStepOngoing: vi.fn(),
+  setRunStepOngoingByPath: vi.fn(),
 }))
 
 vi.mock('vue-router', () => ({
@@ -80,6 +84,15 @@ vi.mock('./homeRunArtifacts', () => ({
   requestHomeRunArtifactReset,
   markHomeRunArtifactResetAwaitingBackendStart,
   clearHomeRunArtifactResetAwaitingBackendStart,
+  onHomeRunArtifactReset: vi.fn(() => () => {}),
+}))
+
+vi.mock('./useFlowStages', () => ({
+  useFlowStages: () => ({
+    flowStages: { value: [] },
+    setFirstRunStepOngoing,
+    setRunStepOngoingByPath,
+  }),
 }))
 
 import {
@@ -116,6 +129,8 @@ describe('useFlowRunner desktop-only guard', () => {
     requestHomeRunArtifactReset.mockReset()
     markHomeRunArtifactResetAwaitingBackendStart.mockReset()
     clearHomeRunArtifactResetAwaitingBackendStart.mockReset()
+    setFirstRunStepOngoing.mockReset()
+    setRunStepOngoingByPath.mockReset()
     flowExecutionActive.value = false
     currentProject.value = null
   })
@@ -169,6 +184,7 @@ describe('useFlowRunner desktop-only guard', () => {
     const { runAllFlow } = useFlowRunner()
 
     await expect(runAllFlow()).resolves.toEqual({ rerun: false })
+    expect(setFirstRunStepOngoing).toHaveBeenCalledTimes(1)
     expect(rtl2gdsApi).toHaveBeenCalledWith({
       cmd: 'rtl2gds',
       data: {
@@ -229,6 +245,7 @@ describe('useFlowRunner desktop-only guard', () => {
 
     await runFlow()
 
+    expect(setRunStepOngoingByPath).toHaveBeenCalledWith(StepEnum.FLOORPLAN)
     expect(runStepApi).toHaveBeenCalledWith({
       cmd: 'run_step',
       data: {

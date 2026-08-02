@@ -720,7 +720,7 @@ import { previewList } from './project-management/projectListPreview'
 import {
   readProjectWorkspaceAnalysisInputs,
   readProjectWorkspaceFlowStates,
-} from './project-management/projectWorkspaceAnalysisData'
+} from '@/utils/workspaceAnalysisData'
 import { waitForDesktopApi } from '@/platform/desktop'
 import { mutateProjectManifest } from '@/api/projectManifest'
 import {

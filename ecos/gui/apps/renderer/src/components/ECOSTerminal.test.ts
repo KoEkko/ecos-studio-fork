@@ -48,66 +48,29 @@ describe('ECOSTerminal', () => {
     expect(terminalSource).not.toContain('write(record.sessionId, "cd ')
   })
 
-  it('is mounted as a VS Code-style bottom panel above the status bar', () => {
+  it('renders as a tab inside the shared bottom panel rather than owning the chrome', () => {
     expect(appSource).toMatch(
-      /<div\s+class="app-main"[\s\S]*>\s*<div\s+class="app-content"[\s\S]*>\s*<router-view\s*\/>\s*<\/div>\s*<ECOSTerminal[^>]*\/>\s*<\/div>\s*<StatusBar/,
+      /<BottomPanel>\s*<ECOSTerminal[\s\S]*?\/>\s*<FlowLogPanel[^>]*\/>[\s\S]*?<\/BottomPanel>/,
     )
-    expect(appSource).toMatch(
-      /:style="\s*terminalExpanded\s*\?\s*\{\s*'--terminal-panel-height': terminalPanelHeight\s*\}\s*:\s*undefined\s*"/,
+    expect(appSource).toContain(
+      ':expanded="isBottomPanelOpen && bottomPanelTab === \'terminal\'"',
     )
-    expect(appSource).toMatch(/const terminalPanelHeight = ref\('min\(300px, 42vh\)'\)/)
-    expect(appSource).toContain(':maximized="terminalPanelMaximized"')
-    expect(appSource).toContain('@height-change="handleTerminalHeightChange"')
-    expect(appSource).toContain('@toggle-maximize="toggleTerminalMaximized"')
-    expect(appSource).toMatch(/\.app-main\s*\{[\s\S]*position:\s*relative;/)
-    expect(appSource).not.toContain('app-content--terminal-open')
-    expect(appSource).toContain("'app-content--terminal-safe-area': terminalExpanded")
-    expect(appSource).not.toMatch(
-      /^\s*padding-bottom:\s*var\(--terminal-panel-height\);/m,
-    )
+    expect(terminalSource).toMatch(/\.ecos-terminal-tab\s*\{[\s\S]*flex:\s*1;/)
+    expect(terminalSource).not.toContain('.ecos-terminal-panel')
+    expect(terminalSource).not.toContain('class="terminal-resize-handle"')
+    expect(terminalSource).not.toContain('class="terminal-header"')
+    expect(terminalSource).not.toContain('heightChange: [height: string]')
+    expect(terminalSource).not.toContain('toggleMaximize: []')
+    expect(terminalSource).not.toContain("emit('collapse')")
   })
 
-  it('keeps covered app content reachable with a scroll spacer instead of resizing it', () => {
-    expect(appSource).toContain("'--terminal-panel-height': terminalPanelHeight")
-    expect(appSource).toContain('@height-change="handleTerminalHeightChange"')
-    expect(appSource).toMatch(
-      /\.app-content--terminal-safe-area::after\s*\{[\s\S]*height:\s*var\(--terminal-panel-height\);/,
-    )
-    expect(appSource).toMatch(
-      /\.app-content--terminal-safe-area\s*\{[\s\S]*scroll-padding-bottom:\s*var\(--terminal-panel-height\);/,
-    )
-    expect(appSource).not.toMatch(
-      /^\s*padding-bottom:\s*var\(--terminal-panel-height\);/m,
-    )
-  })
-
-  it('lets the terminal panel height be dragged and maximized like the VS Code panel', () => {
-    expect(appSource).toContain('const terminalPanelMaximized = ref(false)')
-    expect(appSource).toContain('function handleTerminalHeightChange(height: string)')
-    expect(appSource).toContain('function toggleTerminalMaximized()')
-    expect(terminalSource).toContain('heightChange: [height: string]')
-    expect(terminalSource).toContain('toggleMaximize: []')
-    expect(terminalSource).toContain('class="terminal-resize-handle"')
-    expect(terminalSource).toContain('@pointerdown="handleResizePointerDown"')
-    expect(terminalSource).toContain(
-      "document.body.classList.add('terminal-panel-resizing')",
-    )
-    expect(terminalSource).toContain(
-      "document.body.classList.remove('terminal-panel-resizing')",
-    )
-  })
-
-  it('overlays the app content instead of taking flex layout space', () => {
+  it('teleports its toolbar into the shared panel header only while it is showing', () => {
     expect(terminalSource).toMatch(
-      /\.ecos-terminal-panel\s*\{[\s\S]*position:\s*absolute;/,
+      /<Teleport v-if="expanded" defer to="#bottom-panel-actions">/,
     )
-    expect(terminalSource).toMatch(/\.ecos-terminal-panel\s*\{[\s\S]*z-index:\s*\d+;/)
-    expect(terminalSource).toMatch(/\.ecos-terminal-panel\s*\{[\s\S]*bottom:\s*0;/)
     expect(terminalSource).toMatch(
-      /\.ecos-terminal-panel\s*\{[\s\S]*height:\s*var\(--terminal-panel-height,\s*min\(300px,\s*42vh\)\);/,
+      /<Teleport[\s\S]*ref="terminalActions" class="terminal-actions"[\s\S]*<\/Teleport>/,
     )
-    expect(terminalSource).not.toContain('bottom: calc(var(--status-bar-height')
-    expect(terminalSource).not.toContain('flex: 0 0 260px')
   })
 
   it('keeps the prompt clear of the bottom status bar', () => {
@@ -122,13 +85,7 @@ describe('ECOSTerminal', () => {
   it('uses theme tokens for terminal chrome and xterm surfaces', () => {
     expect(terminalSource).not.toContain("const terminalBackground = '#1e1e1e'")
     expect(terminalSource).toMatch(
-      /\.ecos-terminal-panel\s*\{[\s\S]*background:\s*var\(--bg-primary\);/,
-    )
-    expect(terminalSource).toMatch(
-      /\.terminal-header\s*\{[\s\S]*background:\s*var\(--bg-secondary\);/,
-    )
-    expect(terminalSource).toMatch(
-      /\.terminal-title\s*\{[\s\S]*color:\s*var\(--text-primary\);/,
+      /\.ecos-terminal-tab\s*\{[\s\S]*background:\s*var\(--bg-primary\);/,
     )
     expect(terminalSource).toMatch(
       /\.terminal-body\s*\{[\s\S]*background:\s*var\(--bg-primary\);/,
@@ -235,20 +192,17 @@ describe('ECOSTerminal', () => {
     )
   })
 
-  it('adds VS Code-style terminal actions for new terminal, maximize, and close', () => {
+  it('keeps only terminal-scoped actions and leaves panel chrome to BottomPanel', () => {
     expect(terminalSource).toContain('title="New Terminal"')
     expect(terminalSource).toContain('@click="createAndActivateTerminal"')
-    expect(terminalSource).toContain("'Maximize Panel'")
-    expect(terminalSource).toContain("'Restore Panel'")
-    expect(terminalSource).toContain('@click="$emit(\'toggleMaximize\')"')
-    expect(terminalSource).toContain('title="Close Panel"')
-    expect(terminalSource).toContain('@click="closePanel"')
+    expect(terminalSource).toContain('title="Terminal Profiles"')
     expect(terminalSource).toContain('ri-add-line')
     expect(terminalSource).toContain('ri-arrow-down-s-line')
-    expect(terminalSource).toContain('ri-more-line')
-    expect(terminalSource).toContain('ri-fullscreen-line')
-    expect(terminalSource).toContain('ri-fullscreen-exit-line')
-    expect(terminalSource).toContain('ri-close-line')
+    expect(terminalSource).not.toContain("'Maximize Panel'")
+    expect(terminalSource).not.toContain("'Restore Panel'")
+    expect(terminalSource).not.toContain('title="Close Panel"')
+    expect(terminalSource).not.toContain('ri-more-line')
+    expect(terminalSource).not.toContain('ri-fullscreen-line')
   })
 
   it('keeps prior VS Code terminal sessions alive when creating another terminal', () => {
@@ -263,9 +217,6 @@ describe('ECOSTerminal', () => {
     )
     expect(terminalSource).toMatch(
       /function createAndActivateTerminal\(\)[\s\S]*createTerminalRecord\(\)[\s\S]*terminalRecords\.value = \[\.\.\.terminalRecords\.value, record\][\s\S]*activeTerminalId\.value = record\.localId[\s\S]*startShellSession\(record\)/,
-    )
-    expect(terminalSource).toMatch(
-      /function closePanel\(\) \{[\s\S]*emit\('collapse'\)[\s\S]*\}/,
     )
     expect(createAndActivateTerminalBody).not.toContain('stopShellSession(record)')
   })

@@ -9,8 +9,8 @@ describe('useFlowRunMode', () => {
       useFlowRunMode(currentStage)
 
     expect(activeRunMode.value).toBe('run')
-    expect(runModes.value.run.label).toBe('Run RTL2GDS')
-    expect(runModes.value.rerun.label).toBe('ReRun RTL2GDS')
+    expect(runModes.value.run.label).toBe('Run Flow')
+    expect(runModes.value.rerun.label).toBe('ReRun Flow')
 
     selectRunMode('rerun')
     expect(activeRunMode.value).toBe('rerun')

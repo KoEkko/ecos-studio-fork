@@ -13,31 +13,29 @@
       <div
         class="app-main"
         :style="
-          terminalExpanded
-            ? { '--terminal-panel-height': terminalPanelHeight }
-            : undefined
+          isBottomPanelOpen ? { '--bottom-panel-height': bottomPanelHeight } : undefined
         "
       >
         <div
           class="app-content"
-          :class="{ 'app-content--terminal-safe-area': terminalExpanded }"
+          :class="{ 'app-content--bottom-panel-safe-area': isBottomPanelOpen }"
         >
           <router-view />
         </div>
-        <ECOSTerminal
-          :expanded="terminalExpanded"
-          :maximized="terminalPanelMaximized"
-          :project-path="currentProject?.path ?? null"
-          :theme-name="themeStore.themeName"
-          @collapse="terminalExpanded = false"
-          @height-change="handleTerminalHeightChange"
-          @toggle-maximize="toggleTerminalMaximized"
-        />
+        <BottomPanel>
+          <ECOSTerminal
+            :expanded="isBottomPanelOpen && bottomPanelTab === 'terminal'"
+            :maximized="isBottomPanelMaximized"
+            :project-path="currentProject?.path ?? null"
+            :theme-name="themeStore.themeName"
+          />
+          <FlowLogPanel v-show="bottomPanelTab === 'flow-log'" />
+          <!-- Mounted on demand: these read Home artifacts and should not do so until asked. -->
+          <ChecklistDetailsPanel v-if="bottomPanelTab === 'checklist'" />
+          <QorDetailsPanel v-if="bottomPanelTab === 'qor'" />
+        </BottomPanel>
       </div>
-      <StatusBar
-        :terminal-expanded="terminalExpanded"
-        @toggle-terminal="terminalExpanded = !terminalExpanded"
-      />
+      <StatusBar />
     </div>
 
     <!-- 全局 Toast 通知 -->
@@ -152,7 +150,11 @@ import {
 
 import TopBar from '@/components/TopBar.vue'
 import StatusBar from '@/components/StatusBar.vue'
+import BottomPanel from '@/components/BottomPanel.vue'
+import ChecklistDetailsPanel from '@/components/ChecklistDetailsPanel.vue'
 import ECOSTerminal from '@/components/ECOSTerminal.vue'
+import FlowLogPanel from '@/components/FlowLogPanel.vue'
+import QorDetailsPanel from '@/components/QorDetailsPanel.vue'
 import AboutDialog from '@/components/AboutDialog.vue'
 import SignoffPackageReviewDialog from '@/components/SignoffPackageReviewDialog.vue'
 import Toast from 'primevue/toast'
@@ -160,7 +162,10 @@ import NewProjectWizard from '@/components/NewProjectWizard.vue'
 import DesignFilesManageDialog from '@/components/DesignFilesManageDialog.vue'
 import type { WorkspaceConfig } from '@/types'
 import { setWindowResizing } from '@/composables/useWindowResizeState'
+import { useBottomPanel } from '@/composables/useBottomPanel'
 import { useDesignFiles } from '@/composables/useDesignFiles'
+import { useFlowRunTracking } from '@/composables/flowRunTracker'
+import { bindWorkspaceObservation } from '@/composables/workspace-observation'
 import { readOptionalProjectTextFile } from '@/utils/projectFiles'
 import { consumeOpenWorkspaceLaunchQuery } from '@/utils/openWorkspaceLaunchQuery'
 import {
@@ -209,6 +214,10 @@ const {
 })
 const desktopApi = ref<DesktopApi | null>(getOptionalDesktopApi())
 
+// 工作区文件观测与运行记录都是应用级事实：不能挂在 Home 面板生命周期上。
+bindWorkspaceObservation()
+useFlowRunTracking()
+
 watch(
   () => Boolean(currentProject.value?.path),
   (hasWorkspace) => {
@@ -241,23 +250,12 @@ const workspaceWizardTitle = computed(() => {
   return reconfigureWorkspacePath.value ? 'Update Workspace' : 'New Workspace'
 })
 const showAboutDialog = ref(false)
-const terminalExpanded = ref(false)
-const terminalPanelHeight = ref('min(300px, 42vh)')
-const terminalPanelRestoredHeight = ref('min(300px, 42vh)')
-const terminalPanelMaximized = ref(false)
-
-function handleTerminalHeightChange(height: string) {
-  terminalPanelHeight.value = height
-  terminalPanelRestoredHeight.value = height
-  terminalPanelMaximized.value = false
-}
-
-function toggleTerminalMaximized() {
-  terminalPanelMaximized.value = !terminalPanelMaximized.value
-  terminalPanelHeight.value = terminalPanelMaximized.value
-    ? '100%'
-    : terminalPanelRestoredHeight.value
-}
+const {
+  isOpen: isBottomPanelOpen,
+  activeTab: bottomPanelTab,
+  height: bottomPanelHeight,
+  isMaximized: isBottomPanelMaximized,
+} = useBottomPanel()
 
 function resetWorkspaceWizard() {
   showNewProjectWizard.value = false
@@ -1188,14 +1186,14 @@ body.window-maximized .app-container {
   background: var(--bg-primary);
 }
 
-.app-content--terminal-safe-area {
-  scroll-padding-bottom: var(--terminal-panel-height);
+.app-content--bottom-panel-safe-area {
+  scroll-padding-bottom: var(--bottom-panel-height);
 }
 
-.app-content--terminal-safe-area::after {
+.app-content--bottom-panel-safe-area::after {
   content: '';
   display: block;
-  height: var(--terminal-panel-height);
+  height: var(--bottom-panel-height);
   pointer-events: none;
 }
 

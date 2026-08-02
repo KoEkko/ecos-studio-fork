@@ -3,6 +3,7 @@ import {
   joinLocalPath,
   type DesktopProjectLogTailEvent,
   type DesktopProjectLogTailSubscriptionOptions,
+  type DesktopProjectFileStat,
   type DesktopProjectTextFileTail,
   type DesktopProjectTextFileUpdate,
   type DesktopEventUnsubscribe,
@@ -76,6 +77,26 @@ export async function readProjectTextFile(
   }
 
   return await getDesktopApi().workspace.readProjectTextFile(resolvedPath)
+}
+
+/** mtimeMs:size generation for Home assets; null when missing or unsupported. */
+export async function statProjectFile(
+  path: string,
+  options: ProjectFilePathOptions = {},
+): Promise<DesktopProjectFileStat | null> {
+  const resolvedPath = resolveProjectFilePath(path, options.projectPath)
+  const workspace = getDesktopApi().workspace
+  const statFn = workspace.statProjectFile
+  if (typeof statFn !== 'function') return null
+  return await statFn.call(workspace, resolvedPath)
+}
+
+export function assetGenerationKey(
+  path: string,
+  stat: DesktopProjectFileStat | null,
+): string {
+  if (!stat) return `${path}@missing`
+  return `${path}@${stat.mtimeMs}:${stat.size}`
 }
 
 export async function readOptionalProjectTextFile(

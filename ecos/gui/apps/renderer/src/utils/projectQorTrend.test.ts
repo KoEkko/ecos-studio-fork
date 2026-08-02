@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildProjectQorScoreDetail,
   buildProjectQorTrendSummary,
+  buildQorGateTally,
   hasCurrentQorSummaryText,
   normalizeQorHotspots,
   normalizeQorMetrics,
@@ -344,6 +345,39 @@ describe('project QoR trend V3 model', () => {
     ).toEqual([])
   })
 
+  it('counts every declared gate, not only the failures', () => {
+    expect(
+      buildQorGateTally({
+        DRC: gateSummary([
+          { id: 'qor.drc.clean', state: 'failed' },
+          { id: 'qor.drc.antenna', state: 'pass' },
+        ]),
+        RCX: gateSummary([{ id: 'qor.rcx.corner_coverage', state: 'unavailable' }]),
+        STA: null,
+      }),
+    ).toEqual({ total: 3, blocked: 1, warning: 1 })
+  })
+
+  /* A gate never reports `warning`; anything that is neither a pass nor a failure is a
+     gate that reached no verdict, which the card reports under that heading. */
+  it('reads a gate with no verdict as a warning rather than dropping it', () => {
+    expect(
+      buildQorGateTally({
+        STA: gateSummary([{ id: 'qor.sta.setup_closed', state: 'incomplete' }]),
+      }),
+    ).toEqual({ total: 1, blocked: 0, warning: 1 })
+  })
+
+  it('ignores summaries it cannot read and gates with no id or state', () => {
+    expect(
+      buildQorGateTally({
+        DRC: '{ not json',
+        RCX: JSON.stringify({ schema_version: 3, gates: [{ id: 'x', state: 'failed' }] }),
+        STA: gateSummary([{ id: '', state: 'failed' }, { id: 'qor.sta.hold_closed' }]),
+      }),
+    ).toEqual({ total: 0, blocked: 0, warning: 0 })
+  })
+
   it('serializes readiness and corner-comparison fingerprints in the project report', () => {
     const summary = buildProjectQorTrendSummary([
       workspace('ws_0004', {
@@ -605,6 +639,15 @@ function signoffSummary(step: 'RCX' | 'STA', status: 'pass' | 'incomplete'): str
     metric_count: 0,
     missing_metrics: [],
     gates: gates.map((gate) => ({ ...gate, blocking: true, metrics: [], evidence: [] })),
+  })
+}
+
+function gateSummary(gates: Record<string, unknown>[]): string {
+  return JSON.stringify({
+    schema_version: 4,
+    analysis_status: 'valid',
+    quality_status: 'blocked',
+    gates,
   })
 }
 

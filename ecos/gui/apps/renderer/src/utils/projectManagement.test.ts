@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   FLOW_STEPS,
   buildProjectManagementProject,
+  buildWorkspaceFinalMetrics,
   createProjectManifestDraft,
   createSelectionState,
   parseWorkspaceFlowStateMap,
@@ -295,6 +296,42 @@ describe('project management V3 model', () => {
     expect(model.workspaces).toEqual([])
     expect(model.metricsRows).toEqual([])
     expect(createSelectionState(model).selectedWorkspaceId).toBe('')
+  })
+
+  it('derives the same final metrics for a lone workspace as the project dashboard does', () => {
+    const manifest = manifestWithWorkspace()
+    const model = buildProjectManagementProject(
+      project,
+      manifest,
+      { ws_0004: successStates },
+      { ws_0004: v3Inputs() },
+    )
+
+    const standalone = buildWorkspaceFinalMetrics('/projects/gcd/ws_0004', {
+      ...v3Inputs(),
+      flowText: JSON.stringify({
+        steps: FLOW_STEPS.map((step) => ({ name: step, state: 'success' })),
+      }),
+    })
+
+    expect(standalone).toEqual(model.workspaceSummaries[0]!.finalMetrics)
+    expect(standalone.setupWns).toMatchObject({ value: 2.905 })
+    expect(standalone.dieArea).toMatchObject({ value: 2400 })
+  })
+
+  it('reports pending final metrics when the workspace has no analysis artifacts', () => {
+    const standalone = buildWorkspaceFinalMetrics('/projects/gcd/ws_0004', {})
+    expect(standalone).toEqual({
+      drcCount: undefined,
+      setupWns: undefined,
+      setupTns: undefined,
+      holdWns: undefined,
+      holdTns: undefined,
+      area: undefined,
+      dieArea: undefined,
+      coreUtil: undefined,
+      frequency: undefined,
+    })
   })
 
   it('derives dashboard keys and step-specific Step Analysis metrics from schema v3 ids', () => {

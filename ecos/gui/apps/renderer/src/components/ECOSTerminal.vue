@@ -1,19 +1,8 @@
 <template>
-  <section
-    v-show="expanded"
-    ref="terminalPanel"
-    class="ecos-terminal-panel"
-    aria-label="Terminal"
-  >
-    <div
-      class="terminal-resize-handle"
-      aria-hidden="true"
-      @pointerdown="handleResizePointerDown"
-    ></div>
-    <div class="terminal-header">
-      <div class="terminal-title">
-        <i class="ri-terminal-box-line" aria-hidden="true"></i>
-        <span>Terminal</span>
+  <div v-show="expanded" class="ecos-terminal-tab" aria-label="Terminal">
+    <!-- `defer` lets the shared panel header render before this teleport resolves it. -->
+    <Teleport v-if="expanded" defer to="#bottom-panel-actions">
+      <div ref="terminalActions" class="terminal-actions" aria-label="Terminal actions">
         <span
           v-if="activeTerminalRecord?.cwdPath"
           class="terminal-cwd"
@@ -21,8 +10,6 @@
         >
           {{ activeTerminalRecord.cwdPath }}
         </span>
-      </div>
-      <div ref="terminalActions" class="terminal-actions" aria-label="Terminal actions">
         <button
           class="terminal-icon-button"
           type="button"
@@ -41,37 +28,6 @@
         >
           <i class="ri-arrow-down-s-line" aria-hidden="true"></i>
         </button>
-        <button
-          class="terminal-icon-button"
-          type="button"
-          title="More Actions"
-          aria-label="More Actions"
-          @click.stop="toggleMoreMenu"
-        >
-          <i class="ri-more-line" aria-hidden="true"></i>
-        </button>
-        <span class="terminal-action-separator" aria-hidden="true"></span>
-        <button
-          class="terminal-icon-button"
-          type="button"
-          :title="maximized ? 'Restore Panel' : 'Maximize Panel'"
-          :aria-label="maximized ? 'Restore Panel' : 'Maximize Panel'"
-          @click="$emit('toggleMaximize')"
-        >
-          <i
-            :class="maximized ? 'ri-fullscreen-exit-line' : 'ri-fullscreen-line'"
-            aria-hidden="true"
-          ></i>
-        </button>
-        <button
-          class="terminal-icon-button"
-          type="button"
-          title="Close Panel"
-          aria-label="Close Panel"
-          @click="closePanel"
-        >
-          <i class="ri-close-line" aria-hidden="true"></i>
-        </button>
         <div v-if="showProfilesMenu" class="terminal-menu terminal-profile-menu">
           <button
             type="button"
@@ -81,20 +37,8 @@
             Default shell
           </button>
         </div>
-        <div v-if="showMoreMenu" class="terminal-menu terminal-more-menu">
-          <button
-            type="button"
-            class="terminal-menu-item"
-            @click="toggleMaximizeFromMenu"
-          >
-            {{ maximized ? 'Restore Panel' : 'Maximize Panel' }}
-          </button>
-          <button type="button" class="terminal-menu-item" @click="closePanel">
-            Close Panel
-          </button>
-        </div>
       </div>
-    </div>
+    </Teleport>
     <div ref="terminalBody" class="terminal-body">
       <div ref="terminalWorkspace" class="terminal-workspace">
         <div class="terminal-surfaces">
@@ -157,7 +101,7 @@
         </div>
       </div>
     </div>
-  </section>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -179,16 +123,11 @@ import { getOptionalDesktopApi } from '@/platform/desktop'
 import '@xterm/xterm/css/xterm.css'
 
 const props = defineProps<{
+  /** True only while the shared bottom panel is open on the terminal tab. */
   expanded: boolean
   maximized: boolean
   projectPath: string | null
   themeName: 'light' | 'dark'
-}>()
-
-const emit = defineEmits<{
-  collapse: []
-  heightChange: [height: string]
-  toggleMaximize: []
 }>()
 
 const terminalThemes: Record<'light' | 'dark', ITheme> = {
@@ -237,8 +176,6 @@ const terminalThemes: Record<'light' | 'dark', ITheme> = {
     yellow: '#ca8a04',
   },
 }
-const MIN_TERMINAL_PANEL_HEIGHT = 160
-const TERMINAL_PANEL_MARGIN = 56
 const DEFAULT_TERMINAL_SESSION_LIST_WIDTH = 150
 const MIN_TERMINAL_SESSION_LIST_WIDTH = 104
 const MAX_TERMINAL_SESSION_LIST_WIDTH = 280
@@ -256,14 +193,12 @@ interface TerminalRecord {
   terminal: Terminal
 }
 
-const terminalPanel = ref<HTMLElement | null>(null)
 const terminalBody = ref<HTMLElement | null>(null)
 const terminalWorkspace = ref<HTMLElement | null>(null)
 const terminalActions = ref<HTMLElement | null>(null)
 const terminalRecords = shallowRef<TerminalRecord[]>([])
 const activeTerminalId = ref<string | null>(null)
 const showProfilesMenu = ref(false)
-const showMoreMenu = ref(false)
 const terminalSessionListWidth = ref(DEFAULT_TERMINAL_SESSION_LIST_WIDTH)
 const activeTerminalRecord = computed(
   () =>
@@ -279,8 +214,6 @@ let terminalSequence = 0
 let unsubscribeShellData: (() => void) | undefined
 let unsubscribeShellExit: (() => void) | undefined
 let resizeObserver: ResizeObserver | undefined
-let resizePointerTarget: HTMLElement | null = null
-let resizePointerId: number | null = null
 let sessionListResizePointerTarget: HTMLElement | null = null
 let sessionListResizePointerId: number | null = null
 const pendingShellData = new Map<string, string[]>()
@@ -552,14 +485,8 @@ async function deleteTerminal(localId: string) {
   }
 }
 
-function closePanel() {
-  closeTerminalMenus()
-  emit('collapse')
-}
-
 function closeTerminalMenus() {
   showProfilesMenu.value = false
-  showMoreMenu.value = false
 }
 
 function closeTerminalMenusOutside(event: PointerEvent) {
@@ -569,17 +496,6 @@ function closeTerminalMenusOutside(event: PointerEvent) {
 
 function toggleProfilesMenu() {
   showProfilesMenu.value = !showProfilesMenu.value
-  showMoreMenu.value = false
-}
-
-function toggleMoreMenu() {
-  showMoreMenu.value = !showMoreMenu.value
-  showProfilesMenu.value = false
-}
-
-function toggleMaximizeFromMenu() {
-  closeTerminalMenus()
-  emit('toggleMaximize')
 }
 
 function handleShellData(event: { data: string; sessionId: string }) {
@@ -612,57 +528,6 @@ function handleData(record: TerminalRecord, data: string) {
   const desktopApi = getOptionalDesktopApi()
   if (!desktopApi?.shell) return
   void desktopApi.shell.write(record.sessionId, data)
-}
-
-function handleResizePointerDown(event: PointerEvent) {
-  if (event.button !== 0 || props.maximized) return
-  event.preventDefault()
-
-  resizePointerTarget = event.currentTarget as HTMLElement
-  resizePointerId = event.pointerId
-  resizePointerTarget.setPointerCapture?.(resizePointerId)
-  document.body.classList.add('terminal-panel-resizing')
-  window.addEventListener('pointermove', handleResizePointerMove)
-  window.addEventListener('pointerup', stopTerminalPanelResize)
-  window.addEventListener('pointercancel', stopTerminalPanelResize)
-  window.addEventListener('blur', stopTerminalPanelResize)
-  handleResizePointerMove(event)
-}
-
-function handleResizePointerMove(event: PointerEvent) {
-  const panel = terminalPanel.value
-  const parent = panel?.parentElement
-  if (!parent) return
-
-  const parentRect = parent.getBoundingClientRect()
-  const maxHeight = Math.max(
-    MIN_TERMINAL_PANEL_HEIGHT,
-    Math.floor(parentRect.height - TERMINAL_PANEL_MARGIN),
-  )
-  const height = Math.max(
-    MIN_TERMINAL_PANEL_HEIGHT,
-    Math.min(maxHeight, Math.round(parentRect.bottom - event.clientY)),
-  )
-  emit('heightChange', `${height}px`)
-  fitTerminal()
-}
-
-function stopTerminalPanelResize() {
-  if (resizePointerTarget && resizePointerId !== null) {
-    try {
-      resizePointerTarget.releasePointerCapture?.(resizePointerId)
-    } catch {
-      /* Pointer capture may already be released by the browser. */
-    }
-  }
-  resizePointerTarget = null
-  resizePointerId = null
-  document.body.classList.remove('terminal-panel-resizing')
-  window.removeEventListener('pointermove', handleResizePointerMove)
-  window.removeEventListener('pointerup', stopTerminalPanelResize)
-  window.removeEventListener('pointercancel', stopTerminalPanelResize)
-  window.removeEventListener('blur', stopTerminalPanelResize)
-  fitTerminalAfterLayout()
 }
 
 function handleSessionListResizePointerDown(event: PointerEvent) {
@@ -728,7 +593,6 @@ onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', closeTerminalMenusOutside)
   unsubscribeShellData?.()
   unsubscribeShellExit?.()
-  stopTerminalPanelResize()
   stopSessionListResize()
   resizeObserver?.disconnect()
   for (const record of terminalRecords.value) {
@@ -764,66 +628,19 @@ watch(
 </script>
 
 <style scoped>
-.ecos-terminal-panel {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 80;
-  height: var(--terminal-panel-height, min(300px, 42vh));
-  min-height: 160px;
+.ecos-terminal-tab {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   background: var(--bg-primary);
-  border-top: 1px solid var(--border-color);
-  box-shadow: 0 -12px 28px rgba(0, 0, 0, 0.16);
-}
-
-.terminal-resize-handle {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 5px;
-  z-index: 2;
-  cursor: row-resize;
-  background: transparent;
-}
-
-.terminal-resize-handle:hover {
-  background: color-mix(in srgb, var(--accent-color) 58%, transparent);
-}
-
-.terminal-header {
-  height: 34px;
-  flex: 0 0 34px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 8px 0 12px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
-}
-
-.terminal-title {
-  min-width: 0;
-  flex: 1 1 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-primary);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.terminal-title i {
-  font-size: 14px;
 }
 
 .terminal-cwd {
   min-width: 0;
+  max-width: 42ch;
   overflow: hidden;
   color: var(--text-secondary);
   font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
@@ -839,13 +656,6 @@ watch(
   align-items: center;
   gap: 4px;
   flex: 0 0 auto;
-}
-
-.terminal-action-separator {
-  width: 1px;
-  height: 20px;
-  margin: 0 4px;
-  background: var(--border-color);
 }
 
 .terminal-icon-button {
@@ -897,10 +707,6 @@ watch(
   border-radius: 4px;
   background: var(--bg-secondary);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
-}
-
-.terminal-profile-menu {
-  right: 78px;
 }
 
 .terminal-menu-item {
@@ -1130,13 +936,6 @@ watch(
 :deep(.xterm-viewport),
 :deep(.xterm-screen) {
   background: var(--bg-primary);
-}
-
-:global(body.terminal-panel-resizing),
-:global(body.terminal-panel-resizing *) {
-  cursor: row-resize !important;
-  user-select: none !important;
-  -webkit-user-select: none !important;
 }
 
 :global(body.terminal-session-list-resizing),

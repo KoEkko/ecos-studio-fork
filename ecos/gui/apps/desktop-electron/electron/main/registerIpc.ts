@@ -11,6 +11,13 @@ import { dirname } from 'node:path'
 import {
   desktopApiEventChannels,
   desktopApiIpcChannels,
+  type DesktopAgentEvent,
+  type DesktopAgentProviderRequest,
+  type DesktopAgentSendMessageRequest,
+  type DesktopAgentSendMessageResponse,
+  type DesktopAgentStartSessionRequest,
+  type DesktopAgentStartSessionResponse,
+  type DesktopAgentStatus,
   type DesktopProjectFileChangedEvent,
   type DesktopProjectLogTailEvent,
   type DesktopProjectDirectoryEntry,
@@ -117,6 +124,9 @@ export interface DesktopBridgeServices {
     clearProjectRoot(): Promise<void>
     isProjectDirectory(path: string): Promise<boolean>
     readProjectBinaryFile(path: string): Promise<Uint8Array>
+    statProjectFile(
+      path: string,
+    ): Promise<import('@ecos-studio/shared').DesktopProjectFileStat | null>
     readOptionalProjectTextFile(path: string): Promise<string | null>
     readProjectTextFile(path: string): Promise<string>
     readProjectTextFileTail(path: string, maxChars: number): Promise<string | null>
@@ -212,6 +222,18 @@ export interface DesktopBridgeServices {
     syncConfig(request: EccWorkspaceSyncConfigRequest): Promise<unknown>
     workspaceHome(request: EccWorkspaceHandleRequest): Promise<unknown>
     workspaceInfo(request: EccWorkspaceInfoRequest): Promise<unknown>
+  }
+  agentService: {
+    getStatus(request?: DesktopAgentProviderRequest): Promise<DesktopAgentStatus>
+    startSession(
+      request: DesktopAgentStartSessionRequest,
+    ): Promise<DesktopAgentStartSessionResponse>
+    sendMessage(
+      request: DesktopAgentSendMessageRequest,
+    ): Promise<DesktopAgentSendMessageResponse>
+    interrupt(request?: DesktopAgentProviderRequest): Promise<void>
+    stop(request?: DesktopAgentProviderRequest): Promise<void>
+    onEvent(listener: (event: DesktopAgentEvent) => void): () => void
   }
   shellService: {
     createSession(
@@ -562,6 +584,34 @@ export function registerIpc(
     }
 
     deliverDirectoryScopedEvent(payload)
+  })
+
+  /**
+   * Agent events arrive unsolicited from a long-lived provider process, so they go to
+   * every renderer that has talked to the agent. Renderers filter by their own session.
+   */
+  const agentEventSenders = new Set<IpcMainInvokeEvent['sender']>()
+
+  const trackAgentSender = (sender: IpcMainInvokeEvent['sender']): void => {
+    if (agentEventSenders.has(sender)) return
+    agentEventSenders.add(sender)
+    if (typeof sender.once === 'function') {
+      sender.once('destroyed', () => {
+        agentEventSenders.delete(sender)
+      })
+    }
+  }
+
+  services.agentService.onEvent((payload) => {
+    for (const sender of agentEventSenders) {
+      if (typeof sender.isDestroyed === 'function' && sender.isDestroyed()) {
+        agentEventSenders.delete(sender)
+        continue
+      }
+      if (typeof sender.send === 'function') {
+        sender.send(desktopApiEventChannels.agentEvent, payload)
+      }
+    }
   })
 
   const unwatchProjectFile = async (subscriptionId: string): Promise<void> => {
@@ -989,6 +1039,10 @@ export function registerIpc(
     return await services.workspaceService.readProjectBinaryFile(path as string)
   })
 
+  handle(desktopApiIpcChannels.workspaceStatProjectFile, async (_event, path) => {
+    return await services.workspaceService.statProjectFile(path as string)
+  })
+
   handle(
     desktopApiIpcChannels.workspaceWriteProjectTextFile,
     async (_event, path, content) => {
@@ -1310,6 +1364,37 @@ export function registerIpc(
 
   handle(desktopApiIpcChannels.eccFlowRunStep, async (_event, request) => {
     return await services.eccRuntimeService.runStep(request as EccFlowRunStepRequest)
+  })
+
+  handle(desktopApiIpcChannels.agentGetStatus, async (event, request) => {
+    trackAgentSender(event.sender)
+    return await services.agentService.getStatus(
+      request as DesktopAgentProviderRequest | undefined,
+    )
+  })
+
+  handle(desktopApiIpcChannels.agentStartSession, async (event, request) => {
+    trackAgentSender(event.sender)
+    return await services.agentService.startSession(
+      request as DesktopAgentStartSessionRequest,
+    )
+  })
+
+  handle(desktopApiIpcChannels.agentSendMessage, async (event, request) => {
+    trackAgentSender(event.sender)
+    return await services.agentService.sendMessage(
+      request as DesktopAgentSendMessageRequest,
+    )
+  })
+
+  handle(desktopApiIpcChannels.agentInterrupt, async (_event, request) => {
+    await services.agentService.interrupt(
+      request as DesktopAgentProviderRequest | undefined,
+    )
+  })
+
+  handle(desktopApiIpcChannels.agentStop, async (_event, request) => {
+    await services.agentService.stop(request as DesktopAgentProviderRequest | undefined)
   })
 
   handle(desktopApiIpcChannels.shellCreateSession, async (event, options) => {

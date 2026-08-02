@@ -1,0 +1,167 @@
+/*
+ * The Home dashboard card shell.
+ *
+ * Design intent: the data is the decoration. Cards separate themselves from the page
+ * with one neutral hairline and a small lift in background, never with the accent
+ * colour — accent is reserved for things the user can act on. Nesting is kept to two
+ * levels (page > card) so values never sit inside a box inside a box.
+ *
+ * Shared because the cards live in separate components but must read as one surface.
+ */
+
+.section-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  contain: layout paint style;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px 9px;
+  flex-shrink: 0;
+}
+
+/* A header only needs a rule when content scrolls underneath it. */
+.section-header--divided {
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+}
+
+.header-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+  opacity: 0.8;
+  flex-shrink: 0;
+}
+
+.section-header h2 {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-primary);
+  margin: 0;
+  white-space: nowrap;
+}
+
+.header-badge {
+  padding: 1px 7px;
+  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
+  color: var(--accent-color);
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.header-hint {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.65;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-count {
+  margin-left: auto;
+  color: var(--text-secondary);
+  font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.header-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+/* Without a hint or count in between, the actions still hug the right edge. */
+.section-header h2 + .header-actions,
+.header-badge + .header-actions {
+  margin-left: auto;
+}
+
+/*
+ * Header buttons stay invisible until the card is hovered: a dashboard of six cards
+ * would otherwise show a dozen icons competing with the numbers.
+ */
+.action-btn {
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 13px;
+  opacity: 0;
+  transition:
+    opacity 0.12s ease,
+    color 0.12s ease,
+    background-color 0.12s ease;
+}
+
+.section-card:hover .action-btn,
+.action-btn:focus-visible {
+  opacity: 0.7;
+}
+
+.action-btn:hover:not(:disabled) {
+  opacity: 1;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-secondary) 12%, transparent);
+}
+
+.action-btn:disabled {
+  cursor: default;
+}
+
+/*
+ * A Home card only ever summarises; the full record lives in the bottom panel. This
+ * link is the one accent-coloured thing on the card because it is the only thing on
+ * it the user can act on.
+ */
+.card-details-link {
+  align-self: flex-end;
+  flex: 0 0 auto;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: none;
+  color: var(--accent-color);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.card-details-link:hover {
+  text-decoration: underline;
+}
+
+.card-details-link:focus-visible {
+  outline: 1px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+.section-card:hover .action-btn:disabled {
+  opacity: 0.25;
+}

@@ -30,7 +30,7 @@ export function useFlowRunMode(currentStage: Ref<string | undefined | null>) {
   })
 
   const runModes = computed<Record<FlowRunModeKey, FlowRunModeOption>>(() => {
-    const target = isFullFlowContext.value ? 'RTL2GDS' : 'Step'
+    const target = isFullFlowContext.value ? 'Flow' : 'Step'
 
     return {
       run: { label: `Run ${target}`, icon: 'ri-play-fill' },

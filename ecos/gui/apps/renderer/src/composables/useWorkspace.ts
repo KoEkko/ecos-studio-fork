@@ -36,6 +36,7 @@ import {
   rewriteWorkspaceConfigPathsForReplacement,
   workspaceParentPath,
 } from './workspaceReplacement'
+import { formatDurationSeconds, sumFlowRuntimeSeconds } from '@/utils/duration'
 
 interface SerializedProject {
   id: string
@@ -1152,26 +1153,10 @@ export function useWorkspace() {
         else if (failedStep) status = 'failed'
         else if (completedSteps > 0) status = 'in_progress'
 
-        let totalSeconds = 0
-        let hasValidRuntime = false
-        for (const step of steps) {
-          const runtime = asString(step.runtime)
-          if (runtime) {
-            const parts = runtime.split(':')
-            const numericParts = parts.map((part) =>
-              part.trim() === '' ? Number.NaN : Number(part),
-            )
-            if (numericParts.length === 3 && numericParts.every(Number.isFinite)) {
-              totalSeconds +=
-                numericParts[0] * 3600 + numericParts[1] * 60 + numericParts[2]
-              hasValidRuntime = true
-            }
-          }
-        }
-        const h = Math.floor(totalSeconds / 3600)
-        const m = Math.floor((totalSeconds % 3600) / 60)
-        const s = totalSeconds % 60
-        const totalRuntime = h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${s}s` : `${s}s`
+        const runtimeSum = sumFlowRuntimeSeconds(
+          steps.map((step) => (isRecord(step) ? asString(step.runtime) : undefined)),
+        )
+        const totalRuntime = formatDurationSeconds(runtimeSum.seconds)
         const currentStep =
           asString(ongoingStep?.name) ||
           asString(failedStep?.name) ||
@@ -1181,7 +1166,7 @@ export function useWorkspace() {
         snapshot.totalSteps = totalSteps
         snapshot.completedSteps = completedSteps
         snapshot.currentStep = currentStep
-        if (totalSteps > 0 && hasValidRuntime) snapshot.totalRuntime = totalRuntime
+        if (totalSteps > 0 && runtimeSum.hasValue) snapshot.totalRuntime = totalRuntime
         else if (totalSteps === 0) snapshot.totalRuntime = undefined
       }
     } catch {

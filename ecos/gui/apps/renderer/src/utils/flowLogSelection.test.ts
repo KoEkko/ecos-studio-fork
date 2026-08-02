@@ -5,7 +5,7 @@ import {
   getDefaultSelectedFlowLogKey,
   reconcileSelectedFlowLogKey,
   toFlowLogListItems,
-} from './homeViewFlowLogSelection'
+} from './flowLogSelection'
 
 const segments: FlowLogSegment[] = [
   {
@@ -27,7 +27,7 @@ const segments: FlowLogSegment[] = [
   },
 ]
 
-describe('homeViewFlowLogSelection', () => {
+describe('flowLogSelection', () => {
   it('prefers the live segment for the default selection', () => {
     expect(getDefaultSelectedFlowLogKey(segments)).toBe('Synthesis\u001fyosys')
   })

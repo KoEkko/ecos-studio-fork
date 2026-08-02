@@ -1,12 +1,12 @@
 <template>
   <div class="flex h-full min-w-0 flex-col">
-    <!-- 消息列表 -->
+    <!-- 消息列表：工作区报告 + Agent 对话共用一个滚动区 -->
     <div
       ref="scrollContainerRef"
       class="custom-scrollbar min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-4"
     >
       <div
-        v-if="messages.length === 0"
+        v-if="isEmpty"
         class="flex h-full flex-col items-center justify-center py-12 text-center"
       >
         <div
@@ -18,6 +18,7 @@
           No messages, please enter instructions to start chatting.
         </p>
       </div>
+
       <div
         v-else
         class="messages-container w-full max-w-full min-w-0 space-y-4 overflow-hidden py-4"
@@ -30,156 +31,76 @@
           @close="messageStore.removeMessage(msg.id)"
           class="message-item w-full max-w-full min-w-0"
         />
+
+        <!-- runs 不传：flow 的运行报告属于 Home 的 Assistant，这里只有对话。 -->
+        <AgentFeed
+          v-if="agentEntries.length"
+          :entries="agentEntries"
+          :scrollable="false"
+          hide-empty
+        />
       </div>
     </div>
 
-    <!-- 输入区域 -->
-    <div class="shrink-0 border-t border-(--border-color) bg-(--bg-primary) p-4">
-      <div class="rounded-xl border border-(--border-color) bg-(--bg-secondary) p-2">
-        <textarea
-          v-model="inputValue"
-          placeholder=""
-          class="min-h-[80px] w-full resize-none border-none bg-transparent p-2 text-[13px] text-(--text-primary) focus:ring-0 focus:outline-none"
-          @keydown="handleKeyDown"
-        ></textarea>
-
-        <div class="mt-2 flex items-center justify-between px-1">
-          <div class="flex items-center gap-3">
-            <!-- 模式选择器 - Cursor 风格 -->
-            <div class="relative" ref="modeSelectRef">
-              <button
-                @click="toggleModeMenu"
-                class="mode-selector flex items-center gap-1.5 rounded-full border border-(--border-color) bg-(--bg-primary) px-2 py-0.5 transition-colors duration-150 hover:border-(--text-secondary)/50"
-              >
-                <i :class="[currentMode.icon, 'text-sm text-(--text-secondary)']"></i>
-                <i
-                  class="ri-arrow-down-s-line text-xs text-(--text-secondary) transition-transform duration-200"
-                  :class="{ 'rotate-180': showModeMenu }"
-                ></i>
-              </button>
-
-              <!-- 上拉菜单 -->
-              <Transition name="popup">
-                <div
-                  v-if="showModeMenu"
-                  class="absolute bottom-full left-0 z-50 mb-2 min-w-[140px] overflow-hidden rounded-xl border border-(--border-color)/50 bg-(--bg-tertiary) shadow-xl"
-                >
-                  <div class="py-1">
-                    <div
-                      v-for="mode in modes"
-                      :key="mode.id"
-                      @click="selectMode(mode.id)"
-                      :class="[
-                        'flex cursor-pointer items-center gap-2.5 px-3 py-2 transition-colors duration-150',
-                        currentModeId === mode.id
-                          ? 'bg-(--bg-secondary) text-(--text-primary)'
-                          : 'text-(--text-secondary) hover:bg-(--bg-secondary)/50 hover:text-(--text-primary)',
-                      ]"
-                    >
-                      <i :class="[mode.icon, 'text-sm']"></i>
-                      <span class="flex-1 text-xs font-medium">{{ mode.label }}</span>
-                      <i
-                        v-if="currentModeId === mode.id"
-                        class="ri-check-line text-xs text-(--accent-color)"
-                      ></i>
-                    </div>
-                  </div>
-                </div>
-              </Transition>
-            </div>
-          </div>
-
-          <button
-            @click="handleSubmit"
-            class="send-btn"
-            :class="{ 'send-btn-active': inputValue.trim() }"
-          >
-            <i class="ri-send-plane-2-fill"></i>
-          </button>
-        </div>
-      </div>
-    </div>
+    <AgentInput
+      :busy="isBusy"
+      :disabled="!isAvailable"
+      :notice="notice"
+      @submit="send"
+      @interrupt="interrupt"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted, onUnmounted, onActivated } from 'vue'
+import { computed, nextTick, onActivated, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
+import AgentFeed from './AgentFeed.vue'
+import AgentInput from './AgentInput.vue'
 import MessageItem from './MessageItem.vue'
 import { useMessageStore } from '../stores/messageStore'
+import { AGENT_UNAVAILABLE_MESSAGE, useAgent } from '@/composables/useAgent'
 
 const messageStore = useMessageStore()
 const { messages } = storeToRefs(messageStore)
+const {
+  entries: agentEntries,
+  statusMessage,
+  isAvailable,
+  isBusy,
+  isReady,
+  send,
+  interrupt,
+  refreshStatus,
+} = useAgent()
 
-const inputValue = ref('')
 const scrollContainerRef = ref<HTMLDivElement | null>(null)
 
-// 模式选择器相关
-const modeSelectRef = ref<HTMLDivElement | null>(null)
-const showModeMenu = ref(false)
-const currentModeId = ref<'chat' | 'builder'>('chat')
+const isEmpty = computed(
+  () => messages.value.length === 0 && agentEntries.value.length === 0,
+)
 
-// 模式定义
-const modes = [
-  { id: 'chat' as const, label: 'Chat', icon: 'ri-chat-3-line' },
-  { id: 'builder' as const, label: 'Builder', icon: 'ri-infinity-line' },
-]
-
-// 当前选中的模式
-const currentMode = computed(() => {
-  return modes.find((m) => m.id === currentModeId.value) || modes[0]
-})
-
-// 切换菜单显示
-const toggleModeMenu = () => {
-  showModeMenu.value = !showModeMenu.value
-}
-
-// 选择模式
-const selectMode = (modeId: 'chat' | 'builder') => {
-  currentModeId.value = modeId
-  showModeMenu.value = false
-}
-
-// 点击外部关闭菜单
-const handleClickOutside = (e: MouseEvent) => {
-  if (modeSelectRef.value && !modeSelectRef.value.contains(e.target as Node)) {
-    showModeMenu.value = false
-  }
-}
-
-onMounted(() => {
-  document.addEventListener('click', handleClickOutside)
-})
-
-onUnmounted(() => {
-  document.removeEventListener('click', handleClickOutside)
+const notice = computed(() => {
+  if (!isAvailable.value) return AGENT_UNAVAILABLE_MESSAGE
+  if (!isReady.value && statusMessage.value) return statusMessage.value
+  return ''
 })
 
 // Near-bottom 阈值（像素）
 const NEAR_BOTTOM_THRESHOLD = 32
 
-/**
- * 判断当前滚动位置是否接近底部
- */
-const isNearBottom = (): boolean => {
+function isNearBottom(): boolean {
   const el = scrollContainerRef.value
   if (!el) return true
   return el.scrollHeight - (el.scrollTop + el.clientHeight) <= NEAR_BOTTOM_THRESHOLD
 }
 
-/**
- * 直接滚动到底部（使用 scrollTop）
- */
-const scrollToBottom = (smooth = true) => {
+function scrollToBottom(smooth = true): void {
   const el = scrollContainerRef.value
   if (!el) return
 
   if (smooth) {
-    el.scrollTo({
-      top: el.scrollHeight,
-      behavior: 'smooth',
-    })
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   } else {
     el.scrollTop = el.scrollHeight
   }
@@ -187,63 +108,41 @@ const scrollToBottom = (smooth = true) => {
 
 /** 从 Inspector 切回 Chat 时：KeepAlive 激活，强制滚到底（避免停在中间位置） */
 onActivated(() => {
-  nextTick(() => {
+  void nextTick(() => {
     requestAnimationFrame(() => {
       scrollToBottom(false)
     })
   })
 })
 
-/**
- * 智能滚动到底部
- * @param force 是否强制滚动（忽略 near-bottom 判定）
- */
-const scrollToBottomIfNeeded = (force = false) => {
-  nextTick(() => {
-    if (force || isNearBottom()) {
-      scrollToBottom()
-    }
-  })
-}
+onMounted(() => {
+  void refreshStatus()
+})
 
-/**
- * 图片加载完成回调
- * 图片加载后高度变化，需要重新滚动到底部
- */
-const onImageLoad = () => {
-  // 使用 requestAnimationFrame 确保在渲染完成后滚动
+/** 图片加载后高度变化，需要重新滚动到底部 */
+function onImageLoad(): void {
   requestAnimationFrame(() => {
-    if (isNearBottom()) {
-      scrollToBottom()
-    }
+    if (isNearBottom()) scrollToBottom()
   })
 }
 
-// 监听消息变化，自动滚动到底部
+// 新消息到来时滚到底部；删除消息时保持用户当前浏览位置
 watch(
   () => messages.value.length,
   (newLength, oldLength) => {
-    // 新消息到来时强制滚动到底部；删除消息时保持用户当前浏览位置
-    if (newLength > oldLength) {
-      scrollToBottomIfNeeded(true)
-    }
+    if (newLength > oldLength) void nextTick(() => scrollToBottom())
   },
 )
 
-const handleSubmit = () => {
-  if (inputValue.value.trim()) {
-    messageStore.addMessage(inputValue.value)
-    inputValue.value = ''
-    // TODO: 集成实际的 AI Agent 逻辑
-  }
-}
-
-const handleKeyDown = (e: KeyboardEvent) => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault()
-    handleSubmit()
-  }
-}
+// Agent 的流式输出会持续改写最后一条，长度不变也要跟随，除非用户已向上翻阅
+watch(
+  agentEntries,
+  () => {
+    if (!isNearBottom()) return
+    void nextTick(() => scrollToBottom(false))
+  },
+  { deep: true },
+)
 </script>
 
 <style scoped>
@@ -278,70 +177,5 @@ const handleKeyDown = (e: KeyboardEvent) => {
 .message-item {
   contain: layout style paint;
   box-sizing: border-box;
-}
-
-/* ===== 发送按钮 ===== */
-.send-btn {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  border: none;
-  cursor: pointer;
-  font-size: 15px;
-  color: var(--text-secondary);
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  transition:
-    background-color 0.2s ease,
-    border-color 0.2s ease,
-    color 0.2s ease,
-    box-shadow 0.2s ease,
-    transform 0.2s ease;
-  overflow: hidden;
-}
-
-.send-btn:hover {
-  color: var(--accent-color);
-  border-color: var(--accent-color);
-  background: color-mix(in srgb, var(--accent-color) 8%, var(--bg-primary));
-}
-
-/* 有输入内容时 - 高亮激活态 */
-.send-btn-active {
-  color: #fff;
-  background: var(--accent-color);
-  border-color: var(--accent-color);
-  box-shadow: 0 2px 12px color-mix(in srgb, var(--accent-color) 40%, transparent);
-}
-
-.send-btn-active:hover {
-  color: #fff;
-  background: color-mix(in srgb, var(--accent-color) 85%, #000);
-  border-color: color-mix(in srgb, var(--accent-color) 85%, #000);
-  box-shadow: 0 4px 20px color-mix(in srgb, var(--accent-color) 50%, transparent);
-  transform: translateY(-1px);
-}
-
-.send-btn-active:active {
-  transform: translateY(0) scale(0.95);
-  box-shadow: 0 1px 6px color-mix(in srgb, var(--accent-color) 30%, transparent);
-}
-
-/* 上拉菜单动画 */
-.popup-enter-active,
-.popup-leave-active {
-  transition:
-    opacity 0.15s ease-out,
-    transform 0.15s ease-out;
-}
-
-.popup-enter-from,
-.popup-leave-to {
-  opacity: 0;
-  transform: translateY(4px);
 }
 </style>

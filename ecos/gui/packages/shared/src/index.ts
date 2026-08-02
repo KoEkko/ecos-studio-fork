@@ -14,6 +14,7 @@ export type {
   PickedRtlSources,
   DesktopProjectLogTailSubscriptionOptions,
   DesktopProjectDirectoryEntry,
+  DesktopProjectFileStat,
   DesktopProjectTextFileTail,
   DesktopProjectTextFileUpdate,
   DesktopSettingsValue,

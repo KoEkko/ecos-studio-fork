@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import VirtualScroller from 'primevue/virtualscroller'
-import type { FlowLogListItem } from '@/views/homeViewFlowLogSelection'
+import type { FlowLogListItem } from '@/utils/flowLogSelection'
 
 defineProps<{
   items: FlowLogListItem[]

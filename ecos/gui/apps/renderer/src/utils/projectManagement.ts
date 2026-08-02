@@ -1,10 +1,14 @@
 import type { Project } from '@/types'
 import {
   buildProjectQorTrendSummary,
+  buildQorGateTally,
+  type ProjectQorBlockingIssue,
+  type ProjectQorGateTally,
   type ProjectQorMetricRecord,
   type ProjectQorTimingSummary,
   type ProjectQorTrendSummary,
   type ProjectQorTrendWorkspaceSummary,
+  type QorGateStatus,
 } from './projectQorTrend'
 import {
   buildProjectAnalysisSnapshot,
@@ -608,6 +612,57 @@ function emptyProjectAnalysisSnapshot(
       step: null,
     },
   }
+}
+
+export interface ProjectWorkspaceQorSummary {
+  finalMetrics: ProjectWorkspaceFinalMetrics
+  overallScore: number | null
+  gateStatus: QorGateStatus
+  blockingIssues: ProjectQorBlockingIssue[]
+  gateTally: ProjectQorGateTally
+}
+
+/**
+ * Single-workspace view of the project dashboard's QoR pipeline, so Home and the
+ * dashboard cannot disagree about a score or a gate. Cross-workspace features of the
+ * trend summary (baselines, regressions, rankings) stay inert with one input.
+ */
+export function buildWorkspaceQorSummary(
+  workspacePath: string,
+  analysis: ProjectWorkspaceAnalysisInput,
+): ProjectWorkspaceQorSummary {
+  const summary = buildProjectQorTrendSummary([
+    {
+      workspaceId: workspacePath,
+      workspaceName: workspacePath,
+      workspacePath,
+      createdAt: '',
+      status: 'success',
+      branchFrom: null,
+      stepMetricTexts: analysis.stepMetricTexts ?? {},
+      stepSummaryTexts: analysis.stepSummaryTexts,
+      stepHotspotTexts: analysis.stepHotspotTexts,
+      staTimingIssuesText: analysis.staTimingIssuesText,
+      stepStatuses: analysis.flowText
+        ? parseWorkspaceFlowStateMap(analysis.flowText)
+        : {},
+    },
+  ])
+  const workspace = summary.workspaces[0]
+  return {
+    finalMetrics: v3FinalMetrics(workspace),
+    overallScore: workspace?.overallScore ?? null,
+    gateStatus: workspace?.gateStatus ?? 'unavailable',
+    blockingIssues: workspace?.blockingIssues ?? [],
+    gateTally: buildQorGateTally(analysis.stepSummaryTexts),
+  }
+}
+
+export function buildWorkspaceFinalMetrics(
+  workspacePath: string,
+  analysis: ProjectWorkspaceAnalysisInput,
+): ProjectWorkspaceFinalMetrics {
+  return buildWorkspaceQorSummary(workspacePath, analysis).finalMetrics
 }
 
 function v3FinalMetrics(

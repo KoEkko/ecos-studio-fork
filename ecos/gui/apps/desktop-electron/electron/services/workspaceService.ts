@@ -15,6 +15,7 @@ import type {
   DesktopProjectFileChangedEvent,
   DesktopProjectFileChangeEventType,
   DesktopProjectDirectoryEntry,
+  DesktopProjectFileStat,
   DesktopProjectTextFileTail,
   DesktopProjectTextFileUpdate,
   ScannedPdkDirectory,
@@ -461,6 +462,18 @@ export class WorkspaceService {
   async readProjectBinaryFile(path: string): Promise<Uint8Array> {
     const canonicalPath = await this.projectScopeProvider.requestProjectPathAccess(path)
     return new Uint8Array(await readFile(canonicalPath))
+  }
+
+  async statProjectFile(path: string): Promise<DesktopProjectFileStat | null> {
+    const canonicalPath = await this.projectScopeProvider.requestProjectPathAccess(path)
+    try {
+      const fileStats = await stat(canonicalPath)
+      if (!fileStats.isFile()) return null
+      return { mtimeMs: fileStats.mtimeMs, size: fileStats.size }
+    } catch (error) {
+      if (isNodeErrorWithCode(error, 'ENOENT')) return null
+      throw error
+    }
   }
 
   async writeProjectTextFile(path: string, content: string): Promise<void> {

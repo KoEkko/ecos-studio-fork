@@ -6,6 +6,7 @@ import { createMainWindow } from './createMainWindow'
 import { configureGpuMode } from './gpuMode'
 import { registerIpc } from './registerIpc'
 import { handleSecondInstance } from '../services/appSecondInstance'
+import { AgentService } from '../services/agent/agentService'
 import { AppInfoService } from '../services/appInfoService'
 import {
   getElectronLatestMainLogFile,
@@ -46,6 +47,7 @@ let workspaceReplacementRecoveryComplete = false
 let workspaceReplacementRecovery: Promise<void> | null = null
 let projectScopeService: ProjectScopeService | null = null
 let services: {
+  agentService: AgentService
   appInfoService: AppInfoService
   eccRuntimeService: EccRpcRuntimeService
   remoteContentService: RemoteContentService
@@ -158,8 +160,16 @@ function getDesktopServices() {
     platform: process.platform,
     resourcesPath: process.resourcesPath,
   })
+  const agentService = new AgentService({
+    // A user-installed plugin wins over the bundled one with the same providerId.
+    pluginRoots: [
+      join(app.getPath('userData'), 'agent-providers'),
+      join(process.resourcesPath, 'agent-providers'),
+    ],
+  })
 
   services = {
+    agentService,
     appInfoService,
     eccRuntimeService,
     remoteContentService,
@@ -189,6 +199,7 @@ async function ensureDesktopBridgeReady(): Promise<void> {
 
   if (!ipcRegistered) {
     registerIpc(undefined, {
+      agentService: desktopServices.agentService,
       appInfoService: desktopServices.appInfoService,
       createWindow: async (options) => {
         await launchWindow({

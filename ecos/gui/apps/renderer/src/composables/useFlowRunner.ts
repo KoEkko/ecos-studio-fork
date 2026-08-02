@@ -9,6 +9,9 @@ import {
   clearHomeRunArtifactResetAwaitingBackendStart,
   markHomeRunArtifactResetAwaitingBackendStart,
 } from './homeRunArtifacts'
+import { useFlowRunStore, type FlowRunTrigger } from './flowRunStore'
+import { useFlowStages } from './useFlowStages'
+import { toFlowRunSteps } from './flowRunSteps'
 
 // ============ 模块级运行标志（run_step / rtl2gds 共用）============
 
@@ -19,6 +22,16 @@ const RUN_STEP_FALLBACK_SCOPES: WorkspaceInvalidationScope[] = ['home', 'paramet
 
 export interface FlowRunOptions {
   rerun?: boolean
+  /**
+   * 单步运行的目标。省略时回退到当前路由的 `:step`，所以 step 页上的既有入口
+   * 不用改；Home 上的 `/run <step>` 则必须显式传入。
+   */
+  step?: string
+  /**
+   * 谁发起了这次运行。默认 'user'；将来 agent 代跑时传 'agent'。别处（终端、另一个
+   * 窗口）触发的运行由 flowRunTracker 标记为 'external'，不会走到这里。
+   */
+  trigger?: FlowRunTrigger
 }
 
 function normalizeWorkspacePath(path: string): string {
@@ -77,6 +90,7 @@ function clearTransientInteractionLocks() {
  */
 export function useFlowRunner() {
   const { ensureDesktopRuntime } = useDesktopRuntime()
+  const flowRunStore = useFlowRunStore()
   const {
     currentProject,
     ensureApiReady,
@@ -86,6 +100,7 @@ export function useFlowRunner() {
     workspaceSession,
   } = useWorkspace()
   const route = useRoute()
+  const { flowStages, setFirstRunStepOngoing, setRunStepOngoingByPath } = useFlowStages()
 
   // 状态：当前 workspace 的运行态。flowExecutionActive 仍保留为全局兼容信号。
   const isRunning = computed(() =>
@@ -124,12 +139,19 @@ export function useFlowRunner() {
     return workspaceSession.value.workspaceId || null
   }
 
+  function currentRunSteps(stepPath?: string) {
+    const steps = toFlowRunSteps(flowStages.value)
+    if (!stepPath) return steps
+    const wanted = stepPath.toLowerCase()
+    const matched = steps.filter((step) => step.path.toLowerCase() === wanted)
+    return matched.length > 0 ? matched : steps
+  }
+
   /**
    * 运行当前步骤
    */
   async function runFlow(options: FlowRunOptions = {}): Promise<RunStepResponse | null> {
-    // 从动态路由参数获取当前步骤
-    const step = getCurrentStep()
+    const step = options.step?.trim() || getCurrentStep()
 
     if (!step) {
       console.warn('Unable to get current step')
@@ -167,6 +189,16 @@ export function useFlowRunner() {
 
     clearTransientInteractionLocks()
     markFlowExecutionActiveForWorkspace(directory)
+    // 起跑即登记，好让运行记录拿到准确的发起方和参数；收尾由 flowRunTracker 负责，
+    // 它能等到 flow.json 落定后再判定终态。
+    flowRunStore.beginRun({
+      trigger: options.trigger ?? 'user',
+      scope: 'step',
+      rerun: Boolean(options.rerun),
+      stepPath: step,
+      steps: currentRunSteps(step),
+    })
+    setRunStepOngoingByPath(step)
     state.value = StateEnum.Ongoing
     error.value = null
     try {
@@ -268,6 +300,13 @@ export function useFlowRunner() {
       markHomeRunArtifactResetAwaitingBackendStart(directory)
     }
     markFlowExecutionActiveForWorkspace(directory)
+    flowRunStore.beginRun({
+      trigger: options.trigger ?? 'user',
+      scope: 'full',
+      rerun: Boolean(options.rerun),
+      steps: currentRunSteps(),
+    })
+    setFirstRunStepOngoing()
     state.value = StateEnum.Ongoing
     error.value = null
 
