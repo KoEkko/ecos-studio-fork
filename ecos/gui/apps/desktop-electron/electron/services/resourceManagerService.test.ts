@@ -170,12 +170,304 @@ function localYosysEntry(localYosys: string): Record<string, unknown> {
   }
 }
 
+async function writeMpcRegistry(
+  registryPath: string,
+  archive: { path: string; sha256: string; size: number },
+  version = '0.1.0',
+): Promise<void> {
+  await writeFile(
+    registryPath,
+    JSON.stringify({
+      schema_version: 2,
+      tools: [],
+      pdks: [],
+      mpcs: [
+        {
+          id: 'mpc-frame',
+          display_name: 'MPC Frame',
+          description: 'Multi-project chip frame template.',
+          category: 'mpc',
+          homepage: 'https://github.com/openecos-projects/mpc-frame',
+          versions: [
+            {
+              version,
+              platforms: {
+                'all-platform': {
+                  url: `file://${archive.path}`,
+                  sha256: archive.sha256,
+                  size: archive.size,
+                  strip_prefix: `mpc-frame-${version}`,
+                },
+              },
+            },
+          ],
+        },
+      ],
+    }),
+    'utf8',
+  )
+}
+
 describe('ResourceManagerService', () => {
   afterEach(async () => {
     await Promise.all(
       tempDirectories
         .splice(0)
         .map((directory) => rm(directory, { force: true, recursive: true })),
+    )
+  })
+
+  it('includes the built-in mpc-frame archive resource with the default registry', async () => {
+    const root = await createTempDir('ecos-resources-')
+    const service = new ResourceManagerService({
+      cacheDir: join(root, 'cache'),
+      fetchImpl: vi.fn(async () => {
+        throw new Error('offline')
+      }),
+      resourcesDir: join(root, 'state', 'resources'),
+      toolsDir: join(root, 'data', 'tools'),
+      pdksDir: join(root, 'data', 'pdks'),
+      mpcsDir: join(root, 'data', 'mpcs'),
+    })
+
+    await expect(service.getResource('mpc:mpc-frame')).resolves.toMatchObject({
+      type: 'mpc',
+      name: 'mpc-frame',
+      category: 'mpc',
+      status: 'available',
+      available_versions: ['0.1.0'],
+      source: 'registry',
+      actions: ['install'],
+      homepage: 'https://github.com/openecos-projects/mpc-frame',
+    })
+  })
+
+  it('prefers a default-registry MPC over the built-in fallback', async () => {
+    const root = await createTempDir('ecos-resources-')
+    const service = new ResourceManagerService({
+      cacheDir: join(root, 'cache'),
+      fetchImpl: vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              schema_version: 2,
+              tools: [],
+              pdks: [],
+              mpcs: [
+                {
+                  id: 'mpc-frame',
+                  display_name: 'MPC Frame',
+                  description: 'Registry-managed MPC frame.',
+                  category: 'mpc',
+                  homepage: 'https://github.com/openecos-projects/mpc-frame',
+                  versions: [
+                    {
+                      version: '0.1.1',
+                      platforms: {
+                        'all-platform': {
+                          url: 'https://example.com/mpc-frame-0.1.1.tar.gz',
+                          sha256: 'a'.repeat(64),
+                          size: 123,
+                          strip_prefix: 'mpc-frame-0.1.1',
+                        },
+                      },
+                    },
+                  ],
+                },
+              ],
+            }),
+          ),
+      ),
+      mpcsDir: join(root, 'data', 'mpcs'),
+      pdksDir: join(root, 'data', 'pdks'),
+      resourcesDir: join(root, 'state', 'resources'),
+      toolsDir: join(root, 'data', 'tools'),
+    })
+
+    await expect(service.getResource('mpc:mpc-frame')).resolves.toMatchObject({
+      available_versions: ['0.1.1'],
+      description: 'Registry-managed MPC frame.',
+    })
+  })
+
+  it('installs and uninstalls an MPC source archive through the resource manager', async () => {
+    const root = await createTempDir('ecos-resources-')
+    const registryPath = join(root, 'registry.json')
+    const archive = await createFixtureArchive(root)
+    const mpcsDir = join(root, 'data', 'mpcs')
+    await writeMpcRegistry(registryPath, archive)
+    const extract = vi.fn(async (_archivePath: string, destination: string) => {
+      await mkdir(destination, { recursive: true })
+      await writeFile(
+        join(destination, 'FrameTop.sv'),
+        'module FrameTop; endmodule\n',
+        'utf8',
+      )
+    })
+    const progress: string[] = []
+    const service = new ResourceManagerService({
+      archiveExtractor: extract,
+      cacheDir: join(root, 'cache'),
+      mpcsDir,
+      pdksDir: join(root, 'data', 'pdks'),
+      registryUrl: `file://${registryPath}`,
+      resourcesDir: join(root, 'state', 'resources'),
+      sha256Verifier: vi.fn(async () => true),
+      toolsDir: join(root, 'data', 'tools'),
+    })
+
+    await expect(service.getResource('mpc:mpc-frame')).resolves.toMatchObject({
+      type: 'mpc',
+      category: 'mpc',
+      status: 'available',
+      managed_root: mpcsDir,
+      actions: ['install'],
+    })
+    await expect(
+      service.installResource('mpc:mpc-frame', undefined, (event) => {
+        progress.push(event.phase)
+      }),
+    ).resolves.toEqual({
+      status: 'started',
+      resource_id: 'mpc:mpc-frame',
+      version: '0.1.0',
+    })
+
+    expect(extract).toHaveBeenCalledTimes(1)
+    expect(progress).toEqual(
+      expect.arrayContaining(['downloading', 'verifying', 'extracting', 'done']),
+    )
+    await expect(
+      readFile(join(mpcsDir, 'mpc-frame', '0.1.0', 'FrameTop.sv'), 'utf8'),
+    ).resolves.toContain('module FrameTop')
+    const manifest = JSON.parse(
+      await readFile(join(root, 'state', 'resources', 'manifest.json'), 'utf8'),
+    ) as { mpcs_dir: string; schema_version: number }
+    expect(manifest).toMatchObject({ schema_version: 2, mpcs_dir: mpcsDir })
+    await expect(service.getResource('mpc:mpc-frame')).resolves.toMatchObject({
+      status: 'installed',
+      installed_version: '0.1.0',
+      path: join(mpcsDir, 'mpc-frame', '0.1.0'),
+      actions: ['uninstall'],
+      health: expect.objectContaining({ managed: true, source: 'registry' }),
+    })
+
+    await writeMpcRegistry(registryPath, archive, '0.1.1')
+    await service.refreshRegistry()
+    await expect(service.getResource('mpc:mpc-frame')).resolves.toMatchObject({
+      status: 'update_available',
+      available_versions: ['0.1.1'],
+      actions: ['update', 'uninstall'],
+    })
+    await expect(service.updateResource('mpc:mpc-frame')).resolves.toEqual({
+      status: 'started',
+      resource_id: 'mpc:mpc-frame',
+      version: '0.1.1',
+    })
+    await expect(
+      readFile(join(mpcsDir, 'mpc-frame', '0.1.1', 'FrameTop.sv'), 'utf8'),
+    ).resolves.toContain('module FrameTop')
+
+    await expect(service.uninstallResource('mpc:mpc-frame')).resolves.toEqual({
+      status: 'uninstalled',
+      resource_id: 'mpc:mpc-frame',
+    })
+    await expect(service.getResource('mpc:mpc-frame')).resolves.toMatchObject({
+      status: 'available',
+      actions: ['install'],
+    })
+  })
+
+  it('reads a spec only from the fixed path of a healthy managed MPC', async () => {
+    const root = await createTempDir('ecos-resources-')
+    const resourcesDir = join(root, 'state', 'resources')
+    const mpcsDir = join(root, 'data', 'mpcs')
+    const mpcPath = join(mpcsDir, 'mpc-frame', '0.1.0')
+    const specPath = join(mpcPath, 'spec', 'spec.json.in')
+    await mkdir(join(mpcPath, 'spec'), { recursive: true })
+    await writeFile(
+      specPath,
+      JSON.stringify({
+        designs: [{ design_name: 'frame', core_template: { minimum_area: 100 } }],
+      }),
+      'utf8',
+    )
+    await writeTestManifest(root, {
+      'mpc:mpc-frame': {
+        type: 'mpc',
+        id: 'mpc-frame',
+        name: 'MPC Frame',
+        version: '0.1.0',
+        sha256: 'fixture-sha',
+        source: 'registry',
+        source_url: 'https://example.com/mpc-frame.tar.gz',
+        path: mpcPath,
+        installed_at: '2026-08-02T00:00:00.000Z',
+        managed: true,
+        health: 'ok',
+      },
+    })
+    const service = new ResourceManagerService({
+      resourcesDir,
+      mpcsDir,
+      pdksDir: join(root, 'data', 'pdks'),
+      toolsDir: join(root, 'data', 'tools'),
+    })
+
+    await expect(service.readMpcSpec('mpc:mpc-frame')).resolves.toEqual({
+      resource_id: 'mpc:mpc-frame',
+      installed_version: '0.1.0',
+      spec_path: specPath,
+      spec: {
+        designs: [{ design_name: 'frame', core_template: { minimum_area: 100 } }],
+      },
+    })
+    await expect(service.readMpcSpec('tool:yosys')).rejects.toThrow(
+      'Expected mpc resource id',
+    )
+  })
+
+  it('rejects unhealthy, missing, and malformed MPC specs', async () => {
+    const root = await createTempDir('ecos-resources-')
+    const resourcesDir = join(root, 'state', 'resources')
+    const mpcsDir = join(root, 'data', 'mpcs')
+    const mpcPath = join(mpcsDir, 'mpc-frame', '0.1.0')
+    const entry = {
+      type: 'mpc',
+      id: 'mpc-frame',
+      name: 'MPC Frame',
+      version: '0.1.0',
+      sha256: 'fixture-sha',
+      source: 'registry',
+      source_url: 'https://example.com/mpc-frame.tar.gz',
+      path: mpcPath,
+      installed_at: '2026-08-02T00:00:00.000Z',
+      managed: true,
+      health: 'missing',
+    }
+    await writeTestManifest(root, { 'mpc:mpc-frame': entry })
+    const service = new ResourceManagerService({
+      resourcesDir,
+      mpcsDir,
+      pdksDir: join(root, 'data', 'pdks'),
+      toolsDir: join(root, 'data', 'tools'),
+    })
+
+    await expect(service.readMpcSpec('mpc:mpc-frame')).rejects.toThrow(
+      'not a healthy managed resource',
+    )
+
+    await writeTestManifest(root, {
+      'mpc:mpc-frame': { ...entry, health: 'ok' },
+    })
+    await expect(service.readMpcSpec('mpc:mpc-frame')).rejects.toThrow(
+      'Unable to read MPC spec',
+    )
+
+    await mkdir(join(mpcPath, 'spec'), { recursive: true })
+    await writeFile(join(mpcPath, 'spec', 'spec.json.in'), '{invalid json', 'utf8')
+    await expect(service.readMpcSpec('mpc:mpc-frame')).rejects.toThrow(
+      'Unable to read MPC spec',
     )
   })
 
