@@ -1,7 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createHash } from 'node:crypto'
 import { execFile } from 'node:child_process'
-import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { ResourceManagerService } from './resourceManagerService'
@@ -290,17 +299,86 @@ describe('ResourceManagerService', () => {
     })
   })
 
+  it('migrates a cached legacy built-in MPC while offline', async () => {
+    const root = await createTempDir('ecos-resources-')
+    const cacheDir = join(root, 'cache')
+    const mpcsDir = join(root, 'data', 'mpcs')
+    const mpcPath = join(mpcsDir, 'mpc-frame', '0.1.0')
+    await mkdir(cacheDir, { recursive: true })
+    await writeFile(
+      join(cacheDir, 'resource-registry.json'),
+      JSON.stringify({
+        schema_version: 2,
+        tools: [],
+        pdks: [],
+        mpcs: [
+          {
+            id: 'mpc-frame',
+            display_name: 'MPC Frame',
+            versions: [
+              {
+                version: '0.1.0',
+                platforms: {
+                  'all-platform': {
+                    url: 'https://github.com/openecos-projects/mpc-frame/archive/cc47470b72537ba3f0726468f5d5e27d317d9706.tar.gz',
+                    sha256:
+                      'b6042bf6e0322cb1e532973a3811a06067e92fca808cb657c81cf7ad16399594',
+                    size: 470085,
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      }),
+      'utf8',
+    )
+    await writeTestManifest(root, {
+      'mpc:mpc-frame': {
+        type: 'mpc',
+        id: 'mpc-frame',
+        name: 'MPC Frame',
+        version: '0.1.0',
+        sha256: 'b6042bf6e0322cb1e532973a3811a06067e92fca808cb657c81cf7ad16399594',
+        source: 'registry',
+        source_url: 'https://example.com/old-mpc-frame.tar.gz',
+        path: mpcPath,
+        installed_at: '2026-08-02T00:00:00.000Z',
+        managed: true,
+        health: 'ok',
+      },
+    })
+    const service = new ResourceManagerService({
+      cacheDir,
+      fetchImpl: vi.fn(async () => {
+        throw new Error('offline')
+      }),
+      mpcsDir,
+      pdksDir: join(root, 'data', 'pdks'),
+      resourcesDir: join(root, 'state', 'resources'),
+      toolsDir: join(root, 'data', 'tools'),
+    })
+
+    await expect(service.getResource('mpc:mpc-frame')).resolves.toMatchObject({
+      status: 'update_available',
+      available_versions: ['0.1.0'],
+      actions: ['update', 'uninstall'],
+    })
+  })
+
   it('installs and uninstalls an MPC source archive through the resource manager', async () => {
     const root = await createTempDir('ecos-resources-')
     const registryPath = join(root, 'registry.json')
     const archive = await createFixtureArchive(root)
     const mpcsDir = join(root, 'data', 'mpcs')
     await writeMpcRegistry(registryPath, archive)
+    let frameSource = 'module FrameTop; endmodule\n'
     const extract = vi.fn(async (_archivePath: string, destination: string) => {
-      await mkdir(destination, { recursive: true })
+      await mkdir(join(destination, 'spec'), { recursive: true })
+      await writeFile(join(destination, 'FrameTop.sv'), frameSource, 'utf8')
       await writeFile(
-        join(destination, 'FrameTop.sv'),
-        'module FrameTop; endmodule\n',
+        join(destination, 'spec', 'spec.json.in'),
+        JSON.stringify({ designs: [{ core_template: { name: 'frame' } }] }),
         'utf8',
       )
     })
@@ -352,6 +430,27 @@ describe('ResourceManagerService', () => {
       health: expect.objectContaining({ managed: true, source: 'registry' }),
     })
 
+    await writeMpcRegistry(registryPath, { ...archive, sha256: 'replacement-sha' })
+    await service.refreshRegistry()
+    await expect(service.getResource('mpc:mpc-frame')).resolves.toMatchObject({
+      status: 'update_available',
+      available_versions: ['0.1.0'],
+      actions: ['update', 'uninstall'],
+    })
+    frameSource = 'module FrameTop; // replacement\nendmodule\n'
+    await expect(service.updateResource('mpc:mpc-frame')).resolves.toMatchObject({
+      status: 'started',
+      resource_id: 'mpc:mpc-frame',
+      version: '0.1.0',
+    })
+    await expect(
+      readFile(join(mpcsDir, 'mpc-frame', '0.1.0', 'FrameTop.sv'), 'utf8'),
+    ).resolves.toBe(frameSource)
+    await expect(service.getResource('mpc:mpc-frame')).resolves.toMatchObject({
+      status: 'installed',
+      actions: ['uninstall'],
+    })
+
     await writeMpcRegistry(registryPath, archive, '0.1.1')
     await service.refreshRegistry()
     await expect(service.getResource('mpc:mpc-frame')).resolves.toMatchObject({
@@ -376,6 +475,117 @@ describe('ResourceManagerService', () => {
       status: 'available',
       actions: ['install'],
     })
+  })
+
+  it('does not replace an installed MPC when the new archive has an unusable spec', async () => {
+    const root = await createTempDir('ecos-resources-')
+    const registryPath = join(root, 'registry.json')
+    const archive = await createFixtureArchive(root)
+    const mpcsDir = join(root, 'data', 'mpcs')
+    const mpcPath = join(mpcsDir, 'mpc-frame', '0.1.0')
+    await writeMpcRegistry(registryPath, archive)
+    await mkdir(mpcPath, { recursive: true })
+    await writeFile(join(mpcPath, 'FrameTop.sv'), 'old installation\n', 'utf8')
+    await writeTestManifest(root, {
+      'mpc:mpc-frame': {
+        type: 'mpc',
+        id: 'mpc-frame',
+        name: 'MPC Frame',
+        version: '0.1.0',
+        sha256: 'stale-sha',
+        source: 'registry',
+        source_url: 'https://example.com/stale-mpc-frame.tar.gz',
+        path: mpcPath,
+        installed_at: '2026-08-02T00:00:00.000Z',
+        managed: true,
+        health: 'ok',
+      },
+    })
+    const service = new ResourceManagerService({
+      archiveExtractor: async (_archivePath, destination) => {
+        await mkdir(join(destination, 'spec'), { recursive: true })
+        await writeFile(join(destination, 'FrameTop.sv'), 'new installation\n', 'utf8')
+        await writeFile(join(destination, 'spec', 'spec.json.in'), '{}\n', 'utf8')
+      },
+      cacheDir: join(root, 'cache'),
+      mpcsDir,
+      pdksDir: join(root, 'data', 'pdks'),
+      registryUrl: `file://${registryPath}`,
+      resourcesDir: join(root, 'state', 'resources'),
+      sha256Verifier: async () => true,
+      toolsDir: join(root, 'data', 'tools'),
+    })
+
+    await expect(service.updateResource('mpc:mpc-frame')).rejects.toThrow(
+      'Unable to read MPC spec',
+    )
+    await expect(readFile(join(mpcPath, 'FrameTop.sv'), 'utf8')).resolves.toBe(
+      'old installation\n',
+    )
+  })
+
+  it('rolls back a same-version update when the manifest commit fails', async () => {
+    const root = await createTempDir('ecos-resources-')
+    const registryPath = join(root, 'registry.json')
+    const archive = await createFixtureArchive(root)
+    const mpcsDir = join(root, 'data', 'mpcs')
+    const mpcPath = join(mpcsDir, 'mpc-frame', '0.1.0')
+    const resourcesDir = join(root, 'state', 'resources')
+    await writeMpcRegistry(registryPath, { ...archive, sha256: 'replacement-sha' })
+    await mkdir(join(mpcPath, 'spec'), { recursive: true })
+    await writeFile(join(mpcPath, 'FrameTop.sv'), 'old installation\n', 'utf8')
+    await writeFile(
+      join(mpcPath, 'spec', 'spec.json.in'),
+      JSON.stringify({ designs: [{ core_template: { name: 'old-frame' } }] }),
+      'utf8',
+    )
+    await writeTestManifest(root, {
+      'mpc:mpc-frame': {
+        type: 'mpc',
+        id: 'mpc-frame',
+        name: 'MPC Frame',
+        version: '0.1.0',
+        sha256: 'stale-sha',
+        source: 'registry',
+        source_url: 'https://example.com/stale-mpc-frame.tar.gz',
+        path: mpcPath,
+        installed_at: '2026-08-02T00:00:00.000Z',
+        managed: true,
+        health: 'ok',
+      },
+    })
+    const service = new ResourceManagerService({
+      archiveExtractor: async (_archivePath, destination) => {
+        await mkdir(join(destination, 'spec'), { recursive: true })
+        await writeFile(join(destination, 'FrameTop.sv'), 'new installation\n', 'utf8')
+        await writeFile(
+          join(destination, 'spec', 'spec.json.in'),
+          JSON.stringify({ designs: [{ core_template: { name: 'new-frame' } }] }),
+          'utf8',
+        )
+      },
+      cacheDir: join(root, 'cache'),
+      manifestWriter: async () => {
+        throw new Error('manifest write failed')
+      },
+      mpcsDir,
+      pdksDir: join(root, 'data', 'pdks'),
+      registryUrl: `file://${registryPath}`,
+      resourcesDir,
+      sha256Verifier: async () => true,
+      toolsDir: join(root, 'data', 'tools'),
+    })
+
+    await expect(service.updateResource('mpc:mpc-frame')).rejects.toThrow(
+      'manifest write failed',
+    )
+    await expect(readFile(join(mpcPath, 'FrameTop.sv'), 'utf8')).resolves.toBe(
+      'old installation\n',
+    )
+    await expect(readdir(join(mpcsDir, 'mpc-frame'))).resolves.toEqual(['0.1.0'])
+    await expect(
+      readFile(join(resourcesDir, 'manifest.json'), 'utf8'),
+    ).resolves.toContain('stale-sha')
   })
 
   it('reads a spec only from the fixed path of a healthy managed MPC', async () => {
@@ -466,6 +676,24 @@ describe('ResourceManagerService', () => {
 
     await mkdir(join(mpcPath, 'spec'), { recursive: true })
     await writeFile(join(mpcPath, 'spec', 'spec.json.in'), '{invalid json', 'utf8')
+    await expect(service.readMpcSpec('mpc:mpc-frame')).rejects.toThrow(
+      'Unable to read MPC spec',
+    )
+
+    await writeFile(join(mpcPath, 'spec', 'spec.json.in'), '{}', 'utf8')
+    await expect(service.readMpcSpec('mpc:mpc-frame')).rejects.toThrow(
+      'Unable to read MPC spec',
+    )
+
+    const externalSpecDir = join(root, 'external-spec')
+    await mkdir(externalSpecDir, { recursive: true })
+    await writeFile(
+      join(externalSpecDir, 'spec.json.in'),
+      JSON.stringify({ designs: [{ core_template: { name: 'external' } }] }),
+      'utf8',
+    )
+    await rm(join(mpcPath, 'spec'), { force: true, recursive: true })
+    await symlink(externalSpecDir, join(mpcPath, 'spec'), 'dir')
     await expect(service.readMpcSpec('mpc:mpc-frame')).rejects.toThrow(
       'Unable to read MPC spec',
     )

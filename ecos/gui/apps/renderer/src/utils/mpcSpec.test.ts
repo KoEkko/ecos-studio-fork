@@ -8,10 +8,26 @@ import {
 describe('MPC spec parsing', () => {
   it('keeps every design with a core template and snapshots the selected template', () => {
     const designs = parseMpcSpecDesigns({
+      number: 2,
       designs: [
         {
           design_name: 'small-frame',
           directory: 'small',
+          dbu: null,
+          die: { llx: null, width: 100 },
+          core: { llx: 10, width: 80 },
+          io_pins: {
+            number: 1,
+            list: [
+              {
+                name: 'clock',
+                info: 'Frame clock input.',
+                bounding_box: { llx: null, width: null },
+              },
+            ],
+            naming: 'frame-interface',
+          },
+          floorplan_source: 'template',
           core_template: { minimum_area: 100, parameters: [{ name: 'WIDTH' }] },
         },
         {
@@ -25,6 +41,17 @@ describe('MPC spec parsing', () => {
       'small-frame',
       'large-frame',
     ])
+    expect(designs[0]).toMatchObject({
+      dbu: null,
+      die: { llx: null, width: 100 },
+      core: { llx: 10, width: 80 },
+      ioPins: {
+        declaredCount: 1,
+        list: [{ name: 'clock', info: 'Frame clock input.' }],
+        other: { naming: 'frame-interface' },
+      },
+      other: { floorplan_source: 'template' },
+    })
     const snapshot = createProjectManifestMpcSnapshot(
       {
         resource_id: 'mpc:mpc-frame',
@@ -56,6 +83,26 @@ describe('MPC spec parsing', () => {
       'no design with a core_template object',
     )
     expect(() => parseMpcSpecDesigns({})).toThrow('must contain a designs array')
+  })
+
+  it('rejects inconsistent design and I/O pin counts', () => {
+    expect(() =>
+      parseMpcSpecDesigns({
+        number: 2,
+        designs: [{ core_template: { name: 'frame' } }],
+      }),
+    ).toThrow('number must match designs.length')
+
+    expect(() =>
+      parseMpcSpecDesigns({
+        designs: [
+          {
+            io_pins: { number: 2, list: [{ name: 'clock' }] },
+            core_template: { name: 'frame' },
+          },
+        ],
+      }),
+    ).toThrow('io_pins.number must match io_pins.list.length')
   })
 
   it('groups known template fields while retaining unknown constraints', () => {

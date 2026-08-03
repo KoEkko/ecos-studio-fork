@@ -4,8 +4,7 @@ import { createRequire } from 'node:module'
 import { parse, compileScript } from 'vue/compiler-sfc'
 import * as ts from 'typescript'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import gallerySource from '@/components/SoCTemplateGallery.vue?raw'
-import viewSource from './SoCTemplateGalleryView.vue?raw'
+import ecosViewSource from './ECOSView.vue?raw'
 
 type VueRuntime = typeof import('vue')
 
@@ -18,10 +17,14 @@ type GlobalKey =
   | 'SVGElement'
   | 'DocumentFragment'
 
-const { push, loadSocTemplateCatalog } = vi.hoisted(() => ({
-  push: vi.fn(),
-  loadSocTemplateCatalog: vi.fn(),
-}))
+const { push, loadRecentProjects, openProject, recentProjectFixtures } = vi.hoisted(
+  () => ({
+    push: vi.fn(),
+    loadRecentProjects: vi.fn(async () => {}),
+    openProject: vi.fn(async () => true),
+    recentProjectFixtures: [] as Array<Record<string, unknown>>,
+  }),
+)
 
 const originalGlobals = {
   document: globalThis.document,
@@ -80,7 +83,6 @@ class FakeNode {
       this.childNodes.splice(index, 1)
       node.parentNode = null
     }
-
     return node
   }
 
@@ -150,6 +152,13 @@ class FakeElement extends FakeNode {
     }
   }
 
+  get classList() {
+    const read = () => this.className.split(/\s+/).filter(Boolean)
+    return {
+      contains: (token: string) => read().includes(token),
+    }
+  }
+
   get innerHTML(): string {
     return this.textContent
   }
@@ -163,8 +172,7 @@ class FakeElement extends FakeNode {
       this.className = value
       return
     }
-
-    this.attributes.set(name, String(value))
+    this.attributes.set(name, value)
   }
 
   getAttribute(name: string) {
@@ -176,7 +184,6 @@ class FakeElement extends FakeNode {
       this.className = ''
       return
     }
-
     this.attributes.delete(name)
   }
 
@@ -201,13 +208,17 @@ class FakeElement extends FakeNode {
 
   querySelectorAll(selector: string): FakeElement[] {
     const results: FakeElement[] = []
-    const normalizedSelector = selector.toLowerCase()
+    const matches = (element: FakeElement) => {
+      return element.tagName.toLowerCase() === selector.toLowerCase()
+    }
+
     const walk = (node: FakeNode) => {
-      if (!(node instanceof FakeElement)) return
-      if (node.tagName.toLowerCase() === normalizedSelector) {
-        results.push(node)
+      if (node instanceof FakeElement) {
+        if (matches(node)) {
+          results.push(node)
+        }
+        node.childNodes.forEach(walk)
       }
-      node.childNodes.forEach(walk)
     }
 
     this.childNodes.forEach(walk)
@@ -298,16 +309,13 @@ async function loadVueRuntime() {
   return vueRuntime
 }
 
-function compileComponent(
-  source: string,
-  filename: string,
-  id: string,
-  vue: VueRuntime,
-  extraModules: Record<string, unknown> = {},
-) {
-  const { descriptor } = parse(source, { filename })
+function loadECOSViewComponent(vue: VueRuntime) {
+  const { descriptor } = parse(ecosViewSource, {
+    filename: 'ECOSView.vue',
+  })
+
   const script = compileScript(descriptor, {
-    id,
+    id: 'ecos-view',
     inlineTemplate: true,
     templateOptions: {
       compilerOptions: {
@@ -322,14 +330,29 @@ function compileComponent(
       target: ts.ScriptTarget.ES2019,
       esModuleInterop: true,
     },
-    fileName: `${id}.ts`,
+    fileName: 'ECOSView.ts',
   })
 
-  const moduleExports: { default?: unknown } = {}
-  const customRequire = (moduleId: string) => {
-    if (moduleId === 'vue') return vue
-    if (moduleId in extraModules) return extraModules[moduleId]
-    return require(moduleId)
+  const moduleExports: { default?: any } = {}
+  const customRequire = (id: string) => {
+    if (id === 'vue') return vue
+    if (id === 'vue-router') {
+      return {
+        useRouter: () => ({
+          push,
+        }),
+      }
+    }
+    if (id === '../composables/useWorkspace') {
+      return {
+        useWorkspace: () => ({
+          recentProjects: vue.ref(recentProjectFixtures),
+          openProject,
+          loadRecentProjects,
+        }),
+      }
+    }
+    return require(id)
   }
 
   const evaluator = new Function('require', 'exports', 'module', transpiled.outputText)
@@ -338,172 +361,89 @@ function compileComponent(
   return moduleExports.default
 }
 
-async function mountView() {
-  const vue = await loadVueRuntime()
-  const socCatalogModule = {
-    loadSocTemplateCatalog,
-    importSocTemplateFromJsonText: vi.fn(),
-    removeImportedSocTemplate: vi.fn(),
-  }
-  const SoCTemplateGallery = compileComponent(
-    gallerySource,
-    'SoCTemplateGallery.vue',
-    'soc-template-gallery',
-    vue,
-    {
-      '@/composables/socTemplateCatalog': socCatalogModule,
-    },
-  )
-  const SoCTemplateGalleryView = compileComponent(
-    viewSource,
-    'SoCTemplateGalleryView.vue',
-    'soc-template-gallery-view',
-    vue,
-    {
-      'vue-router': {
-        useRouter: () => ({
-          push,
-        }),
-      },
-      '@/components/SoCTemplateGallery.vue': SoCTemplateGallery,
-      '@/composables/socTemplateCatalog': socCatalogModule,
-    },
-  )
-
-  const container = document.createElement('div')
-  document.body.appendChild(container)
-  const app = vue.createApp(SoCTemplateGalleryView as never)
-  app.mount(container as never)
-  await flush(vue)
-
-  return {
-    app,
-    container,
-    vue,
-  }
-}
-
-async function flush(vue: VueRuntime) {
-  await Promise.resolve()
-  await vue.nextTick()
-  await Promise.resolve()
-  await vue.nextTick()
-}
-
-type ButtonQueryContainer = {
-  querySelectorAll(selector: string): ArrayLike<FakeElement>
-}
-
-function findButton(
-  container: ButtonQueryContainer,
-  label: string,
-): FakeElement | undefined {
-  return Array.from(container.querySelectorAll('button')).find((button) =>
-    button.textContent?.trim().includes(label),
-  )
-}
-
-describe('SoCTemplateGalleryView', () => {
+describe('ECOSView home', () => {
   beforeEach(() => {
     ensureDom()
-    document.body.innerHTML = ''
     push.mockReset()
-    loadSocTemplateCatalog.mockReset()
+    loadRecentProjects.mockClear()
+    openProject.mockClear()
+    recentProjectFixtures.splice(0)
+    document.body.innerHTML = ''
   })
 
   afterEach(() => {
     restoreDomGlobals()
   })
 
-  it('loads the catalog on mount and renders gallery items on success', async () => {
-    loadSocTemplateCatalog.mockResolvedValue([
-      {
-        id: 'demoSoC001',
-        name: 'Demo SoC',
-        info: 'Reference template',
-        ioPinsCount: 12,
-        coreCount: 2,
-        sourceLabel: 'fixture.json',
-      },
-    ])
+  it('keeps the home resources compact without duplicate documentation or PDK manager entries', async () => {
+    const vue = await loadVueRuntime()
+    const ECOSView = loadECOSViewComponent(vue)
+    const container = document.createElement('div')
+    document.body.appendChild(container)
 
-    const { app, container } = await mountView()
+    const app = vue.createApp(ECOSView)
+    app.mount(container as never)
+    await vue.nextTick()
 
-    expect(loadSocTemplateCatalog).toHaveBeenCalledTimes(1)
-    expect(container.textContent).toContain('Demo SoC')
-    expect(container.textContent).toContain('Reference template')
+    expect(container.textContent).toContain('Resource Manager')
+    expect(container.textContent).toContain('MPC Resources')
+    expect(container.textContent).toContain('Templates and core constraints')
+    expect(container.textContent).toContain('IP Catalog')
+    expect(container.textContent).toContain('Benchmarks')
+    expect(container.textContent.indexOf('Resource Manager')).toBeLessThan(
+      container.textContent.indexOf('IP Catalog'),
+    )
+    expect(container.textContent).not.toContain('Explore')
+    expect(container.textContent).not.toContain('Documentation')
+    expect(container.textContent).not.toContain('PDK Manager')
+    expect(container.textContent).not.toContain('Remote template catalog')
+    expect(container.textContent).not.toContain('SoC')
 
     app.unmount()
   })
 
-  it('routes to the detail page when an item is opened', async () => {
-    loadSocTemplateCatalog.mockResolvedValue([
-      {
-        id: 'demoSoC001',
-        name: 'Demo SoC',
-        info: 'Reference template',
-        ioPinsCount: 12,
-        coreCount: 2,
-        sourceLabel: 'fixture.json',
-      },
-    ])
+  it('opens the dedicated MPC resources page from its home card', async () => {
+    const vue = await loadVueRuntime()
+    const ECOSView = loadECOSViewComponent(vue)
+    const container = document.createElement('div')
+    document.body.appendChild(container)
 
-    const { app, container } = await mountView()
+    const app = vue.createApp(ECOSView)
+    app.mount(container as never)
+    await vue.nextTick()
 
-    const openButton = findButton(container, 'Open Details')
-    expect(openButton).toBeTruthy()
+    const mpcButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('MPC Resources'),
+    )
+    expect(mpcButton).toBeDefined()
+    mpcButton?.click()
+    expect(push).toHaveBeenCalledWith('/mpc')
 
-    openButton?.click()
+    app.unmount()
+  })
 
-    expect(push).toHaveBeenCalledWith({
-      name: 'SoCTemplateDetail',
-      params: { templateId: 'demoSoC001' },
+  it('keeps the home page clear of workspace history', async () => {
+    recentProjectFixtures.push({
+      id: 'recent-ws',
+      name: 'recent_workspace',
+      path: '/tmp/recent_workspace',
+      lastOpened: new Date(),
+      workspaceRecognized: true,
     })
 
-    app.unmount()
-  })
+    const vue = await loadVueRuntime()
+    const ECOSView = loadECOSViewComponent(vue)
+    const container = document.createElement('div')
+    document.body.appendChild(container)
 
-  it('routes home when back is clicked', async () => {
-    loadSocTemplateCatalog.mockResolvedValue([])
+    const app = vue.createApp(ECOSView)
+    app.mount(container as never)
+    await vue.nextTick()
 
-    const { app, container } = await mountView()
-
-    const backButton = findButton(container, 'Back')
-    expect(backButton).toBeTruthy()
-
-    backButton?.click()
-
-    expect(push).toHaveBeenCalledWith('/')
-
-    app.unmount()
-  })
-
-  it('retries catalog loading after a failure', async () => {
-    loadSocTemplateCatalog
-      .mockRejectedValueOnce(new Error('Unable to reach catalog'))
-      .mockResolvedValueOnce([
-        {
-          id: 'demoSoC001',
-          name: 'Demo SoC',
-          info: 'Reference template',
-          ioPinsCount: 12,
-          coreCount: 2,
-          sourceLabel: 'fixture.json',
-        },
-      ])
-
-    const { app, container, vue } = await mountView()
-
-    expect(container.textContent).toContain('Unable to reach catalog')
-
-    const retryButton = findButton(container, 'Retry')
-    expect(retryButton).toBeTruthy()
-
-    retryButton?.click()
-    await flush(vue)
-
-    expect(loadSocTemplateCatalog).toHaveBeenCalledTimes(2)
-    expect(container.textContent).toContain('Demo SoC')
+    expect(loadRecentProjects).not.toHaveBeenCalled()
+    expect(container.textContent).not.toContain('Continue Working')
+    expect(container.textContent).not.toContain('Resume')
+    expect(container.textContent).not.toContain('recent_workspace')
 
     app.unmount()
   })

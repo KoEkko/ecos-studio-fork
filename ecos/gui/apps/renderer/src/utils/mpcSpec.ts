@@ -1,10 +1,22 @@
 import type { ProjectManifestMpc, ProjectManifestMpcCandidate } from './projectManagement'
+import { validateMpcSpec } from '@ecos-studio/shared'
 
 export interface MpcSpecDesign {
   index: number
   designName: string
   directory?: string
+  dbu: unknown
+  die: Record<string, unknown>
+  core: Record<string, unknown>
+  ioPins: MpcSpecIoPins
+  other: Record<string, unknown>
   coreTemplate: Record<string, unknown>
+}
+
+export interface MpcSpecIoPins {
+  declaredCount: number | null
+  list: Record<string, unknown>[]
+  other: Record<string, unknown>
 }
 
 export interface MpcCoreTemplatePreview {
@@ -32,35 +44,39 @@ const GROUPED_FIELDS = new Set([
   'frame_io',
   'template_behavior',
 ])
+const DESIGN_FIELDS = new Set([
+  'directory',
+  'design_name',
+  'dbu',
+  'die',
+  'core',
+  'io_pins',
+  'core_template',
+])
+const IO_PIN_FIELDS = new Set(['number', 'list'])
 
 export function parseMpcSpecDesigns(spec: unknown): MpcSpecDesign[] {
-  const source = recordValue(spec)
-  if (!source || !Array.isArray(source.designs)) {
-    throw new Error('MPC spec must contain a designs array.')
-  }
-
-  const designs = source.designs.flatMap((value, index) => {
-    const design = recordValue(value)
-    if (!design) return []
-    const coreTemplate = recordValue(design.core_template)
-    if (!coreTemplate) return []
-
-    const designName = optionalString(design.design_name) || `Design ${index + 1}`
-    const directory = optionalString(design.directory)
-    return [
-      {
+  return validateMpcSpec(spec).designs.map(
+    ({ index, design, coreTemplate, ioPins, pins, declaredPinCount }) => {
+      const designName = optionalString(design.design_name) || `Design ${index + 1}`
+      const directory = optionalString(design.directory)
+      return {
         index,
         designName,
         ...(directory ? { directory } : {}),
+        dbu: design.dbu ?? null,
+        die: recordValue(design.die) ?? {},
+        core: recordValue(design.core) ?? {},
+        ioPins: {
+          declaredCount: declaredPinCount,
+          list: pins,
+          other: omitFields(ioPins, IO_PIN_FIELDS),
+        },
+        other: omitFields(design, DESIGN_FIELDS),
         coreTemplate,
-      },
-    ]
-  })
-
-  if (designs.length === 0) {
-    throw new Error('MPC spec has no design with a core_template object.')
-  }
-  return designs
+      }
+    },
+  )
 }
 
 export function createProjectManifestMpcSnapshot(
@@ -103,6 +119,13 @@ function pickFields(
       Object.prototype.hasOwnProperty.call(source, field) ? [[field, source[field]]] : [],
     ),
   )
+}
+
+function omitFields(
+  source: Record<string, unknown>,
+  fields: ReadonlySet<string>,
+): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(source).filter(([key]) => !fields.has(key)))
 }
 
 function recordList(value: unknown): Record<string, unknown>[] {

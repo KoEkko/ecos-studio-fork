@@ -103,6 +103,21 @@ describe('ProjectsView project management surface', () => {
     expect(projectStyles).toContain('overflow: visible;')
   })
 
+  it('opens the final workspace action menu upward within the scrollable list', () => {
+    const finalWorkspaceMenuStart = projectStyles.indexOf(
+      '.workspace-tree-list > .workspace-tree-item:last-of-type .row-action-menu {',
+    )
+    const finalWorkspaceMenuEnd = projectStyles.indexOf('}\n', finalWorkspaceMenuStart)
+    const finalWorkspaceMenuStyles = projectStyles.slice(
+      finalWorkspaceMenuStart,
+      finalWorkspaceMenuEnd,
+    )
+
+    expect(finalWorkspaceMenuStart).toBeGreaterThan(-1)
+    expect(finalWorkspaceMenuStyles).toContain('top: auto;')
+    expect(finalWorkspaceMenuStyles).toContain('bottom: calc(100% + 6px);')
+  })
+
   it('caps long project and workspace lists without hiding the active selection', () => {
     expect(source).toContain('v-for="project in visibleProjectCards"')
     expect(source).toContain('visibleProjectWorkspaces(project.model)')
@@ -371,7 +386,7 @@ describe('ProjectsView project management surface', () => {
     expect(source).toContain('projectMpcOptionFromResource')
     expect(source).toContain('readMpcSpecApi')
     expect(source).toContain('parseMpcSpecDesigns')
-    expect(source).toContain('MpcCoreTemplatePreview')
+    expect(source).toContain('MpcTemplatePreview')
     expect(source).toContain('selectedProjectMpcDesignIndex')
     expect(source).toContain('selectProjectStorageLocation')
     expect(source).toContain('createProjectFolderDraft')

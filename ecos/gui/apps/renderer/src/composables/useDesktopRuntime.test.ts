@@ -81,11 +81,6 @@ const desktopBridge = {
     set: async () => undefined,
     delete: async () => undefined,
   },
-  remoteContent: {
-    listFiles: async () => [],
-    readTextFile: async () => '',
-    readJsonFile: async <T = unknown>() => null as T,
-  },
   projectManifest: {
     mutate: async () => ({ content: '' }),
   },

@@ -559,11 +559,7 @@
               </option>
             </select>
           </label>
-          <MpcCoreTemplatePreview
-            :core-template="selectedProjectMpcDesign.coreTemplate"
-            :design-name="selectedProjectMpcDesign.designName"
-            :directory="selectedProjectMpcDesign.directory"
-          />
+          <MpcTemplatePreview :design="selectedProjectMpcDesign" />
         </template>
 
         <p class="modal-help">Project manifest: {{ projectManifestPreview }}</p>
@@ -762,7 +758,7 @@ import { useRouter } from 'vue-router'
 import type { Project, ProjectStatus } from '../types'
 import { useWorkspace } from '../composables/useWorkspace'
 import ProjectAnalysisPanel from './project-management/ProjectAnalysisPanel.vue'
-import MpcCoreTemplatePreview from '@/components/MpcCoreTemplatePreview.vue'
+import MpcTemplatePreview from '@/components/MpcTemplatePreview.vue'
 import { previewList } from './project-management/projectListPreview'
 import {
   readProjectWorkspaceAnalysisInputs,

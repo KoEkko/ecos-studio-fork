@@ -81,14 +81,6 @@ export type {
   ResourceType,
 } from './contracts/resources.ts'
 export type {
-  RemoteContentApi,
-  RemoteContentFile,
-  RemoteContentListFilesRequest,
-  RemoteContentReadJsonFileRequest,
-  RemoteContentReadTextFileRequest,
-  RemoteContentSourceId,
-} from './contracts/remoteContent.ts'
-export type {
   DesktopShellDataEvent,
   DesktopShellExitEvent,
   DesktopShellSession,
@@ -160,6 +152,8 @@ export {
   resolveProjectFileAbsolutePath,
 } from './utils/localPath.ts'
 export { isHdlFilePath } from './utils/hdlPath.ts'
+export { validateMpcSpec } from './utils/mpcSpec.ts'
+export type { ValidatedMpcSpec, ValidatedMpcSpecDesign } from './utils/mpcSpec.ts'
 export {
   applyProjectManifestMutation,
   archiveWorkspaceInManifest,

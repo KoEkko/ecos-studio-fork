@@ -13,7 +13,6 @@ import type {
   DesktopMenuEventId,
   DesktopProjectFileChangedEvent,
   DesktopProjectLogTailEvent,
-  RemoteContentReadJsonFileRequest,
   ProjectManifestMutationRequest,
   ResourceJob,
   ResourceImportLocalRequest,
@@ -119,14 +118,6 @@ const desktopApi: DesktopApi = {
       invokeDesktop<T | null>(desktopApiIpcChannels.settingsGet, key),
     set: (key, value) => invokeDesktop(desktopApiIpcChannels.settingsSet, key, value),
     delete: (key) => invokeDesktop(desktopApiIpcChannels.settingsDelete, key),
-  },
-  remoteContent: {
-    listFiles: (request) =>
-      invokeDesktop(desktopApiIpcChannels.remoteContentListFiles, request),
-    readTextFile: (request) =>
-      invokeDesktop(desktopApiIpcChannels.remoteContentReadTextFile, request),
-    readJsonFile: <T = unknown>(request: RemoteContentReadJsonFileRequest) =>
-      invokeDesktop<T>(desktopApiIpcChannels.remoteContentReadJsonFile, request),
   },
   projectManifest: {
     mutate: (request: ProjectManifestMutationRequest) =>

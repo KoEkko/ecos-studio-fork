@@ -36,10 +36,6 @@ import {
   type DesktopSettingsValue,
   type ChipViewerOpenRequest,
   type ChipViewerOpenResult,
-  type RemoteContentFile,
-  type RemoteContentListFilesRequest,
-  type RemoteContentReadJsonFileRequest,
-  type RemoteContentReadTextFileRequest,
   type ResourceImportPdkRequest,
   type ResourceImportLocalRequest,
   type ResourceInstallRequest,
@@ -102,11 +98,6 @@ export interface DesktopBridgeServices {
       key: string,
     ): Promise<T | null>
     set(key: string, value: DesktopSettingsValue): Promise<void>
-  }
-  remoteContentService: {
-    listFiles(request: RemoteContentListFilesRequest): Promise<RemoteContentFile[]>
-    readTextFile(request: RemoteContentReadTextFileRequest): Promise<string>
-    readJsonFile<T = unknown>(request: RemoteContentReadJsonFileRequest): Promise<T>
   }
   projectManifestService: {
     mutate(
@@ -819,24 +810,6 @@ export function registerIpc(
 
   handle(desktopApiIpcChannels.settingsDelete, async (_event, key) => {
     await services.settingsStore.delete(key as string)
-  })
-
-  handle(desktopApiIpcChannels.remoteContentListFiles, async (_event, request) => {
-    return await services.remoteContentService.listFiles(
-      request as RemoteContentListFilesRequest,
-    )
-  })
-
-  handle(desktopApiIpcChannels.remoteContentReadTextFile, async (_event, request) => {
-    return await services.remoteContentService.readTextFile(
-      request as RemoteContentReadTextFileRequest,
-    )
-  })
-
-  handle(desktopApiIpcChannels.remoteContentReadJsonFile, async (_event, request) => {
-    return await services.remoteContentService.readJsonFile(
-      request as RemoteContentReadJsonFileRequest,
-    )
   })
 
   handle(desktopApiIpcChannels.projectManifestMutate, async (_event, request) => {
