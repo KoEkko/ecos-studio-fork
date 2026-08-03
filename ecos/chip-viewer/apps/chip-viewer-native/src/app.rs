@@ -54,6 +54,7 @@ struct LoadingViewer {
 struct LoadedViewer {
     db: ChipViewDb,
     stats: SnapshotStats,
+    grid_bounds: Option<Rect32>,
     drawing_category_counts: BTreeMap<DrawingCategory, usize>,
     layers: Vec<LayerUiState>,
     edit_enabled: bool,
@@ -1064,12 +1065,14 @@ impl LoadedViewer {
         drc_statis_path: Option<PathBuf>,
     ) -> Self {
         let stats = db.stats();
+        let grid_bounds = grid_reference_bounds(&db).or(stats.bbox);
         let snapshot_signature = snapshot_signature_for_db(&db);
         let drawing_category_counts = drawing_category_counts(&db);
         let layers = layer_ui_states(&db, &BTreeMap::new());
         Self {
             db,
             stats,
+            grid_bounds,
             drawing_category_counts,
             layers,
             edit_enabled,
@@ -1877,6 +1880,7 @@ impl LoadedViewer {
             &self.layers,
             self.object_visibility,
             viewport,
+            self.grid_bounds.unwrap_or(world),
             world,
             canvas,
             self.zoom,
@@ -2568,7 +2572,9 @@ impl LoadedViewer {
             .iter()
             .map(|layer| (layer.layer_id, layer.visible))
             .collect();
-        self.stats = db.stats();
+        let stats = db.stats();
+        self.grid_bounds = grid_reference_bounds(&db).or(stats.bbox);
+        self.stats = stats;
         self.drawing_category_counts = drawing_category_counts(&db);
         self.layers = layer_ui_states(&db, &visibility);
         self.db = db;
@@ -3902,6 +3908,7 @@ fn paint_parameterized_grid_overlay(
     layers: &[LayerUiState],
     visibility: ObjectVisibility,
     viewport: Rect32,
+    grid_bounds: Rect32,
     world: Rect32,
     canvas: egui::Rect,
     zoom: f32,
@@ -3916,30 +3923,15 @@ fn paint_parameterized_grid_overlay(
             continue;
         };
         let stroke = parameterized_grid_stroke(grid, layers, owner_type);
-        for index in grid_visible_indices(grid, viewport) {
+        let Some(grid_viewport) = intersect_rect(viewport, grid_bounds) else {
+            continue;
+        };
+        for index in grid_visible_indices(grid, grid_viewport) {
             let coordinate = saturating_i64_to_i32(grid_coordinate_at_index(grid, index));
-            let (begin, end) = match grid.direction.trim().to_ascii_lowercase().as_str() {
-                "x" => (
-                    Point32 {
-                        x: coordinate,
-                        y: viewport.ly,
-                    },
-                    Point32 {
-                        x: coordinate,
-                        y: viewport.hy,
-                    },
-                ),
-                "y" => (
-                    Point32 {
-                        x: viewport.lx,
-                        y: coordinate,
-                    },
-                    Point32 {
-                        x: viewport.hx,
-                        y: coordinate,
-                    },
-                ),
-                _ => continue,
+            let Some((begin, end)) =
+                parameterized_grid_line_endpoints(grid, coordinate, grid_viewport, grid_bounds)
+            else {
+                continue;
             };
             painter.line_segment(
                 [
@@ -4142,6 +4134,69 @@ fn grid_layer_style<'a>(grid: &GridMetadata, layers: &'a [LayerUiState]) -> Opti
             .find(|layer| layer.visible && layer.name.as_str() == name.as_str())
             .map(|layer| &layer.style)
     })
+}
+
+fn parameterized_grid_line_endpoints(
+    grid: &GridMetadata,
+    coordinate: i32,
+    viewport: Rect32,
+    grid_bounds: Rect32,
+) -> Option<(Point32, Point32)> {
+    let bounds = intersect_rect(viewport, grid_bounds)?;
+    match grid.direction.trim().to_ascii_lowercase().as_str() {
+        "x" if coordinate >= bounds.lx && coordinate <= bounds.hx => Some((
+            Point32 {
+                x: coordinate,
+                y: bounds.ly,
+            },
+            Point32 {
+                x: coordinate,
+                y: bounds.hy,
+            },
+        )),
+        "y" if coordinate >= bounds.ly && coordinate <= bounds.hy => Some((
+            Point32 {
+                x: bounds.lx,
+                y: coordinate,
+            },
+            Point32 {
+                x: bounds.hx,
+                y: coordinate,
+            },
+        )),
+        _ => None,
+    }
+}
+
+fn intersect_rect(lhs: Rect32, rhs: Rect32) -> Option<Rect32> {
+    let intersection = Rect32 {
+        lx: lhs.lx.max(rhs.lx),
+        ly: lhs.ly.max(rhs.ly),
+        hx: lhs.hx.min(rhs.hx),
+        hy: lhs.hy.min(rhs.hy),
+    };
+    (intersection.lx <= intersection.hx && intersection.ly <= intersection.hy)
+        .then_some(intersection)
+}
+
+fn grid_reference_bounds(db: &ChipViewDb) -> Option<Rect32> {
+    grid_reference_bounds_from_records(db.snapshot().shapes(), db.snapshot().owners())
+}
+
+fn grid_reference_bounds_from_records(
+    shapes: &[ShapeRecord],
+    owners: &[OwnerRef],
+) -> Option<Rect32> {
+    shapes
+        .iter()
+        .filter(|shape| shape.state == ShapeState::Alive as u8)
+        .filter_map(|shape| {
+            owners
+                .get(shape.owner_index as usize)
+                .filter(|owner| owner.owner_type == OwnerType::Die as u8)
+                .map(|_| shape.bbox)
+        })
+        .reduce(union_rect)
 }
 
 fn grid_visible_indices(grid: &GridMetadata, viewport: Rect32) -> Vec<u32> {
@@ -7025,6 +7080,148 @@ mod tests {
                 },
             ),
             vec![0, 1, 2]
+        );
+    }
+
+    #[test]
+    fn parameterized_grid_lines_clip_to_design_bounds() {
+        let viewport = Rect32 {
+            lx: -40,
+            ly: 20,
+            hx: 60,
+            hy: 140,
+        };
+        let design_bounds = Rect32 {
+            lx: 0,
+            ly: 0,
+            hx: 100,
+            hy: 100,
+        };
+        let x_grid = GridMetadata {
+            direction: "x".to_string(),
+            ..GridMetadata::default()
+        };
+        assert_eq!(
+            parameterized_grid_line_endpoints(&x_grid, 50, viewport, design_bounds),
+            Some((Point32 { x: 50, y: 20 }, Point32 { x: 50, y: 100 }))
+        );
+
+        let y_grid = GridMetadata {
+            direction: "y".to_string(),
+            ..GridMetadata::default()
+        };
+        assert_eq!(
+            parameterized_grid_line_endpoints(&y_grid, 40, viewport, design_bounds),
+            Some((Point32 { x: 0, y: 40 }, Point32 { x: 60, y: 40 }))
+        );
+        assert_eq!(
+            parameterized_grid_line_endpoints(
+                &x_grid,
+                50,
+                Rect32 {
+                    lx: 120,
+                    ly: 120,
+                    hx: 160,
+                    hy: 160,
+                },
+                design_bounds,
+            ),
+            None
+        );
+
+        let drc_viewport = Rect32 {
+            lx: -20_405,
+            ly: 23_796,
+            hx: 35_574,
+            hy: 68_467,
+        };
+        let drc_die = Rect32 {
+            lx: 0,
+            ly: 0,
+            hx: 59_076,
+            hy: 59_076,
+        };
+        assert_eq!(
+            parameterized_grid_line_endpoints(&x_grid, 20_300, drc_viewport, drc_die),
+            Some((
+                Point32 {
+                    x: 20_300,
+                    y: 23_796,
+                },
+                Point32 {
+                    x: 20_300,
+                    y: 59_076,
+                },
+            ))
+        );
+        assert_eq!(
+            parameterized_grid_line_endpoints(&y_grid, 23_900, drc_viewport, drc_die),
+            Some((
+                Point32 { x: 0, y: 23_900 },
+                Point32 {
+                    x: 35_574,
+                    y: 23_900,
+                },
+            ))
+        );
+    }
+
+    #[test]
+    fn grid_reference_bounds_use_only_alive_die_shapes() {
+        let owners = [
+            OwnerRef {
+                owner_type: OwnerType::Die as u8,
+                ..OwnerRef::default()
+            },
+            OwnerRef {
+                owner_type: OwnerType::InstanceBBox as u8,
+                ..OwnerRef::default()
+            },
+        ];
+        let shapes = [
+            ShapeRecord {
+                owner_index: 0,
+                state: ShapeState::Alive as u8,
+                bbox: Rect32 {
+                    lx: 0,
+                    ly: 0,
+                    hx: 100,
+                    hy: 100,
+                },
+                ..ShapeRecord::default()
+            },
+            ShapeRecord {
+                owner_index: 1,
+                state: ShapeState::Alive as u8,
+                bbox: Rect32 {
+                    lx: -50,
+                    ly: -50,
+                    hx: 150,
+                    hy: 150,
+                },
+                ..ShapeRecord::default()
+            },
+            ShapeRecord {
+                owner_index: 0,
+                state: ShapeState::Deleted as u8,
+                bbox: Rect32 {
+                    lx: -100,
+                    ly: -100,
+                    hx: 200,
+                    hy: 200,
+                },
+                ..ShapeRecord::default()
+            },
+        ];
+
+        assert_eq!(
+            grid_reference_bounds_from_records(&shapes, &owners),
+            Some(Rect32 {
+                lx: 0,
+                ly: 0,
+                hx: 100,
+                hy: 100,
+            })
         );
     }
 
