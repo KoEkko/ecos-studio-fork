@@ -1,4 +1,5 @@
 mod app;
+mod map_data;
 
 use std::path::PathBuf;
 
@@ -28,6 +29,9 @@ struct Args {
 
     #[arg(long)]
     drc_statis: Option<PathBuf>,
+
+    #[arg(long)]
+    map_root: Option<PathBuf>,
 }
 
 fn main() -> Result<()> {
@@ -52,6 +56,7 @@ fn main() -> Result<()> {
                 args.edit_dirty,
                 args.drc_data.clone(),
                 args.drc_statis.clone(),
+                args.map_root.clone(),
             )))
         }),
     )

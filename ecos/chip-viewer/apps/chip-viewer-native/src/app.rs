@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{self, Receiver};
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
@@ -18,6 +18,8 @@ use chipgeom_format::{
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 
+use crate::map_data::{HeatmapData, MapCatalog, MapItem};
+
 const SNAPSHOT_REFRESH_CHECK_INTERVAL: Duration = Duration::from_secs(1);
 const FOCUS_VIEWPORT_FILL: f32 = 0.45;
 const MIN_SHAPE_SCREEN_SIZE: f32 = 2.0;
@@ -32,6 +34,17 @@ const HOVER_NEAREST_RADIUS_PX: f32 = 8.0;
 const MAX_PARAMETERIZED_GRID_LINES_PER_GRID: usize = 4096;
 const MAX_JAVASCRIPT_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
 const SIDEBAR_SECTION_RESERVE_HEIGHT: f32 = 34.0;
+const MAP_HEATMAP_WIDTH_FRACTION: f32 = 0.46;
+const MAP_HEATMAP_MAX_WIDTH: f32 = 380.0;
+const MAP_HEATMAP_MIN_WIDTH: f32 = 270.0;
+const MAP_HEATMAP_MAX_GRID_SIZE: f32 = 300.0;
+const MAP_HEATMAP_VERTICAL_OVERHEAD: f32 = 142.0;
+const MAP_FOCUS_ANIMATION_DURATION_SECONDS: f64 = 0.22;
+const MAP_THUMBNAIL_WIDTH: u32 = 128;
+const MAP_THUMBNAIL_HEIGHT: u32 = 96;
+const MAP_THUMBNAIL_MAX_DIMENSION: u32 = 8192;
+const MAP_THUMBNAIL_MAX_DECODE_BYTES: u64 = 128 * 1024 * 1024;
+const REDUCED_MOTION_ENV: &str = "ECOS_REDUCED_MOTION";
 
 pub struct ChipViewerApp {
     state: ViewerState,
@@ -49,6 +62,7 @@ struct LoadingViewer {
     edit_result_dir: Option<PathBuf>,
     drc_data_path: Option<PathBuf>,
     drc_statis_path: Option<PathBuf>,
+    map_root_path: Option<PathBuf>,
 }
 
 struct LoadedViewer {
@@ -83,6 +97,17 @@ struct LoadedViewer {
     next_command_counter: u32,
     drc_overlay: Option<DrcOverlay>,
     selected_drc: Option<usize>,
+    map_catalog: Option<MapCatalog>,
+    map_catalog_error: Option<String>,
+    analysis_tab: AnalysisTab,
+    expanded_map_categories: BTreeSet<String>,
+    selected_map_item: Option<PathBuf>,
+    active_heatmap: Option<ActiveHeatmap>,
+    map_item_error: Option<String>,
+    map_thumbnails: BTreeMap<PathBuf, MapThumbnailState>,
+    map_thumbnail_worker: Option<MapThumbnailWorker>,
+    selected_map_bbox: Option<Rect32>,
+    focus_animation: Option<FocusAnimation>,
     zoom: f32,
     pan: egui::Vec2,
     pan_drag: PanDragState,
@@ -127,6 +152,39 @@ struct DrcOverlay {
     type_states: Vec<DrcTypeState>,
     violations: Vec<DrcViolation>,
     load_error: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AnalysisTab {
+    Drc,
+    Map,
+}
+
+struct ActiveHeatmap {
+    title: String,
+    data: HeatmapData,
+    selected_cell: Option<(usize, usize)>,
+}
+
+enum MapThumbnailState {
+    Loading,
+    Ready(egui::TextureHandle),
+    Failed,
+}
+
+struct MapThumbnailWorker {
+    request_sender: Sender<PathBuf>,
+    result_receiver: Receiver<MapThumbnailResult>,
+}
+
+struct MapThumbnailResult {
+    path: PathBuf,
+    decoded: Result<DecodedMapThumbnail, String>,
+}
+
+struct DecodedMapThumbnail {
+    size: [usize; 2],
+    rgba: Vec<u8>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -287,6 +345,29 @@ struct PendingSessionAction {
 struct PendingFocus {
     bbox: Rect32,
     select_shape_id: Option<ShapeId>,
+    transition: FocusTransition,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FocusTransition {
+    Immediate,
+    Animated,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct FocusAnimation {
+    started_at: f64,
+    from_zoom: f32,
+    from_pan: egui::Vec2,
+    to_zoom: f32,
+    to_pan: egui::Vec2,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct FocusAnimationFrame {
+    zoom: f32,
+    pan: egui::Vec2,
+    complete: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -681,6 +762,7 @@ impl ChipViewerApp {
         initial_session_dirty: bool,
         drc_data_path: Option<PathBuf>,
         drc_statis_path: Option<PathBuf>,
+        map_root_path: Option<PathBuf>,
     ) -> Self {
         let edit_enabled = mode == "edit";
         let (sender, receiver) = mpsc::channel();
@@ -700,6 +782,7 @@ impl ChipViewerApp {
                 edit_result_dir,
                 drc_data_path,
                 drc_statis_path,
+                map_root_path,
             }),
             theme_initialized: false,
             startup_focus_requested: false,
@@ -770,6 +853,7 @@ impl ChipViewerApp {
                     loading.edit_result_dir.clone(),
                     loading.drc_data_path.clone(),
                     loading.drc_statis_path.clone(),
+                    loading.map_root_path.clone(),
                 ))),
                 Ok(Err(err)) => Some(ViewerState::Error(err)),
                 Err(mpsc::TryRecvError::Disconnected) => Some(ViewerState::Error(
@@ -1063,12 +1147,33 @@ impl LoadedViewer {
         edit_result_dir: Option<PathBuf>,
         drc_data_path: Option<PathBuf>,
         drc_statis_path: Option<PathBuf>,
+        map_root_path: Option<PathBuf>,
     ) -> Self {
         let stats = db.stats();
         let grid_bounds = grid_reference_bounds(&db).or(stats.bbox);
         let snapshot_signature = snapshot_signature_for_db(&db);
         let drawing_category_counts = drawing_category_counts(&db);
         let layers = layer_ui_states(&db, &BTreeMap::new());
+        let drc_overlay = DrcOverlay::load(drc_data_path, drc_statis_path);
+        let (map_catalog, map_catalog_error) = match map_root_path.as_deref() {
+            Some(root) => match MapCatalog::discover(root) {
+                Ok(catalog) if !catalog.is_empty() => (Some(catalog), None),
+                Ok(_) => (None, None),
+                Err(err) => (None, Some(err)),
+            },
+            None => (None, None),
+        };
+        let analysis_tab = if drc_overlay.is_some() {
+            AnalysisTab::Drc
+        } else {
+            AnalysisTab::Map
+        };
+        let expanded_map_categories = map_catalog
+            .as_ref()
+            .and_then(|catalog| catalog.categories.first())
+            .map(|category| BTreeSet::from([category.id.clone()]))
+            .unwrap_or_default();
+        let map_thumbnail_worker = map_catalog.as_ref().map(|_| spawn_map_thumbnail_worker());
         Self {
             db,
             stats,
@@ -1099,8 +1204,19 @@ impl LoadedViewer {
             render_cache: RenderPlanCache::default(),
             view_tile_cache: ViewTilePlaneCache::default(),
             next_command_counter: 1,
-            drc_overlay: DrcOverlay::load(drc_data_path, drc_statis_path),
+            drc_overlay,
             selected_drc: None,
+            map_catalog,
+            map_catalog_error,
+            analysis_tab,
+            expanded_map_categories,
+            selected_map_item: None,
+            active_heatmap: None,
+            map_item_error: None,
+            map_thumbnails: BTreeMap::new(),
+            map_thumbnail_worker,
+            selected_map_bbox: None,
+            focus_animation: None,
             zoom: 1.0,
             pan: egui::Vec2::ZERO,
             pan_drag: PanDragState::default(),
@@ -1114,8 +1230,31 @@ impl LoadedViewer {
         self.sidebar_contents(ui);
     }
 
-    fn has_drc_panel(&self) -> bool {
-        self.drc_overlay.is_some()
+    fn has_analysis_panel(&self) -> bool {
+        self.drc_overlay.is_some() || self.map_catalog.is_some() || self.map_catalog_error.is_some()
+    }
+
+    fn analysis_sidebar(&mut self, ui: &mut egui::Ui) {
+        let has_drc = self.drc_overlay.is_some();
+        let has_maps = self.map_catalog.is_some() || self.map_catalog_error.is_some();
+        ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 2.0;
+            if has_drc && analysis_tab_button(ui, "DRC", self.analysis_tab == AnalysisTab::Drc) {
+                self.analysis_tab = AnalysisTab::Drc;
+            }
+            if has_maps && analysis_tab_button(ui, "MAP", self.analysis_tab == AnalysisTab::Map) {
+                self.analysis_tab = AnalysisTab::Map;
+            }
+        });
+        ui.add_space(4.0);
+        ui.separator();
+        match self.analysis_tab {
+            AnalysisTab::Drc if has_drc => self.drc_sidebar(ui),
+            AnalysisTab::Map if has_maps => self.map_sidebar(ui),
+            AnalysisTab::Drc => self.map_sidebar(ui),
+            AnalysisTab::Map => self.drc_sidebar(ui),
+        }
     }
 
     fn drc_sidebar(&mut self, ui: &mut egui::Ui) {
@@ -1124,9 +1263,8 @@ impl LoadedViewer {
             return;
         };
 
-        ui.add_space(8.0);
         ui.horizontal(|ui| {
-            section_heading(ui, "DRC");
+            section_heading(ui, "VIOLATIONS");
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(
                     egui::RichText::new(format!("{visible_count}/{}", overlay.total_count()))
@@ -1192,6 +1330,198 @@ impl LoadedViewer {
                     ui.add_space(8.0);
                 }
             });
+    }
+
+    fn map_sidebar(&mut self, ui: &mut egui::Ui) {
+        self.poll_map_thumbnail_results(ui.ctx());
+        ui.horizontal(|ui| {
+            section_heading(ui, "MAP DATA");
+            if let Some(catalog) = &self.map_catalog {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "{} maps / {} groups",
+                            catalog.item_count(),
+                            catalog.categories.len()
+                        ))
+                        .small()
+                        .color(ecos_text_secondary()),
+                    );
+                });
+            }
+        });
+
+        if let Some(err) = &self.map_catalog_error {
+            ui.add_space(6.0);
+            ui.colored_label(ecos_warning(), err);
+            return;
+        }
+        if let Some(err) = &self.map_item_error {
+            ui.add_space(6.0);
+            ui.colored_label(ecos_warning(), err);
+        }
+
+        let Some(catalog) = self.map_catalog.as_ref() else {
+            ui.add_space(6.0);
+            ui.label(
+                egui::RichText::new("No map data")
+                    .size(13.0)
+                    .color(ecos_text_secondary()),
+            );
+            return;
+        };
+        let categories = catalog.categories.clone();
+        let warnings = catalog.warnings.clone();
+        for warning in warnings {
+            ui.colored_label(ecos_warning(), warning);
+        }
+
+        ui.add_space(4.0);
+        egui::ScrollArea::vertical()
+            .id_salt("chip_viewer_map_catalog_scroll")
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                for category in categories {
+                    let default_open = self.expanded_map_categories.contains(&category.id);
+                    egui::CollapsingHeader::new(format!(
+                        "{}  {}",
+                        category.label,
+                        category.items.len()
+                    ))
+                    .id_salt(("chip_viewer_map_category", &category.id))
+                    .default_open(default_open)
+                    .show(ui, |ui| {
+                        for item in &category.items {
+                            let texture_id = self.map_thumbnail_id(ui.ctx(), &item.png_path);
+                            let available =
+                                item.csv_path.is_some() && category.layout_path.is_some();
+                            let selected = self.selected_map_item.as_ref() == Some(&item.png_path);
+                            ui.horizontal(|ui| {
+                                if let Some(texture_id) = texture_id {
+                                    ui.add(
+                                        egui::Image::new((texture_id, egui::vec2(52.0, 40.0)))
+                                            .fit_to_exact_size(egui::vec2(52.0, 40.0))
+                                            .corner_radius(3.0),
+                                    );
+                                } else {
+                                    let (rect, _) = ui.allocate_exact_size(
+                                        egui::vec2(52.0, 40.0),
+                                        egui::Sense::hover(),
+                                    );
+                                    ui.painter().rect_filled(rect, 3.0, ecos_canvas());
+                                    ui.painter().text(
+                                        rect.center(),
+                                        egui::Align2::CENTER_CENTER,
+                                        "PNG",
+                                        egui::FontId::monospace(10.0),
+                                        ecos_text_secondary(),
+                                    );
+                                }
+
+                                let button_width = ui.available_width().max(80.0);
+                                let response = ui.add_enabled(
+                                    available,
+                                    egui::Button::new(
+                                        egui::RichText::new(&item.label)
+                                            .size(12.5)
+                                            .color(ecos_text_primary()),
+                                    )
+                                    .selected(selected)
+                                    .truncate()
+                                    .min_size(egui::vec2(button_width, 40.0)),
+                                );
+                                let response = if available {
+                                    response
+                                        .on_hover_text(format!("Open {}", item.png_path.display()))
+                                } else if item.csv_path.is_none() {
+                                    response.on_disabled_hover_text("Matching CSV file is missing")
+                                } else {
+                                    response.on_disabled_hover_text("layout.csv is missing")
+                                };
+                                if response.clicked() {
+                                    self.activate_map_item(item, category.layout_path.as_deref());
+                                }
+                            });
+                            ui.add_space(4.0);
+                        }
+                    });
+                    ui.add_space(4.0);
+                }
+            });
+    }
+
+    fn activate_map_item(&mut self, item: &MapItem, layout_path: Option<&Path>) {
+        self.selected_map_item = Some(item.png_path.clone());
+        self.active_heatmap = None;
+        self.map_item_error = None;
+        self.selected_map_bbox = None;
+
+        let Some(csv_path) = item.csv_path.as_deref() else {
+            self.map_item_error = Some(format!("matching CSV is missing for {}", item.label));
+            return;
+        };
+        let Some(layout_path) = layout_path else {
+            self.map_item_error = Some(format!("layout.csv is missing for {}", item.label));
+            return;
+        };
+        match HeatmapData::load(csv_path, layout_path) {
+            Ok(data) => {
+                self.active_heatmap = Some(ActiveHeatmap {
+                    title: item.label.clone(),
+                    data,
+                    selected_cell: None,
+                });
+            }
+            Err(err) => self.map_item_error = Some(err),
+        }
+    }
+
+    fn map_thumbnail_id(&mut self, ctx: &egui::Context, path: &Path) -> Option<egui::TextureId> {
+        if !self.map_thumbnails.contains_key(path) {
+            let state = self
+                .map_thumbnail_worker
+                .as_ref()
+                .filter(|worker| worker.request_sender.send(path.to_path_buf()).is_ok())
+                .map_or(MapThumbnailState::Failed, |_| MapThumbnailState::Loading);
+            self.map_thumbnails.insert(path.to_path_buf(), state);
+            ctx.request_repaint_after(Duration::from_millis(32));
+        }
+        match self.map_thumbnails.get(path) {
+            Some(MapThumbnailState::Ready(texture)) => Some(texture.id()),
+            Some(MapThumbnailState::Loading | MapThumbnailState::Failed) | None => None,
+        }
+    }
+
+    fn poll_map_thumbnail_results(&mut self, ctx: &egui::Context) {
+        let results = self
+            .map_thumbnail_worker
+            .as_ref()
+            .map(|worker| worker.result_receiver.try_iter().collect::<Vec<_>>())
+            .unwrap_or_default();
+        for result in results {
+            let state = match result.decoded {
+                Ok(decoded) => {
+                    let image = egui::ColorImage::from_rgba_unmultiplied(
+                        decoded.size,
+                        decoded.rgba.as_slice(),
+                    );
+                    MapThumbnailState::Ready(ctx.load_texture(
+                        format!("map-preview:{}", result.path.display()),
+                        image,
+                        egui::TextureOptions::LINEAR,
+                    ))
+                }
+                Err(_) => MapThumbnailState::Failed,
+            };
+            self.map_thumbnails.insert(result.path, state);
+        }
+        if self
+            .map_thumbnails
+            .values()
+            .any(|state| matches!(state, MapThumbnailState::Loading))
+        {
+            ctx.request_repaint_after(Duration::from_millis(32));
+        }
     }
 
     fn sidebar_contents(&mut self, ui: &mut egui::Ui) {
@@ -1275,6 +1605,7 @@ impl LoadedViewer {
         });
         ui.horizontal(|ui| {
             if ui.button("⛶").on_hover_text("Fit layout to view").clicked() {
+                self.focus_animation = None;
                 self.zoom = 1.0;
                 self.pan = egui::Vec2::ZERO;
                 self.pan_drag.reset();
@@ -1670,6 +2001,12 @@ impl LoadedViewer {
         let available = ui.available_size();
         let (response, painter) = ui.allocate_painter(available, egui::Sense::click_and_drag());
         let canvas = response.rect;
+        let heatmap_popup_rect = self.map_heatmap_popup_rect(canvas);
+        let pointer_over_heatmap = heatmap_popup_rect.is_some_and(|rect| {
+            ui.ctx()
+                .input(|input| input.pointer.hover_pos())
+                .is_some_and(|pos| rect.contains(pos))
+        });
         painter.rect_filled(canvas, 0.0, ecos_canvas());
 
         let Some(world) = self.stats.bbox else {
@@ -1683,7 +2020,7 @@ impl LoadedViewer {
             return;
         };
 
-        if response.hovered() {
+        if response.hovered() && !pointer_over_heatmap {
             let raw_scroll_delta_y = ui.ctx().input(|input| input.raw_scroll_delta.y);
             let zoom_delta = ui.ctx().input(|input| input.zoom_delta());
             let zoom_factor = if raw_scroll_delta_y.abs() > 0.0 {
@@ -1692,6 +2029,7 @@ impl LoadedViewer {
                 zoom_delta
             };
             if (zoom_factor - 1.0).abs() > f32::EPSILON {
+                self.focus_animation = None;
                 let cursor = ui
                     .ctx()
                     .input(|input| input.pointer.hover_pos())
@@ -1703,7 +2041,7 @@ impl LoadedViewer {
             }
         }
 
-        self.focus_pending_shape(world, canvas);
+        self.focus_pending_shape(ui.ctx(), world, canvas);
 
         let all_layers: BTreeMap<LayerId, LayerStyle> = self
             .layers
@@ -1723,10 +2061,11 @@ impl LoadedViewer {
         let hover_world_point = ui
             .ctx()
             .input(|input| input.pointer.hover_pos())
-            .filter(|pos| response.hovered() && canvas.contains(*pos))
+            .filter(|pos| response.hovered() && !pointer_over_heatmap && canvas.contains(*pos))
             .map(|pos| screen_to_world_point(pos, world, canvas, self.zoom, self.pan));
 
-        if response.drag_started() {
+        if response.drag_started() && !pointer_over_heatmap {
+            self.focus_animation = None;
             self.pan_drag.reset();
             let mode = if response.drag_started_by(egui::PointerButton::Middle)
                 || response.drag_started_by(egui::PointerButton::Secondary)
@@ -1752,7 +2091,7 @@ impl LoadedViewer {
                 self.pan_drag.start(mode);
             }
         }
-        if response.dragged() {
+        if response.dragged() && !pointer_over_heatmap {
             let frame_delta = response.drag_delta();
             match self.pan_drag.mode() {
                 Some(CanvasDragMode::Edit) if self.draft.is_some() => {
@@ -1777,18 +2116,21 @@ impl LoadedViewer {
         }
 
         let drc_double_clicked = response.double_clicked_by(egui::PointerButton::Primary);
-        if drc_double_clicked {
+        if drc_double_clicked && !pointer_over_heatmap {
             self.selected_drc = response
                 .interact_pointer_pos()
                 .and_then(|pos| self.pick_drc_violation_at(pos, world, canvas, viewport));
         }
-        if response.clicked_by(egui::PointerButton::Primary) && !drc_double_clicked {
+        if response.clicked_by(egui::PointerButton::Primary)
+            && !drc_double_clicked
+            && !pointer_over_heatmap
+        {
             self.selected = response
                 .interact_pointer_pos()
                 .and_then(|pos| self.pick_shape_at(pos, world, canvas, &query_layer_ids));
         }
         if let Some(cursor_icon) = canvas_cursor_icon(
-            response.hovered(),
+            response.hovered() && !pointer_over_heatmap,
             self.pan_drag.mode() == Some(CanvasDragMode::Pan)
                 && (response.drag_started() || response.dragged()),
         ) {
@@ -1919,6 +2261,12 @@ impl LoadedViewer {
             }
         }
 
+        if self.analysis_tab == AnalysisTab::Map {
+            if let Some(bbox) = self.selected_map_bbox {
+                paint_map_selection_overlay(&painter, bbox, world, canvas, self.zoom, self.pan);
+            }
+        }
+
         for shape_id in &overlay_shape_ids {
             let Some(shape) = self.db.find_shape(*shape_id) else {
                 continue;
@@ -2001,6 +2349,171 @@ impl LoadedViewer {
         }
         self.canvas_info_overlay(ui, canvas);
         self.drc_detail_overlay(ui, canvas);
+        self.map_heatmap_overlay(ui, canvas);
+    }
+
+    fn map_heatmap_popup_rect(&self, canvas: egui::Rect) -> Option<egui::Rect> {
+        if self.analysis_tab != AnalysisTab::Map {
+            return None;
+        }
+        let heatmap = self.active_heatmap.as_ref()?;
+        let (popup_size, _) =
+            map_heatmap_layout(canvas, heatmap.data.rows(), heatmap.data.columns());
+        let min = egui::pos2(
+            (canvas.right() - popup_size.x - 12.0).max(canvas.left() + 12.0),
+            (canvas.bottom() - popup_size.y - 12.0).max(canvas.top() + 12.0),
+        );
+        Some(egui::Rect::from_min_size(min, popup_size))
+    }
+
+    fn map_heatmap_overlay(&mut self, ui: &mut egui::Ui, canvas: egui::Rect) {
+        let Some(popup_rect) = self.map_heatmap_popup_rect(canvas) else {
+            return;
+        };
+        let Some(heatmap) = self.active_heatmap.as_ref() else {
+            return;
+        };
+        let title = heatmap.title.clone();
+        let rows = heatmap.data.rows();
+        let columns = heatmap.data.columns();
+        let selected_cell = heatmap.selected_cell;
+        let (_, grid_size) = map_heatmap_layout(canvas, rows, columns);
+        let mut close_requested = false;
+        let mut clicked_cell = None;
+        let ctx = ui.ctx().clone();
+
+        egui::Area::new(egui::Id::new("chip_viewer_map_heatmap_popup"))
+            .order(egui::Order::Foreground)
+            .fixed_pos(popup_rect.min)
+            .show(&ctx, |ui| {
+                ui.set_width(popup_rect.width());
+                egui::Frame::NONE
+                    .fill(egui::Color32::from_rgb(29, 30, 34))
+                    .stroke(egui::Stroke::new(1.0, ecos_accent()))
+                    .corner_radius(8)
+                    .inner_margin(egui::Margin::same(10))
+                    .show(ui, |ui| {
+                        ui.set_min_size(popup_rect.size() - egui::vec2(20.0, 20.0));
+                        ui.horizontal(|ui| {
+                            ui.add(
+                                egui::Label::new(
+                                    egui::RichText::new(&title)
+                                        .strong()
+                                        .size(13.0)
+                                        .color(ecos_text_primary()),
+                                )
+                                .truncate(),
+                            );
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    if ui
+                                        .small_button("×")
+                                        .on_hover_text("Close heatmap")
+                                        .clicked()
+                                    {
+                                        close_requested = true;
+                                    }
+                                },
+                            );
+                        });
+                        ui.label(
+                            egui::RichText::new(format!("{rows} rows × {columns} columns"))
+                                .small()
+                                .color(ecos_text_secondary()),
+                        );
+                        ui.add_space(2.0);
+
+                        ui.horizontal(|ui| {
+                            let side_padding =
+                                ((ui.available_width() - grid_size.x) * 0.5).max(0.0);
+                            ui.add_space(side_padding);
+                            let (grid_rect, response) =
+                                ui.allocate_exact_size(grid_size, egui::Sense::click());
+                            let painter = ui.painter_at(grid_rect);
+                            paint_heatmap_grid(&painter, grid_rect, &heatmap.data, selected_cell);
+                            let hovered_cell = response.hover_pos().and_then(|pos| {
+                                interactive_heatmap_cell_at(pos, grid_rect, &heatmap.data)
+                            });
+                            if let Some((row, column)) = hovered_cell {
+                                paint_heatmap_cell_outline(
+                                    &painter,
+                                    grid_rect,
+                                    rows,
+                                    columns,
+                                    row,
+                                    column,
+                                    egui::Stroke::new(1.5, egui::Color32::WHITE),
+                                );
+                                if let Some(value) = heatmap.data.value(row, column) {
+                                    response.clone().on_hover_text(format!(
+                                        "row {row}, column {column}\nvalue {}",
+                                        format_map_value(value)
+                                    ));
+                                }
+                            }
+                            if response.clicked() {
+                                clicked_cell = hovered_cell;
+                            }
+                        });
+
+                        if let Some((row, column)) = selected_cell {
+                            let detail = heatmap.data.value(row, column).map_or_else(
+                                || format!("row {row} · column {column}"),
+                                |value| {
+                                    format!(
+                                        "row {row} · column {column} · {}",
+                                        format_map_value(value)
+                                    )
+                                },
+                            );
+                            ui.label(
+                                egui::RichText::new(detail)
+                                    .monospace()
+                                    .size(11.0)
+                                    .color(ecos_info_text()),
+                            );
+                        } else {
+                            ui.label(
+                                egui::RichText::new("Select a cell to focus the layout")
+                                    .size(11.0)
+                                    .color(ecos_text_secondary()),
+                            );
+                        }
+                        paint_heatmap_legend(ui, heatmap.data.min(), heatmap.data.max());
+                    });
+            });
+
+        if close_requested {
+            self.active_heatmap = None;
+            self.selected_map_bbox = None;
+            return;
+        }
+        let Some((row, column)) = clicked_cell else {
+            return;
+        };
+        let bbox = self
+            .active_heatmap
+            .as_ref()
+            .and_then(|heatmap| heatmap.data.bbox(row, column));
+        if let Some(heatmap) = self.active_heatmap.as_mut() {
+            heatmap.selected_cell = Some((row, column));
+        }
+        if let Some(bbox) = bbox {
+            self.selected_map_bbox = Some(bbox);
+            self.pending_focus = Some(PendingFocus {
+                bbox: contextual_map_focus_bbox(bbox),
+                select_shape_id: None,
+                transition: FocusTransition::Animated,
+            });
+            self.selected = None;
+            self.pan_drag.reset();
+            ui.ctx().request_repaint();
+        } else {
+            self.map_item_error = Some(format!(
+                "layout.csv has no coordinate mapping for row {row}, column {column}"
+            ));
+        }
     }
 
     fn canvas_info_overlay(&mut self, ui: &mut egui::Ui, canvas: egui::Rect) {
@@ -2015,9 +2528,14 @@ impl LoadedViewer {
         let popup_height = (canvas.height() * 0.34)
             .clamp(220.0, 310.0)
             .min((canvas.height() - 24.0).max(160.0));
+        let popup_y = if self.analysis_tab == AnalysisTab::Map && self.active_heatmap.is_some() {
+            canvas.top() + 12.0
+        } else {
+            (canvas.bottom() - popup_height - 12.0).max(canvas.top() + 12.0)
+        };
         let popup_pos = egui::pos2(
             (canvas.right() - popup_width - 12.0).max(canvas.left() + 12.0),
-            (canvas.bottom() - popup_height - 12.0).max(canvas.top() + 12.0),
+            popup_y,
         );
 
         egui::Area::new(egui::Id::new("chip_viewer_canvas_info_popup"))
@@ -2078,16 +2596,34 @@ impl LoadedViewer {
         }
     }
 
-    fn focus_pending_shape(&mut self, world: Rect32, canvas: egui::Rect) {
-        let Some(focus) = self.pending_focus.take() else {
+    fn focus_pending_shape(&mut self, ctx: &egui::Context, world: Rect32, canvas: egui::Rect) {
+        let now = ctx.input(|input| input.time);
+        if let Some(focus) = self.pending_focus.take() {
+            let (zoom, pan) = focus_view_on_bbox(world, focus.bbox, canvas);
+            self.pan_drag.reset();
+            self.selected = focus.select_shape_id;
+
+            if focus.transition == FocusTransition::Animated && focus_animation_enabled(ctx) {
+                self.focus_animation =
+                    Some(FocusAnimation::new(now, self.zoom, self.pan, zoom, pan));
+            } else {
+                self.focus_animation = None;
+                self.zoom = zoom;
+                self.pan = pan;
+            }
+        }
+
+        let Some(animation) = self.focus_animation else {
             return;
         };
-
-        let (zoom, pan) = focus_view_on_bbox(world, focus.bbox, canvas);
-        self.zoom = zoom;
-        self.pan = pan;
-        self.pan_drag.reset();
-        self.selected = focus.select_shape_id;
+        let frame = animation.sample(now);
+        self.zoom = frame.zoom;
+        self.pan = frame.pan;
+        if frame.complete {
+            self.focus_animation = None;
+        } else {
+            ctx.request_repaint();
+        }
     }
 
     fn begin_edit_drag(&mut self, pos: egui::Pos2, world: Rect32, canvas: egui::Rect) -> bool {
@@ -2912,13 +3448,13 @@ impl eframe::App for ChipViewerApp {
             ctx.request_repaint_after(Duration::from_millis(50));
         }
         if let ViewerState::Loaded(loaded) = &mut self.state {
-            if loaded.has_drc_panel() {
-                egui::SidePanel::left("chip_viewer_drc")
+            if loaded.has_analysis_panel() {
+                egui::SidePanel::left("chip_viewer_analysis")
                     .resizable(true)
                     .min_width(240.0)
                     .max_width(380.0)
                     .default_width(292.0)
-                    .show(ctx, |ui| loaded.drc_sidebar(ui));
+                    .show(ctx, |ui| loaded.analysis_sidebar(ui));
             }
         }
         egui::SidePanel::right("chip_viewer_operations")
@@ -3032,6 +3568,325 @@ fn section_heading(ui: &mut egui::Ui, label: &str) {
             .small()
             .strong()
             .color(ecos_accent()),
+    );
+}
+
+fn analysis_tab_button(ui: &mut egui::Ui, label: &str, selected: bool) -> bool {
+    let response = ui.add_sized(
+        egui::vec2(52.0, 28.0),
+        egui::Button::new(
+            egui::RichText::new(label)
+                .strong()
+                .size(12.5)
+                .color(if selected {
+                    ecos_text_primary()
+                } else {
+                    ecos_text_secondary()
+                }),
+        )
+        .frame(false),
+    );
+    if selected {
+        ui.painter().line_segment(
+            [
+                egui::pos2(response.rect.left() + 8.0, response.rect.bottom()),
+                egui::pos2(response.rect.right() - 8.0, response.rect.bottom()),
+            ],
+            egui::Stroke::new(2.0, ecos_accent()),
+        );
+    }
+    response.clicked()
+}
+
+fn spawn_map_thumbnail_worker() -> MapThumbnailWorker {
+    let (request_sender, request_receiver) = mpsc::channel::<PathBuf>();
+    let (result_sender, result_receiver) = mpsc::channel::<MapThumbnailResult>();
+    thread::spawn(move || {
+        while let Ok(path) = request_receiver.recv() {
+            let decoded = decode_map_thumbnail(&path);
+            if result_sender
+                .send(MapThumbnailResult { path, decoded })
+                .is_err()
+            {
+                break;
+            }
+        }
+    });
+    MapThumbnailWorker {
+        request_sender,
+        result_receiver,
+    }
+}
+
+fn decode_map_thumbnail(path: &Path) -> Result<DecodedMapThumbnail, String> {
+    let mut reader = image::ImageReader::open(path)
+        .and_then(image::ImageReader::with_guessed_format)
+        .map_err(|err| format!("failed to open map preview {}: {err}", path.display()))?;
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(MAP_THUMBNAIL_MAX_DIMENSION);
+    limits.max_image_height = Some(MAP_THUMBNAIL_MAX_DIMENSION);
+    limits.max_alloc = Some(MAP_THUMBNAIL_MAX_DECODE_BYTES);
+    reader.limits(limits);
+    let image = reader
+        .decode()
+        .map_err(|err| format!("failed to decode map preview {}: {err}", path.display()))?
+        .thumbnail(MAP_THUMBNAIL_WIDTH, MAP_THUMBNAIL_HEIGHT)
+        .to_rgba8();
+    Ok(DecodedMapThumbnail {
+        size: [image.width() as usize, image.height() as usize],
+        rgba: image.into_raw(),
+    })
+}
+
+fn map_heatmap_layout(canvas: egui::Rect, rows: usize, columns: usize) -> (egui::Vec2, egui::Vec2) {
+    let popup_width = (canvas.width() * MAP_HEATMAP_WIDTH_FRACTION)
+        .clamp(MAP_HEATMAP_MIN_WIDTH, MAP_HEATMAP_MAX_WIDTH)
+        .min((canvas.width() - 24.0).max(160.0));
+    let content_width = (popup_width - 20.0).max(120.0);
+    let mut grid_width = content_width.min(MAP_HEATMAP_MAX_GRID_SIZE);
+    let mut grid_height = grid_width * rows.max(1) as f32 / columns.max(1) as f32;
+    let max_grid_height = (canvas.height() - 118.0).clamp(60.0, MAP_HEATMAP_MAX_GRID_SIZE);
+    if grid_height > max_grid_height {
+        let scale = max_grid_height / grid_height;
+        grid_width *= scale;
+        grid_height = max_grid_height;
+    }
+    let popup_height =
+        (grid_height + MAP_HEATMAP_VERTICAL_OVERHEAD).min((canvas.height() - 24.0).max(150.0));
+    (
+        egui::vec2(popup_width, popup_height),
+        egui::vec2(grid_width, grid_height),
+    )
+}
+
+fn paint_heatmap_grid(
+    painter: &egui::Painter,
+    rect: egui::Rect,
+    data: &HeatmapData,
+    selected_cell: Option<(usize, usize)>,
+) {
+    let rows = data.rows().max(1);
+    let columns = data.columns().max(1);
+    let cell_width = rect.width() / columns as f32;
+    let cell_height = rect.height() / rows as f32;
+    painter.rect_filled(rect, 2.0, ecos_canvas());
+    for row in 0..rows {
+        for column in 0..columns {
+            let Some(normalized) = data.normalized_value(row, column) else {
+                continue;
+            };
+            let cell = heatmap_cell_rect(rect, rows, columns, row, column);
+            painter.rect_filled(cell, 0.0, heatmap_color(normalized));
+        }
+    }
+    painter.rect_stroke(
+        rect,
+        2.0,
+        egui::Stroke::new(1.0, ecos_border()),
+        egui::StrokeKind::Inside,
+    );
+    if let Some((row, column)) = selected_cell {
+        if row < rows && column < columns {
+            paint_heatmap_cell_outline(
+                painter,
+                rect,
+                rows,
+                columns,
+                row,
+                column,
+                egui::Stroke::new(2.0, egui::Color32::WHITE),
+            );
+        }
+    }
+
+    if cell_width >= 8.0 && cell_height >= 8.0 {
+        let stroke = egui::Stroke::new(0.5, egui::Color32::from_black_alpha(48));
+        for column in 1..columns {
+            let x = rect.left() + column as f32 * cell_width;
+            painter.line_segment(
+                [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
+                stroke,
+            );
+        }
+        for row in 1..rows {
+            let y = rect.top() + row as f32 * cell_height;
+            painter.line_segment(
+                [egui::pos2(rect.left(), y), egui::pos2(rect.right(), y)],
+                stroke,
+            );
+        }
+    }
+}
+
+fn paint_heatmap_legend(ui: &mut egui::Ui, min: f64, max: f64) {
+    let (rect, _) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 8.0), egui::Sense::hover());
+    let painter = ui.painter_at(rect);
+    let segments = 64;
+    for segment in 0..segments {
+        let t0 = segment as f32 / segments as f32;
+        let t1 = (segment + 1) as f32 / segments as f32;
+        painter.rect_filled(
+            egui::Rect::from_min_max(
+                egui::pos2(egui::lerp(rect.x_range(), t0), rect.top()),
+                egui::pos2(egui::lerp(rect.x_range(), t1), rect.bottom()),
+            ),
+            0.0,
+            heatmap_color((t0 + t1) * 0.5),
+        );
+    }
+    ui.horizontal(|ui| {
+        ui.label(
+            egui::RichText::new(format_map_value(min))
+                .monospace()
+                .size(10.0)
+                .color(ecos_text_secondary()),
+        );
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.label(
+                egui::RichText::new(format_map_value(max))
+                    .monospace()
+                    .size(10.0)
+                    .color(ecos_text_secondary()),
+            );
+        });
+    });
+}
+
+fn heatmap_cell_at(
+    pos: egui::Pos2,
+    rect: egui::Rect,
+    rows: usize,
+    columns: usize,
+) -> Option<(usize, usize)> {
+    if !rect.contains(pos) || rows == 0 || columns == 0 {
+        return None;
+    }
+    let column = (((pos.x - rect.left()) / rect.width()) * columns as f32)
+        .floor()
+        .clamp(0.0, (columns - 1) as f32) as usize;
+    let row = (((pos.y - rect.top()) / rect.height()) * rows as f32)
+        .floor()
+        .clamp(0.0, (rows - 1) as f32) as usize;
+    Some((row, column))
+}
+
+fn interactive_heatmap_cell_at(
+    pos: egui::Pos2,
+    rect: egui::Rect,
+    data: &HeatmapData,
+) -> Option<(usize, usize)> {
+    heatmap_cell_at(pos, rect, data.rows(), data.columns())
+        .filter(|(row, column)| data.value(*row, *column).is_some())
+}
+
+fn heatmap_cell_rect(
+    rect: egui::Rect,
+    rows: usize,
+    columns: usize,
+    row: usize,
+    column: usize,
+) -> egui::Rect {
+    let cell_width = rect.width() / columns.max(1) as f32;
+    let cell_height = rect.height() / rows.max(1) as f32;
+    egui::Rect::from_min_max(
+        egui::pos2(
+            rect.left() + column as f32 * cell_width,
+            rect.top() + row as f32 * cell_height,
+        ),
+        egui::pos2(
+            rect.left() + (column + 1) as f32 * cell_width,
+            rect.top() + (row + 1) as f32 * cell_height,
+        ),
+    )
+}
+
+fn paint_heatmap_cell_outline(
+    painter: &egui::Painter,
+    rect: egui::Rect,
+    rows: usize,
+    columns: usize,
+    row: usize,
+    column: usize,
+    stroke: egui::Stroke,
+) {
+    painter.rect_stroke(
+        heatmap_cell_rect(rect, rows, columns, row, column).expand(1.0),
+        0.0,
+        stroke,
+        egui::StrokeKind::Inside,
+    );
+}
+
+fn heatmap_color(value: f32) -> egui::Color32 {
+    const STOPS: [[u8; 3]; 5] = [
+        [30, 42, 85],
+        [23, 108, 124],
+        [41, 156, 105],
+        [153, 211, 67],
+        [250, 225, 52],
+    ];
+    let scaled = value.clamp(0.0, 1.0) * (STOPS.len() - 1) as f32;
+    let lower = scaled.floor() as usize;
+    let upper = (lower + 1).min(STOPS.len() - 1);
+    let t = scaled - lower as f32;
+    let channel = |index: usize| {
+        (STOPS[lower][index] as f32 + (STOPS[upper][index] as f32 - STOPS[lower][index] as f32) * t)
+            .round() as u8
+    };
+    egui::Color32::from_rgb(channel(0), channel(1), channel(2))
+}
+
+fn format_map_value(value: f64) -> String {
+    let magnitude = value.abs();
+    if magnitude == 0.0 {
+        "0".to_string()
+    } else if magnitude >= 1000.0 || magnitude < 0.001 {
+        format!("{value:.3e}")
+    } else if magnitude >= 1.0 {
+        format!("{value:.3}")
+    } else {
+        format!("{value:.5}")
+    }
+}
+
+fn contextual_map_focus_bbox(bbox: Rect32) -> Rect32 {
+    let width = i64::from(bbox.hx) - i64::from(bbox.lx);
+    let height = i64::from(bbox.hy) - i64::from(bbox.ly);
+    let half_extent = width.max(height).max(1);
+    let center_x = (i64::from(bbox.lx) + i64::from(bbox.hx)) / 2;
+    let center_y = (i64::from(bbox.ly) + i64::from(bbox.hy)) / 2;
+    Rect32 {
+        lx: clamp_i64_to_i32(center_x - half_extent),
+        ly: clamp_i64_to_i32(center_y - half_extent),
+        hx: clamp_i64_to_i32(center_x + half_extent),
+        hy: clamp_i64_to_i32(center_y + half_extent),
+    }
+}
+
+fn clamp_i64_to_i32(value: i64) -> i32 {
+    value.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32
+}
+
+fn paint_map_selection_overlay(
+    painter: &egui::Painter,
+    bbox: Rect32,
+    world: Rect32,
+    canvas: egui::Rect,
+    zoom: f32,
+    pan: egui::Vec2,
+) {
+    let rect = world_to_screen_rect(bbox, world, canvas, zoom, pan);
+    painter.rect_filled(
+        rect,
+        0.0,
+        egui::Color32::from_rgba_unmultiplied(0, 191, 165, 36),
+    );
+    painter.rect_stroke(
+        rect.expand(1.5),
+        0.0,
+        egui::Stroke::new(2.0, ecos_accent()),
+        egui::StrokeKind::Inside,
     );
 }
 
@@ -5197,6 +6052,7 @@ where
     Some(PendingFocus {
         bbox,
         select_shape_id,
+        transition: FocusTransition::Immediate,
     })
 }
 
@@ -5228,6 +6084,7 @@ where
         pending_focus: Some(PendingFocus {
             bbox,
             select_shape_id: Some(shape_id),
+            transition: FocusTransition::Immediate,
         }),
         message: format!("shape {shape_id} selected"),
     }
@@ -5268,6 +6125,57 @@ fn focus_view_on_bbox(world: Rect32, target: Rect32, canvas: egui::Rect) -> (f32
             (target_cy - world_cy) * scale,
         ),
     )
+}
+
+impl FocusAnimation {
+    fn new(
+        started_at: f64,
+        from_zoom: f32,
+        from_pan: egui::Vec2,
+        to_zoom: f32,
+        to_pan: egui::Vec2,
+    ) -> Self {
+        Self {
+            started_at,
+            from_zoom,
+            from_pan,
+            to_zoom,
+            to_pan,
+        }
+    }
+
+    fn sample(self, now: f64) -> FocusAnimationFrame {
+        let progress =
+            ((now - self.started_at) / MAP_FOCUS_ANIMATION_DURATION_SECONDS).clamp(0.0, 1.0) as f32;
+        let eased = ease_out_quint(progress);
+        let zoom = egui::lerp(self.from_zoom..=self.to_zoom, eased);
+        FocusAnimationFrame {
+            zoom: if progress >= 1.0 { self.to_zoom } else { zoom },
+            pan: if progress >= 1.0 {
+                self.to_pan
+            } else {
+                self.from_pan + (self.to_pan - self.from_pan) * eased
+            },
+            complete: progress >= 1.0,
+        }
+    }
+}
+
+fn ease_out_quint(progress: f32) -> f32 {
+    1.0 - (1.0 - progress.clamp(0.0, 1.0)).powi(5)
+}
+
+fn focus_animation_enabled(ctx: &egui::Context) -> bool {
+    ctx.style().animation_time > 0.0
+        && !reduced_motion_requested(std::env::var(REDUCED_MOTION_ENV).ok().as_deref())
+}
+
+fn reduced_motion_requested(value: Option<&str>) -> bool {
+    value.is_some_and(|value| {
+        ["1", "true", "yes", "on"]
+            .iter()
+            .any(|enabled| value.trim().eq_ignore_ascii_case(enabled))
+    })
 }
 
 fn retain_existing_shape_id<F>(shape_id: Option<ShapeId>, mut exists: F) -> Option<ShapeId>
@@ -6501,6 +7409,7 @@ mod tests {
                     hy: 40,
                 },
                 select_shape_id: Some(42),
+                transition: FocusTransition::Immediate,
             })
         );
         assert_eq!(action.message, "shape 42 selected");
@@ -6539,6 +7448,177 @@ mod tests {
         assert!((screen.center().x - canvas.center().x).abs() <= 0.5);
         assert!((screen.center().y - canvas.center().y).abs() <= 0.5);
         assert!(zoom >= 1.0);
+    }
+
+    #[test]
+    fn focus_animation_eases_out_and_finishes_on_the_exact_target() {
+        let animation =
+            FocusAnimation::new(10.0, 1.0, egui::Vec2::ZERO, 16.0, egui::vec2(80.0, -40.0));
+
+        let start = animation.sample(10.0);
+        let middle = animation.sample(10.0 + MAP_FOCUS_ANIMATION_DURATION_SECONDS * 0.5);
+        let end = animation.sample(10.0 + MAP_FOCUS_ANIMATION_DURATION_SECONDS);
+
+        assert_eq!(start.zoom, 1.0);
+        assert_eq!(start.pan, egui::Vec2::ZERO);
+        assert!(!start.complete);
+        assert!(middle.zoom > 4.0 && middle.zoom < 16.0);
+        assert!(middle.pan.x > 40.0 && middle.pan.x < 80.0);
+        assert!(middle.pan.y < -20.0 && middle.pan.y > -40.0);
+        assert!(!middle.complete);
+        assert_eq!(end.zoom, 16.0);
+        assert_eq!(end.pan, egui::vec2(80.0, -40.0));
+        assert!(end.complete);
+    }
+
+    #[test]
+    fn focus_animation_moves_target_monotonically_to_viewport_center() {
+        let target_from_world_center = egui::vec2(10.0, -5.0);
+        let animation = FocusAnimation::new(
+            10.0,
+            1.0,
+            egui::Vec2::ZERO,
+            16.0,
+            -target_from_world_center * 16.0,
+        );
+        let mut previous_distance = f32::INFINITY;
+
+        for progress in [0.0, 0.1, 0.25, 0.5, 0.75, 1.0] {
+            let frame = animation.sample(10.0 + MAP_FOCUS_ANIMATION_DURATION_SECONDS * progress);
+            let target_offset = target_from_world_center * frame.zoom + frame.pan;
+            let distance = target_offset.length();
+            assert!(
+                distance <= previous_distance + f32::EPSILON,
+                "target moved away from center at progress {progress}: {distance} > {previous_distance}"
+            );
+            assert!(target_offset.x >= -f32::EPSILON);
+            assert!(target_offset.y <= f32::EPSILON);
+            previous_distance = distance;
+        }
+        assert!(previous_distance <= f32::EPSILON);
+    }
+
+    #[test]
+    fn reduced_motion_environment_values_disable_focus_animation() {
+        for value in ["1", "true", "TRUE", "yes", "on"] {
+            assert!(reduced_motion_requested(Some(value)));
+        }
+        for value in ["0", "false", "off", ""] {
+            assert!(!reduced_motion_requested(Some(value)));
+        }
+        assert!(!reduced_motion_requested(None));
+    }
+
+    #[test]
+    fn map_focus_keeps_context_around_the_selected_cell() {
+        let target = contextual_map_focus_bbox(Rect32 {
+            lx: 0,
+            ly: 0,
+            hx: 100,
+            hy: 20,
+        });
+
+        assert_eq!(
+            target,
+            Rect32 {
+                lx: -50,
+                ly: -90,
+                hx: 150,
+                hy: 110,
+            }
+        );
+    }
+
+    #[test]
+    fn heatmap_pointer_maps_to_matrix_coordinates() {
+        let rect = egui::Rect::from_min_size(egui::pos2(10.0, 20.0), egui::vec2(100.0, 80.0));
+
+        assert_eq!(
+            heatmap_cell_at(egui::pos2(10.0, 20.0), rect, 4, 5),
+            Some((0, 0))
+        );
+        assert_eq!(
+            heatmap_cell_at(egui::pos2(109.9, 99.9), rect, 4, 5),
+            Some((3, 4))
+        );
+        assert_eq!(heatmap_cell_at(egui::pos2(110.1, 100.1), rect, 4, 5), None);
+    }
+
+    #[test]
+    fn heatmap_pointer_ignores_cells_without_finite_data() {
+        let directory = temp_snapshot_dir("heatmap-interactive-cells");
+        let values_path = directory.join("values.csv");
+        let layout_path = directory.join("layout.csv");
+        fs::write(&values_path, "1,NaN\n3,4\n").unwrap();
+        fs::write(
+            &layout_path,
+            "pixel_row,pixel_col,lx,ly,ux,uy\n0,0,0,0,10,10\n0,1,10,0,20,10\n",
+        )
+        .unwrap();
+        let data = HeatmapData::load(&values_path, &layout_path).unwrap();
+        let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(100.0, 100.0));
+
+        assert_eq!(
+            interactive_heatmap_cell_at(egui::pos2(25.0, 25.0), rect, &data),
+            Some((0, 0))
+        );
+        assert_eq!(
+            interactive_heatmap_cell_at(egui::pos2(75.0, 25.0), rect, &data),
+            None
+        );
+
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn map_thumbnail_decoder_downsizes_and_enforces_dimension_limit() {
+        let directory = temp_snapshot_dir("map-thumbnail-limits");
+        let preview_path = directory.join("preview.png");
+        image::RgbaImage::new(256, 192).save(&preview_path).unwrap();
+
+        let preview = decode_map_thumbnail(&preview_path).unwrap();
+        assert_eq!(preview.size, [128, 96]);
+        assert_eq!(preview.rgba.len(), 128 * 96 * 4);
+
+        let oversized_path = directory.join("oversized.png");
+        image::RgbaImage::new(MAP_THUMBNAIL_MAX_DIMENSION + 1, 1)
+            .save(&oversized_path)
+            .unwrap();
+        assert!(decode_map_thumbnail(&oversized_path).is_err());
+
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn heatmap_palette_has_distinct_low_and_high_colors() {
+        assert_eq!(heatmap_color(0.0), egui::Color32::from_rgb(30, 42, 85));
+        assert_eq!(heatmap_color(1.0), egui::Color32::from_rgb(250, 225, 52));
+        assert_ne!(heatmap_color(0.5), heatmap_color(0.0));
+        assert_ne!(heatmap_color(0.5), heatmap_color(1.0));
+    }
+
+    #[test]
+    fn heatmap_layout_uses_a_larger_contextual_grid() {
+        let canvas = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(674.0, 650.0));
+
+        let (popup, grid) = map_heatmap_layout(canvas, 43, 43);
+
+        assert!((popup.x - 310.04).abs() < 0.1);
+        assert!((grid.x - 290.04).abs() < 0.1);
+        assert_eq!(grid.x, grid.y);
+        assert!((popup.y - (grid.y + MAP_HEATMAP_VERTICAL_OVERHEAD)).abs() < 0.1);
+    }
+
+    #[test]
+    fn heatmap_layout_stays_inside_a_small_canvas() {
+        let canvas = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(220.0, 180.0));
+
+        let (popup, grid) = map_heatmap_layout(canvas, 43, 43);
+
+        assert!(popup.x <= canvas.width() - 24.0);
+        assert!(popup.y <= canvas.height() - 24.0);
+        assert!(grid.x <= popup.x - 20.0);
+        assert!(grid.y <= canvas.height() - 118.0);
     }
 
     #[test]
@@ -7650,7 +8730,7 @@ mod tests {
         let dir = temp_snapshot_dir("external-refresh-new-delta");
         write_empty_snapshot(&dir, false);
         let db = ChipViewDb::open(dir.join("geometry.manifest")).unwrap();
-        let mut loaded = LoadedViewer::new(db, false, false, None, None, None, None);
+        let mut loaded = LoadedViewer::new(db, false, false, None, None, None, None, None);
         let delta_path = dir.join("geometry.delta.bin");
 
         assert!(!loaded.snapshot_signature.files.contains_key(&delta_path));
@@ -7677,7 +8757,7 @@ mod tests {
         let dir = temp_snapshot_dir("restored-edit-session-dirty");
         write_empty_snapshot(&dir, false);
         let db = ChipViewDb::open(dir.join("geometry.manifest")).unwrap();
-        let loaded = LoadedViewer::new(db, true, true, None, None, None, None);
+        let loaded = LoadedViewer::new(db, true, true, None, None, None, None, None);
 
         assert!(loaded.session_dirty);
 

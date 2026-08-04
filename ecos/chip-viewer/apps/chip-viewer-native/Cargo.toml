@@ -11,7 +11,9 @@ chip-render = { path = "../../crates/chip-render" }
 chip-view-db = { path = "../../crates/chip-view-db" }
 chipgeom-format = { path = "../../crates/chipgeom-format" }
 clap.workspace = true
+csv.workspace = true
 eframe.workspace = true
 egui.workspace = true
+image.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -195,6 +195,7 @@ interface SnapshotInputs {
   gdsPath: string
   imagePath: string
   manifestPath: string
+  mapRootPath?: string
   workspaceStepDirectory: string
 }
 
@@ -611,6 +612,9 @@ export class ChipViewerService {
     if (snapshotInputs.drcStatisPath) {
       viewerArgs.push('--drc-statis', snapshotInputs.drcStatisPath)
     }
+    if (snapshotInputs.mapRootPath) {
+      viewerArgs.push('--map-root', snapshotInputs.mapRootPath)
+    }
     if (mode === 'edit') {
       viewerArgs.push(
         '--edit-command-dir',
@@ -715,6 +719,7 @@ export class ChipViewerService {
     const editDirectory = join(workspaceStepDirectory, '.chip-viewer', 'layout-edit')
     const drcDataPath = join(workspaceStepDirectory, 'feature', 'drc.step.json')
     const drcStatisPath = join(workspaceStepDirectory, 'analysis', 'drc_statis.csv')
+    const mapRootPath = join(workspaceStepDirectory, 'feature')
     const isDrcStep = isDrcWorkspaceStep(step, stepLabel, workspaceStepDirectory)
 
     return {
@@ -728,6 +733,7 @@ export class ChipViewerService {
       gdsPath,
       imagePath,
       manifestPath: join(geometryDir, 'geometry.manifest'),
+      mapRootPath: this.fileExists(mapRootPath) ? mapRootPath : undefined,
       workspaceStepDirectory,
     }
   }
