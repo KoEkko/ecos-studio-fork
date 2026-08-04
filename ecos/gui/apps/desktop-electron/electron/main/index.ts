@@ -25,7 +25,6 @@ import {
 } from '../services/menuService'
 import { ProjectScopeService } from '../services/projectScopeService'
 import { ProjectManifestService } from '../services/projectManifestService'
-import { RemoteContentService } from '../services/remoteContentService'
 import { ResourceManagerService } from '../services/resourceManagerService'
 import { SettingsStore } from '../services/settingsStore'
 import { ShellPtyService } from '../services/shellPtyService'
@@ -49,7 +48,6 @@ let projectScopeService: ProjectScopeService | null = null
 let services: {
   appInfoService: AppInfoService
   eccRuntimeService: EccRpcRuntimeService
-  remoteContentService: RemoteContentService
   projectManifestService: ProjectManifestService
   settingsStore: SettingsStore
   resourceManagerService: ResourceManagerService
@@ -120,7 +118,6 @@ function getDesktopServices() {
     appVersionProvider: () => app.getVersion(),
     env: runtimeEnv,
   })
-  const remoteContentService = new RemoteContentService()
   const workspaceResourceService = new WorkspaceResourceService({
     projectScopeProvider: projectScopeService,
   })
@@ -167,7 +164,6 @@ function getDesktopServices() {
     appInfoService,
     chipViewerService,
     eccRuntimeService,
-    remoteContentService,
     projectManifestService,
     resourceManagerService,
     settingsStore,
@@ -201,7 +197,6 @@ async function ensureDesktopBridgeReady(): Promise<void> {
         })
       },
       eccRuntimeService: desktopServices.eccRuntimeService,
-      remoteContentService: desktopServices.remoteContentService,
       projectManifestService: desktopServices.projectManifestService,
       resourceManagerService: desktopServices.resourceManagerService,
       chipViewerService: desktopServices.chipViewerService,

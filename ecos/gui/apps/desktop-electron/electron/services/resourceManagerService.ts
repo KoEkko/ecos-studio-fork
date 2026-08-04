@@ -3,33 +3,37 @@ import { constants, createReadStream } from 'node:fs'
 import {
   access,
   copyFile,
+  lstat,
   mkdir,
   open,
   readdir,
   readFile,
+  realpath,
   rename,
   rm,
   stat,
   writeFile,
 } from 'node:fs/promises'
-import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { homedir } from 'node:os'
 import { spawn } from 'node:child_process'
 import { electronLogger } from './logger'
-import type {
-  ResourceAction,
-  ResourceInfo,
-  ResourceJob,
-  ResourceList,
-  MpcSpecReadResult,
-  ResourceOperationResult,
-  ResourceStatus,
+import {
+  validateMpcSpec,
+  type ResourceAction,
+  type ResourceInfo,
+  type ResourceJob,
+  type ResourceList,
+  type MpcSpecReadResult,
+  type ResourceOperationResult,
+  type ResourceStatus,
 } from '@ecos-studio/shared'
 
 const DEFAULT_REGISTRY_URL = 'https://emin017.github.io/ecos-registry/tool-registry.json'
 const ALL_PLATFORM = 'all-platform'
 const COMMAND_ERROR_OUTPUT_LIMIT = 2048
 const PDK_RESOURCE_FILE_EXTENSIONS = ['.lef', '.lib', '.liberty']
+const REGISTRY_CACHE_VERSION = 1
 
 type ResourceInventoryEntry = ToolInventoryEntry | PdkInventoryEntry | MpcInventoryEntry
 type ArchiveExtractor = (
@@ -44,6 +48,7 @@ type CommandRunner = (
 ) => Promise<void>
 type DownloadProgressListener = (progress: DownloadProgress) => void
 type Sha256Verifier = (filePath: string, expected: string) => Promise<boolean>
+type ManifestWriter = (filePath: string, content: string) => Promise<void>
 
 interface CommandRunnerOptions {
   cwd?: string
@@ -129,10 +134,10 @@ const BUILTIN_MPCS: RegistryMpc[] = [
         version: '0.1.0',
         platforms: {
           [ALL_PLATFORM]: {
-            url: 'https://github.com/openecos-projects/mpc-frame/archive/cc47470b72537ba3f0726468f5d5e27d317d9706.tar.gz',
-            sha256: 'b6042bf6e0322cb1e532973a3811a06067e92fca808cb657c81cf7ad16399594',
-            size: 470085,
-            strip_prefix: 'mpc-frame-cc47470b72537ba3f0726468f5d5e27d317d9706',
+            url: 'https://github.com/openecos-projects/mpc-frame/archive/7555b4053816895919fb1d324d623d46d70dec3d.tar.gz',
+            sha256: '34c0013bb5b74876351be6b7cc3885fd5fccb66e6edf9afd15519408a52b5113',
+            size: 471915,
+            strip_prefix: 'mpc-frame-7555b4053816895919fb1d324d623d46d70dec3d',
             post_install: [],
           },
         },
@@ -140,6 +145,11 @@ const BUILTIN_MPCS: RegistryMpc[] = [
     ],
   },
 ]
+
+const LEGACY_BUILTIN_MPC_ARCHIVE_URLS = new Set([
+  'https://github.com/openecos-projects/mpc-frame/archive/cc47470b72537ba3f0726468f5d5e27d317d9706.tar.gz',
+  BUILTIN_MPCS[0].versions[0].platforms[ALL_PLATFORM].url,
+])
 
 interface ToolInventoryEntry {
   type: 'tool'
@@ -220,6 +230,7 @@ export interface ResourceManagerServiceOptions {
   cacheDir?: string
   commandRunner?: CommandRunner
   fetchImpl?: typeof fetch
+  manifestWriter?: ManifestWriter
   pdksDir?: string
   mpcsDir?: string
   registryUrl?: string
@@ -238,6 +249,7 @@ export class ResourceManagerService {
   private readonly commandRunner: CommandRunner
   private readonly fetchImpl: typeof fetch
   private readonly manifestPath: string
+  private readonly manifestWriter: ManifestWriter
   private readonly mpcsDir: string
   private readonly pdksDir: string
   private readonly registryUrl: string
@@ -263,6 +275,7 @@ export class ResourceManagerService {
     this.fetchImpl = options.fetchImpl ?? fetch
     this.archiveExtractor = options.archiveExtractor ?? extractArchive
     this.sha256Verifier = options.sha256Verifier ?? verifySha256
+    this.manifestWriter = options.manifestWriter ?? writeFile
   }
 
   async listResources(): Promise<ResourceList> {
@@ -333,13 +346,7 @@ export class ResourceManagerService {
       throw new Error(`MPC '${mpcId}' has an invalid managed path`)
     }
 
-    const specPath = resolveInside(mpcPath, 'spec/spec.json.in')
-    let spec: unknown
-    try {
-      spec = JSON.parse(await readFile(specPath, 'utf8'))
-    } catch (error) {
-      throw new Error(`Unable to read MPC spec at ${specPath}`, { cause: error })
-    }
+    const { specPath, spec } = await readMpcSpecFromDirectory(mpcPath)
 
     return {
       resource_id: resourceId,
@@ -1201,11 +1208,7 @@ export class ResourceManagerService {
         },
       )
       throwIfAborted(controller.signal)
-      await rm(destination, { force: true, recursive: true })
-      await mkdir(dirname(destination), { recursive: true })
-      await rename(tempExtract, destination)
-      throwIfAborted(controller.signal)
-
+      await readMpcSpecFromDirectory(tempExtract)
       const manifest = await this.readManifest()
       manifest.installed[resourceId] = {
         type: 'mpc',
@@ -1220,7 +1223,7 @@ export class ResourceManagerService {
         managed: true,
         health: 'ok',
       }
-      await this.writeManifest(manifest)
+      await this.commitMpcInstall(tempExtract, destination, manifest, controller.signal)
       this.publish(listener, {
         resource_id: resourceId,
         action,
@@ -1265,6 +1268,58 @@ export class ResourceManagerService {
       if (tempArchive) await rm(tempArchive, { force: true }).catch(() => undefined)
       if (tempExtract)
         await rm(tempExtract, { force: true, recursive: true }).catch(() => undefined)
+    }
+  }
+
+  private async commitMpcInstall(
+    source: string,
+    destination: string,
+    manifest: ResourceManifest,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const backup = `${destination}.backup-${randomUUID()}`
+    let movedExistingInstall = false
+    let movedNewInstall = false
+
+    await mkdir(dirname(destination), { recursive: true })
+    try {
+      if (await pathExists(destination)) {
+        await rename(destination, backup)
+        movedExistingInstall = true
+      }
+      await rename(source, destination)
+      movedNewInstall = true
+      throwIfAborted(signal)
+      await this.writeManifest(manifest)
+    } catch (error) {
+      const rollbackErrors: unknown[] = []
+      if (movedNewInstall) {
+        await rm(destination, { force: true, recursive: true }).catch((rollbackError) => {
+          rollbackErrors.push(rollbackError)
+        })
+      }
+      if (movedExistingInstall) {
+        await rename(backup, destination).catch((rollbackError) => {
+          rollbackErrors.push(rollbackError)
+        })
+      }
+      if (rollbackErrors.length > 0) {
+        throw new AggregateError(
+          [error, ...rollbackErrors],
+          `Failed to install and roll back MPC directory at ${destination}`,
+        )
+      }
+      throw error
+    }
+
+    if (movedExistingInstall) {
+      await rm(backup, { force: true, recursive: true }).catch((error) => {
+        electronLogger.warn(
+          '[resources] Failed to remove MPC update backup at %s: %s',
+          backup,
+          error instanceof Error ? error.message : String(error),
+        )
+      })
     }
   }
 
@@ -1372,12 +1427,10 @@ export class ResourceManagerService {
 
     const diagnostics: string[] = []
     try {
-      const registry = withBuiltinMpcs(
-        await readRegistryFromUrl(this.registryUrl, this.fetchImpl),
-        this.registryUrl,
-      )
+      const remoteRegistry = await readRegistryFromUrl(this.registryUrl, this.fetchImpl)
+      const registry = withBuiltinMpcs(remoteRegistry, this.registryUrl)
       await mkdir(dirname(cacheFile), { recursive: true })
-      await writeFile(cacheFile, JSON.stringify(registry, null, 2), 'utf8')
+      await writeFile(cacheFile, serializeRegistryCache(remoteRegistry), 'utf8')
       this.registryMemory = registry
       return { registry, diagnostics }
     } catch {
@@ -1386,7 +1439,10 @@ export class ResourceManagerService {
 
     try {
       const registry = withBuiltinMpcs(
-        parseRegistry(JSON.parse(await readFile(cacheFile, 'utf8'))),
+        parseCachedRegistry(
+          JSON.parse(await readFile(cacheFile, 'utf8')),
+          this.registryUrl,
+        ),
         this.registryUrl,
       )
       this.registryMemory = registry
@@ -1404,7 +1460,10 @@ export class ResourceManagerService {
   private async readCachedRegistry(cacheFile: string): Promise<RegistryCacheResult> {
     try {
       const registry = withBuiltinMpcs(
-        parseRegistry(JSON.parse(await readFile(cacheFile, 'utf8'))),
+        parseCachedRegistry(
+          JSON.parse(await readFile(cacheFile, 'utf8')),
+          this.registryUrl,
+        ),
         this.registryUrl,
       )
       this.registryMemory = registry
@@ -1421,12 +1480,10 @@ export class ResourceManagerService {
     if (this.registryRefreshPromise) return
     this.registryRefreshPromise = (async () => {
       try {
-        const registry = withBuiltinMpcs(
-          await readRegistryFromUrl(this.registryUrl, this.fetchImpl),
-          this.registryUrl,
-        )
+        const remoteRegistry = await readRegistryFromUrl(this.registryUrl, this.fetchImpl)
+        const registry = withBuiltinMpcs(remoteRegistry, this.registryUrl)
         await mkdir(dirname(cacheFile), { recursive: true })
-        await writeFile(cacheFile, JSON.stringify(registry, null, 2), 'utf8')
+        await writeFile(cacheFile, serializeRegistryCache(remoteRegistry), 'utf8')
         this.registryMemory = registry
       } catch (error) {
         electronLogger.debug(
@@ -1481,7 +1538,7 @@ export class ResourceManagerService {
     manifest.mpcs_dir = this.mpcsDir
     await mkdir(dirname(this.manifestPath), { recursive: true })
     const tempPath = `${this.manifestPath}.${process.pid}.${Date.now()}.tmp`
-    await writeFile(tempPath, JSON.stringify(manifest, null, 2), 'utf8')
+    await this.manifestWriter(tempPath, JSON.stringify(manifest, null, 2))
     await rename(tempPath, this.manifestPath)
   }
 
@@ -1696,12 +1753,15 @@ export class ResourceManagerService {
     registryMpc?: RegistryMpc,
   ): ResourceInfo {
     const resourceId = `mpc:${entry.id}`
+    const latestVersion = registryMpc?.versions[0]
+    const latestAsset = latestVersion ? selectPlatformAsset(latestVersion).asset : null
     const hasUpdate =
       entry.managed &&
       entry.health === 'ok' &&
       Boolean(entry.version) &&
-      Boolean(registryMpc?.versions[0]?.version) &&
-      registryMpc?.versions[0]?.version !== entry.version
+      Boolean(latestVersion?.version) &&
+      (latestVersion?.version !== entry.version ||
+        (Boolean(latestAsset?.sha256) && latestAsset?.sha256 !== entry.sha256))
     const status: ResourceStatus = this.activeJobs.has(resourceId)
       ? 'installing'
       : entry.health === 'missing'
@@ -1819,6 +1879,45 @@ function registryCachePath(cacheDir: string, registryUrl: string): string {
   }
   const key = createHash('sha256').update(registryUrl).digest('hex').slice(0, 12)
   return join(cacheDir, `resource-registry-${key}.json`)
+}
+
+function serializeRegistryCache(registry: ResourceRegistry): string {
+  return JSON.stringify(
+    {
+      cache_version: REGISTRY_CACHE_VERSION,
+      registry,
+    },
+    null,
+    2,
+  )
+}
+
+function parseCachedRegistry(value: unknown, registryUrl: string): ResourceRegistry {
+  const record = readRecord(value)
+  if (record.cache_version === REGISTRY_CACHE_VERSION && record.registry) {
+    return parseRegistry(record.registry)
+  }
+  return migrateLegacyBuiltinMpcs(parseRegistry(value), registryUrl)
+}
+
+function migrateLegacyBuiltinMpcs(
+  registry: ResourceRegistry,
+  registryUrl: string,
+): ResourceRegistry {
+  if (registryUrl !== DEFAULT_REGISTRY_URL) return registry
+  return {
+    ...registry,
+    mpcs: registry.mpcs.filter((mpc) => !isLegacyBuiltinMpcSnapshot(mpc)),
+  }
+}
+
+function isLegacyBuiltinMpcSnapshot(mpc: RegistryMpc): boolean {
+  if (mpc.id !== 'mpc-frame') return false
+  return mpc.versions.some((version) =>
+    Object.values(version.platforms).some((asset) =>
+      LEGACY_BUILTIN_MPC_ARCHIVE_URLS.has(asset.url),
+    ),
+  )
 }
 
 function utcNowIso(): string {
@@ -2552,6 +2651,40 @@ function parseGithubArchiveUrl(
       ? (parts[refsIndex + 2]?.replace(/\.tar\.gz$|\.zip$/, '') ?? null)
       : null
   return { owner, repo, tag }
+}
+
+async function readMpcSpecFromDirectory(
+  mpcPath: string,
+): Promise<{ specPath: string; spec: unknown }> {
+  const specPath = resolveInside(mpcPath, 'spec/spec.json.in')
+  try {
+    const specStats = await lstat(specPath)
+    if (!specStats.isFile()) {
+      throw new Error('MPC spec must be a regular file')
+    }
+    const canonicalRoot = await realpath(mpcPath)
+    const canonicalSpecPath = await realpath(specPath)
+    assertPathInside(canonicalRoot, canonicalSpecPath, 'spec/spec.json.in')
+    const spec = JSON.parse(await readFile(specPath, 'utf8')) as unknown
+    validateMpcSpec(spec)
+    return {
+      specPath,
+      spec,
+    }
+  } catch (error) {
+    throw new Error(`Unable to read MPC spec at ${specPath}`, { cause: error })
+  }
+}
+
+function assertPathInside(root: string, path: string, label: string): void {
+  const relativePath = relative(root, path)
+  if (
+    isAbsolute(relativePath) ||
+    relativePath === '..' ||
+    relativePath.startsWith(`..${sep}`)
+  ) {
+    throw new Error(`Path escapes resource directory: ${label}`)
+  }
 }
 
 async function verifySha256(filePath: string, expected: string): Promise<boolean> {

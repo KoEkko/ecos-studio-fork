@@ -1,22 +1,5 @@
 <template>
   <div class="resource-manager-view">
-    <div class="blurred-home" aria-hidden="true">
-      <div class="blurred-brand">
-        <i class="ri-cpu-line"></i>
-        <span>ECOS Studio</span>
-      </div>
-      <div class="blurred-cards">
-        <div class="blurred-card"></div>
-        <div class="blurred-card"></div>
-        <div class="blurred-card is-active"></div>
-      </div>
-      <div class="blurred-lines">
-        <div></div>
-        <div></div>
-        <div></div>
-      </div>
-    </div>
-
     <div class="manager-scrim" aria-hidden="true"></div>
 
     <section class="manager-dialog" aria-labelledby="resource-manager-title">
@@ -745,98 +728,6 @@ async function openDocs(): Promise<void> {
   isolation: isolate;
   color: var(--text-primary);
   background: var(--bg-secondary);
-}
-
-/* ---- Blurred background ---- */
-.blurred-home {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  filter: blur(1.5px) brightness(0.82);
-  transform: translateZ(0) scale(1.006);
-  transform-origin: center;
-  background:
-    radial-gradient(
-      circle at 50% 16%,
-      color-mix(in srgb, var(--accent-color) 12%, transparent),
-      transparent 28%
-    ),
-    linear-gradient(
-      color-mix(in srgb, var(--border-color) 50%, transparent) 1px,
-      transparent 1px
-    ),
-    linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--border-color) 50%, transparent) 1px,
-      transparent 1px
-    ),
-    var(--bg-secondary);
-  background-size:
-    auto,
-    52px 52px,
-    52px 52px,
-    auto;
-}
-
-.blurred-brand {
-  position: absolute;
-  top: 58px;
-  left: 50%;
-  display: flex;
-  align-items: center;
-  gap: 26px;
-  transform: translateX(-50%);
-  color: var(--text-primary);
-  font-size: 42px;
-  font-weight: 800;
-  letter-spacing: 0;
-}
-
-.blurred-brand i {
-  color: var(--accent-color);
-  font-size: 64px;
-  text-shadow: 0 18px 50px color-mix(in srgb, var(--accent-color) 22%, transparent);
-}
-
-.blurred-cards {
-  position: absolute;
-  top: 310px;
-  left: 10%;
-  right: 10%;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
-}
-
-.blurred-card,
-.blurred-lines div {
-  border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
-  background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
-  box-shadow: 0 24px 90px rgba(15, 23, 42, 0.06);
-}
-
-.blurred-card {
-  height: 170px;
-  border-radius: 16px;
-}
-
-.blurred-card.is-active {
-  border-color: color-mix(in srgb, var(--accent-color) 28%, transparent);
-}
-
-.blurred-lines {
-  position: absolute;
-  top: 590px;
-  left: 10%;
-  right: 10%;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 18px 32px;
-}
-
-.blurred-lines div {
-  height: 58px;
-  border-radius: 12px;
 }
 
 /* ---- Scrim ---- */
@@ -1881,44 +1772,6 @@ async function openDocs(): Promise<void> {
 
 :global(.dark) .manager-dialog {
   box-shadow: 0 34px 90px rgba(0, 0, 0, 0.4);
-}
-
-:global(.dark) .blurred-card,
-:global(.dark) .blurred-lines div {
-  border-color: color-mix(in srgb, var(--border-color) 60%, transparent);
-  background: color-mix(in srgb, var(--bg-primary) 70%, transparent);
-}
-
-:global(.dark) .blurred-card.is-active {
-  border-color: color-mix(in srgb, var(--accent-color) 35%, transparent);
-}
-
-:global(.dark) .blurred-home {
-  background:
-    radial-gradient(
-      circle at 50% 16%,
-      color-mix(in srgb, var(--accent-color) 14%, transparent),
-      transparent 28%
-    ),
-    linear-gradient(
-      color-mix(in srgb, var(--border-color) 40%, transparent) 1px,
-      transparent 1px
-    ),
-    linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--border-color) 40%, transparent) 1px,
-      transparent 1px
-    ),
-    var(--bg-primary);
-  background-size:
-    auto,
-    52px 52px,
-    52px 52px,
-    auto;
-}
-
-:global(.dark) .blurred-brand {
-  color: var(--text-primary);
 }
 
 :global(.dark) .selected-empty {

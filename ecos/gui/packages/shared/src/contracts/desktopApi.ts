@@ -17,7 +17,6 @@ import type {
   MpcSpecReadResult,
   ResourceOperationResult,
 } from './resources.ts'
-import type { RemoteContentApi } from './remoteContent.ts'
 import type { EccRuntimeApi } from './eccRuntime.ts'
 import type {
   ProjectManifestMutationRequest,
@@ -192,7 +191,6 @@ export interface DesktopApi {
     set(key: string, value: DesktopSettingsValue): Promise<void>
     delete(key: string): Promise<void>
   }
-  remoteContent: RemoteContentApi
   projectManifest: {
     mutate(
       request: ProjectManifestMutationRequest,

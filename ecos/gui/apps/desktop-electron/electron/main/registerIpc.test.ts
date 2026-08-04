@@ -85,11 +85,6 @@ function registerHandlers() {
       get: vi.fn(),
       set: vi.fn(),
     },
-    remoteContentService: {
-      listFiles: vi.fn(),
-      readJsonFile: vi.fn(),
-      readTextFile: vi.fn(),
-    },
     projectManifestService: {
       mutate: vi.fn(),
     },
@@ -376,58 +371,6 @@ describe('registerIpc', () => {
       handlers.get(desktopApiIpcChannels.eccRpcPing)?.(event),
     ).resolves.toEqual({ ok: true })
     expect(services.eccRuntimeService.rpcPing).toHaveBeenCalledTimes(1)
-  })
-
-  it('delegates remote content requests to the remote content service', async () => {
-    const { handlers, services } = registerHandlers()
-    const event = { sender: { id: 'web-contents' } }
-    services.remoteContentService.listFiles.mockResolvedValue([
-      {
-        source: 'socTemplateCatalog',
-        path: 'manifest.json',
-        name: 'manifest.json',
-      },
-    ])
-    services.remoteContentService.readTextFile.mockResolvedValue('{"schema_version":1}')
-    services.remoteContentService.readJsonFile.mockResolvedValue({ schema_version: 1 })
-
-    await expect(
-      handlers.get(desktopApiIpcChannels.remoteContentListFiles)?.(event, {
-        source: 'socTemplateCatalog',
-        pattern: '**/*.json',
-      }),
-    ).resolves.toEqual([
-      {
-        source: 'socTemplateCatalog',
-        path: 'manifest.json',
-        name: 'manifest.json',
-      },
-    ])
-    await expect(
-      handlers.get(desktopApiIpcChannels.remoteContentReadTextFile)?.(event, {
-        source: 'socTemplateCatalog',
-        path: 'manifest.json',
-      }),
-    ).resolves.toBe('{"schema_version":1}')
-    await expect(
-      handlers.get(desktopApiIpcChannels.remoteContentReadJsonFile)?.(event, {
-        source: 'socTemplateCatalog',
-        path: 'manifest.json',
-      }),
-    ).resolves.toEqual({ schema_version: 1 })
-
-    expect(services.remoteContentService.listFiles).toHaveBeenCalledWith({
-      source: 'socTemplateCatalog',
-      pattern: '**/*.json',
-    })
-    expect(services.remoteContentService.readTextFile).toHaveBeenCalledWith({
-      source: 'socTemplateCatalog',
-      path: 'manifest.json',
-    })
-    expect(services.remoteContentService.readJsonFile).toHaveBeenCalledWith({
-      source: 'socTemplateCatalog',
-      path: 'manifest.json',
-    })
   })
 
   it('forwards resource progress to the requesting renderer during installs', async () => {
