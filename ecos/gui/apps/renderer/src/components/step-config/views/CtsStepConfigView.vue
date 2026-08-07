@@ -177,7 +177,7 @@ function setKey(k: string, v: unknown): void {
               <div
                 v-for="(_x, i) in draft[k] as number[]"
                 :key="i"
-                class="flex w-full min-w-0 items-center gap-2 rounded border border-(--border-color) bg-(--bg-primary) px-2 py-1.5"
+                class="border-(--border-color) bg-(--bg-primary) flex w-full min-w-0 items-center gap-2 rounded border px-2 py-1.5"
               >
                 <InputNumber
                   :model-value="(draft[k] as number[])[i]"

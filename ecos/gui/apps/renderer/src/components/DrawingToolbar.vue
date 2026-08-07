@@ -81,14 +81,14 @@ onUnmounted(() => {
 
 <template>
   <div
-    class="flex h-10 shrink-0 items-center gap-2 border-b border-(--border-color) bg-(--bg-secondary) px-4"
+    class="border-(--border-color) bg-(--bg-secondary) flex h-10 shrink-0 items-center gap-2 border-b px-4"
   >
     <div class="flex items-center gap-1">
       <button
         v-if="showChipViewer"
         type="button"
         :disabled="chipViewerBusy || chipViewerEditBusy"
-        class="flex h-9 w-9 shrink-0 items-center justify-center rounded text-base transition-all disabled:cursor-wait disabled:text-(--text-secondary) disabled:opacity-50"
+        class="disabled:text-(--text-secondary) flex h-9 w-9 shrink-0 items-center justify-center rounded text-base transition-all disabled:cursor-wait disabled:opacity-50"
         :class="
           chipViewerBusy || chipViewerEditBusy
             ? 'text-(--text-secondary)'
@@ -104,7 +104,7 @@ onUnmounted(() => {
         v-if="showChipViewer"
         type="button"
         :disabled="chipViewerBusy || chipViewerEditBusy"
-        class="flex h-9 w-9 shrink-0 items-center justify-center rounded text-base transition-all disabled:cursor-wait disabled:text-(--text-secondary) disabled:opacity-50"
+        class="disabled:text-(--text-secondary) flex h-9 w-9 shrink-0 items-center justify-center rounded text-base transition-all disabled:cursor-wait disabled:opacity-50"
         :class="
           chipViewerBusy || chipViewerEditBusy
             ? 'text-(--text-secondary)'
@@ -121,7 +121,7 @@ onUnmounted(() => {
       </button>
     </div>
 
-    <div class="h-6 w-px bg-(--border-color)"></div>
+    <div class="bg-(--border-color) h-6 w-px"></div>
 
     <div class="flex flex-1 items-center justify-end gap-3">
       <button
@@ -137,25 +137,25 @@ onUnmounted(() => {
         <i class="ri-ruler-line text-base"></i>
       </button>
 
-      <div class="h-6 w-px bg-(--border-color)"></div>
+      <div class="bg-(--border-color) h-6 w-px"></div>
 
       <div
-        class="flex items-center gap-2 rounded border border-(--border-color) bg-(--bg-primary) px-3 py-1.5"
+        class="border-(--border-color) bg-(--bg-primary) flex items-center gap-2 rounded border px-3 py-1.5"
       >
         <button
-          class="text-(--text-secondary) transition-colors hover:text-(--text-primary)"
+          class="text-(--text-secondary) hover:text-(--text-primary) transition-colors"
           title="Zoom Out"
           @click="handleZoomOut"
         >
           <i class="ri-subtract-line text-sm"></i>
         </button>
         <span
-          class="min-w-[52px] text-center text-[13px] font-medium text-(--text-primary) tabular-nums"
+          class="text-(--text-primary) min-w-[52px] text-center text-[13px] font-medium tabular-nums"
         >
           {{ zoomPercentLabel }}%
         </span>
         <button
-          class="text-(--text-secondary) transition-colors hover:text-(--text-primary)"
+          class="text-(--text-secondary) hover:text-(--text-primary) transition-colors"
           title="Zoom In"
           @click="handleZoomIn"
         >
@@ -163,7 +163,7 @@ onUnmounted(() => {
         </button>
       </div>
       <button
-        class="flex h-8 w-8 items-center justify-center rounded text-(--text-secondary) transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
+        class="text-(--text-secondary) hover:bg-(--bg-hover) hover:text-(--text-primary) flex h-8 w-8 items-center justify-center rounded transition-colors"
         title="Fit to Canvas"
         @click="handleFitToWorld"
       >

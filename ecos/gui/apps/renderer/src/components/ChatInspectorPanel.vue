@@ -2,7 +2,7 @@
   <Teleport to="body" :disabled="!isAnyPanelFullscreen">
     <div
       :class="[
-        'chat-inspector-panel flex h-full w-full max-w-full min-w-0 flex-col overflow-hidden bg-(--bg-primary)',
+        'chat-inspector-panel bg-(--bg-primary) flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden',
         {
           'is-panel-fullscreen panel-fullscreen-card': isAnyPanelFullscreen,
           'is-chat-fullscreen': isChatFullscreen,
@@ -75,7 +75,7 @@
           <AIChatPanel
             v-if="activeTab === 'chat'"
             shell="workspace"
-            class="h-full min-h-0 w-full max-w-full min-w-0 flex-1 overflow-hidden"
+            class="h-full min-h-0 w-full min-w-0 max-w-full flex-1 overflow-hidden"
           >
             <template #tab-actions>
               <button

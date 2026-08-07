@@ -1,11 +1,11 @@
 <template>
   <div
-    class="relative flex min-h-full w-full flex-col items-center overflow-x-hidden overflow-y-auto py-8 text-(--text-primary)"
+    class="text-(--text-primary) relative flex min-h-full w-full flex-col items-center overflow-y-auto overflow-x-hidden py-8"
   >
     <!-- 返回按钮 -->
     <button
       @click="goBack"
-      class="absolute top-6 left-6 z-20 flex cursor-pointer items-center gap-2 rounded-lg border border-(--border-color) bg-(--bg-secondary) px-3 py-2 text-sm text-(--text-secondary) transition-all duration-200 hover:border-(--accent-color) hover:text-(--accent-color)"
+      class="border-(--border-color) bg-(--bg-secondary) text-(--text-secondary) hover:border-(--accent-color) hover:text-(--accent-color) absolute left-6 top-6 z-20 flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-all duration-200"
     >
       <i class="ri-arrow-left-line"></i>
       <span>Back to ECOS</span>
@@ -16,12 +16,12 @@
       <div class="mb-12 flex items-center justify-center">
         <div class="relative">
           <div
-            class="absolute -inset-4 rounded-full bg-(--accent-color)/10 blur-xl"
+            class="bg-(--accent-color)/10 absolute -inset-4 rounded-full blur-xl"
           ></div>
-          <i class="ri-cpu-line relative text-6xl text-(--accent-color)"></i>
+          <i class="ri-cpu-line text-(--accent-color) relative text-6xl"></i>
         </div>
         <div class="ml-5 flex flex-col">
-          <h1 class="text-4xl font-bold tracking-tight text-(--text-primary)">ECC</h1>
+          <h1 class="text-(--text-primary) text-4xl font-bold tracking-tight">ECC</h1>
         </div>
       </div>
 
@@ -29,44 +29,44 @@
       <div class="mb-16 flex gap-5">
         <button
           @click="handleOpenProject"
-          class="group flex min-w-[180px] cursor-pointer flex-col items-center gap-3 rounded-xl border border-(--border-color) bg-(--bg-secondary) px-8 py-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02] hover:border-(--accent-color) hover:bg-(--bg-sidebar) hover:shadow-(--accent-color)/5 hover:shadow-lg"
+          class="border-(--border-color) bg-(--bg-secondary) hover:border-(--accent-color) hover:bg-(--bg-sidebar) hover:shadow-(--accent-color)/5 group flex min-w-[180px] cursor-pointer flex-col items-center gap-3 rounded-xl border px-8 py-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02] hover:shadow-lg"
         >
           <div
-            class="flex h-14 w-14 items-center justify-center rounded-xl bg-(--bg-primary) transition-colors group-hover:bg-(--accent-color)/10"
+            class="bg-(--bg-primary) group-hover:bg-(--accent-color)/10 flex h-14 w-14 items-center justify-center rounded-xl transition-colors"
           >
             <i
-              class="ri-book-open-line text-2xl text-(--text-secondary) transition-colors group-hover:text-(--accent-color)"
+              class="ri-book-open-line text-(--text-secondary) group-hover:text-(--accent-color) text-2xl transition-colors"
             ></i>
           </div>
-          <span class="text-sm font-medium text-(--text-primary)">Open Workspace</span>
+          <span class="text-(--text-primary) text-sm font-medium">Open Workspace</span>
         </button>
 
         <button
           @click="openWizard"
-          class="group flex min-w-[180px] cursor-pointer flex-col items-center gap-3 rounded-xl border border-(--border-color) bg-(--bg-secondary) px-8 py-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02] hover:border-(--accent-color) hover:bg-(--bg-sidebar) hover:shadow-(--accent-color)/5 hover:shadow-lg"
+          class="border-(--border-color) bg-(--bg-secondary) hover:border-(--accent-color) hover:bg-(--bg-sidebar) hover:shadow-(--accent-color)/5 group flex min-w-[180px] cursor-pointer flex-col items-center gap-3 rounded-xl border px-8 py-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02] hover:shadow-lg"
         >
           <div
-            class="flex h-14 w-14 items-center justify-center rounded-xl bg-(--bg-primary) transition-colors group-hover:bg-(--accent-color)/10"
+            class="bg-(--bg-primary) group-hover:bg-(--accent-color)/10 flex h-14 w-14 items-center justify-center rounded-xl transition-colors"
           >
             <i
-              class="ri-folder-open-line text-2xl text-(--text-secondary) transition-colors group-hover:text-(--accent-color)"
+              class="ri-folder-open-line text-(--text-secondary) group-hover:text-(--accent-color) text-2xl transition-colors"
             ></i>
           </div>
-          <span class="text-sm font-medium text-(--text-primary)">New Workspace</span>
+          <span class="text-(--text-primary) text-sm font-medium">New Workspace</span>
         </button>
       </div>
 
       <!-- 最近项目 -->
       <div class="w-full max-w-3xl px-4">
         <div class="mb-4 flex items-center justify-between">
-          <h2 class="flex items-center gap-2 text-lg font-semibold text-(--text-primary)">
+          <h2 class="text-(--text-primary) flex items-center gap-2 text-lg font-semibold">
             <i class="ri-time-line text-(--text-secondary)"></i>
             Recent Workspaces
           </h2>
           <button
             v-if="recentProjects.length > 3"
             @click="showAllProjects = !showAllProjects"
-            class="flex cursor-pointer items-center gap-1 text-sm text-(--accent-color) transition-opacity hover:opacity-80"
+            class="text-(--accent-color) flex cursor-pointer items-center gap-1 text-sm transition-opacity hover:opacity-80"
           >
             <template v-if="showAllProjects">
               Collapse
@@ -81,7 +81,7 @@
 
         <div
           v-if="recentProjects.length === 0"
-          class="rounded-xl border border-dashed border-(--border-color) bg-(--bg-secondary)/50 py-16 text-center text-(--text-secondary)"
+          class="border-(--border-color) bg-(--bg-secondary)/50 text-(--text-secondary) rounded-xl border border-dashed py-16 text-center"
         >
           <i class="ri-folder-2-line mb-4 block text-5xl opacity-30"></i>
           <p class="text-sm">No recent workspaces</p>
@@ -97,11 +97,11 @@
           <div
             v-for="project in displayedProjects"
             :key="project.id"
-            class="group flex w-full items-center justify-between rounded-xl border bg-(--bg-secondary) px-5 py-4 text-left transition-all duration-200"
+            class="bg-(--bg-secondary) group flex w-full items-center justify-between rounded-xl border px-5 py-4 text-left transition-all duration-200"
             :class="
               project.workspaceRecognized === false
-                ? 'cursor-default border-(--border-color) opacity-55'
-                : 'cursor-pointer border-(--border-color) hover:border-(--accent-color) hover:bg-(--bg-sidebar) hover:shadow-md'
+                ? 'border-(--border-color) cursor-default opacity-55'
+                : 'border-(--border-color) hover:border-(--accent-color) hover:bg-(--bg-sidebar) cursor-pointer hover:shadow-md'
             "
             @click="project.workspaceRecognized !== false && handleOpenRecent(project)"
           >
@@ -118,7 +118,7 @@
                   :class="
                     project.workspaceRecognized === false
                       ? 'ri-folder-warning-line text-lg text-red-400'
-                      : 'ri-folder-line text-lg text-(--accent-color)'
+                      : 'ri-folder-line text-(--accent-color) text-lg'
                   "
                 ></i>
               </div>
@@ -136,7 +136,7 @@
                   </p>
                   <span
                     v-if="project.pdk"
-                    class="shrink-0 rounded bg-(--accent-color)/10 px-1.5 py-0.5 text-[10px] font-medium text-(--accent-color)"
+                    class="bg-(--accent-color)/10 text-(--accent-color) shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium"
                   >
                     {{ project.pdk }}
                   </span>
@@ -150,12 +150,12 @@
                 </div>
                 <p
                   v-if="project.completedSteps != null && project.totalSteps"
-                  class="mt-0.5 text-[11px] text-(--text-secondary)"
+                  class="text-(--text-secondary) mt-0.5 text-[11px]"
                 >
                   {{ project.completedSteps }}/{{ project.totalSteps }} steps
                 </p>
                 <div class="mt-0.5 flex items-center gap-2">
-                  <p class="truncate text-xs text-(--text-secondary)">
+                  <p class="text-(--text-secondary) truncate text-xs">
                     {{ project.path }}
                   </p>
                   <span
@@ -169,17 +169,17 @@
             </div>
             <div class="flex items-center gap-2">
               <span
-                class="text-xs whitespace-nowrap text-(--text-secondary) transition-colors group-hover:text-(--text-primary)"
+                class="text-(--text-secondary) group-hover:text-(--text-primary) whitespace-nowrap text-xs transition-colors"
               >
                 {{ formatDate(project.lastOpened) }}
               </span>
               <button
                 @click.stop="handleRemoveRecent(project.id)"
-                class="cursor-pointer rounded-lg p-1.5 opacity-0 transition-all group-hover:opacity-100 hover:bg-red-500/10"
+                class="cursor-pointer rounded-lg p-1.5 opacity-0 transition-all hover:bg-red-500/10 group-hover:opacity-100"
                 title="Remove from list"
               >
                 <i
-                  class="ri-close-line text-sm text-(--text-secondary) hover:text-red-500"
+                  class="ri-close-line text-(--text-secondary) text-sm hover:text-red-500"
                 ></i>
               </button>
               <i

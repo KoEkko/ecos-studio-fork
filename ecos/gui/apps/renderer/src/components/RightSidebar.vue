@@ -1,9 +1,9 @@
 <template>
   <div
-    class="flex h-full w-8 shrink-0 flex-col items-center border-l border-(--border-color) bg-(--bg-sidebar) py-4"
+    class="border-(--border-color) bg-(--bg-sidebar) flex h-full w-8 shrink-0 flex-col items-center border-l py-4"
   >
     <div
-      class="vertical-text py-4 text-[11px] font-medium tracking-widest text-(--text-secondary)"
+      class="vertical-text text-(--text-secondary) py-4 text-[11px] font-medium tracking-widest"
     >
       Inspector
     </div>

@@ -13,7 +13,7 @@
     </AgentChatTabStrip>
     <div
       ref="scrollContainerRef"
-      class="custom-scrollbar agent-chat__scroll min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-3"
+      class="custom-scrollbar agent-chat__scroll min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-3"
       @scroll.passive="onScrollContainerScroll"
     >
       <div
@@ -35,11 +35,11 @@
         class="flex h-full flex-col items-center justify-center px-4 py-10 text-center"
       >
         <div
-          class="mb-3 flex h-11 w-11 items-center justify-center rounded-lg border border-(--border-color) bg-(--bg-secondary)"
+          class="border-(--border-color) bg-(--bg-secondary) mb-3 flex h-11 w-11 items-center justify-center rounded-lg border"
         >
-          <i class="ri-sparkling-2-line text-xl text-(--accent-color)"></i>
+          <i class="ri-sparkling-2-line text-(--accent-color) text-xl"></i>
         </div>
-        <h2 class="text-sm font-semibold text-(--text-primary)">ECOS Agent</h2>
+        <h2 class="text-(--text-primary) text-sm font-semibold">ECOS Agent</h2>
         <div class="mt-4 grid w-full max-w-sm gap-2">
           <button
             v-for="suggestion in emptyStateSuggestions"
@@ -54,7 +54,7 @@
           </button>
         </div>
       </div>
-      <div v-else class="messages-container w-full max-w-full min-w-0 py-2">
+      <div v-else class="messages-container w-full min-w-0 max-w-full py-2">
         <section
           v-for="(turn, turnIndex) in conversationTurns"
           :key="turn.id"
@@ -87,7 +87,7 @@
               :choice-disabled="isRunning"
               @img-load="onImageLoad"
               @choice="handleMessageChoice"
-              class="message-item w-full max-w-full min-w-0"
+              class="message-item w-full min-w-0 max-w-full"
             />
             <div
               v-if="turnIndex === conversationTurns.length - 1 && showPendingPlaceholder"

@@ -87,22 +87,22 @@ onUnmounted(() => {
 <template>
   <div
     :class="[
-      'overflow-hidden rounded-xl border border-(--border-color) bg-(--bg-secondary) transition-colors duration-200',
+      'border-(--border-color) bg-(--bg-secondary) overflow-hidden rounded-xl border transition-colors duration-200',
       props.layout === 'page' ? 'flex h-full min-h-0 flex-1 flex-col' : '',
     ]"
   >
     <div class="flex items-center justify-between px-4 py-3">
       <div class="flex min-w-0 items-center gap-2">
         <i
-          class="ri-tools-line shrink-0 text-lg text-(--text-secondary)"
+          class="ri-tools-line text-(--text-secondary) shrink-0 text-lg"
           aria-hidden="true"
         />
-        <span class="truncate text-sm font-medium text-(--text-primary)">EDA Tools</span>
+        <span class="text-(--text-primary) truncate text-sm font-medium">EDA Tools</span>
       </div>
       <button
         type="button"
         :disabled="pluginStore.refreshing"
-        class="flex cursor-pointer items-center gap-1 rounded-md px-2.5 py-1 text-xs text-(--accent-color) transition-colors duration-200 hover:bg-(--accent-color)/10 disabled:cursor-not-allowed disabled:opacity-50"
+        class="text-(--accent-color) hover:bg-(--accent-color)/10 flex cursor-pointer items-center gap-1 rounded-md px-2.5 py-1 text-xs transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50"
         @click="pluginStore.refresh()"
       >
         <i
@@ -118,7 +118,7 @@ onUnmounted(() => {
 
     <div
       :class="[
-        'space-y-3 border-t border-(--border-color) px-4 pt-3 pb-3',
+        'border-(--border-color) space-y-3 border-t px-4 pb-3 pt-3',
         props.layout === 'page' ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : '',
       ]"
     >
@@ -150,7 +150,7 @@ onUnmounted(() => {
 
       <div v-if="pluginStore.loading" class="flex justify-center py-6">
         <i
-          class="ri-loader-4-line animate-spin text-2xl text-(--accent-color)"
+          class="ri-loader-4-line text-(--accent-color) animate-spin text-2xl"
           aria-hidden="true"
         />
       </div>
@@ -171,14 +171,14 @@ onUnmounted(() => {
         <div
           v-for="tool in filteredTools"
           :key="tool.name"
-          class="flex w-full flex-col gap-2 self-start rounded-lg border border-(--border-color) bg-(--bg-primary)/40 p-3 transition-colors duration-200"
+          class="border-(--border-color) bg-(--bg-primary)/40 flex w-full flex-col gap-2 self-start rounded-lg border p-3 transition-colors duration-200"
         >
           <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div class="min-w-0 flex-1">
-              <h4 class="text-sm font-medium text-(--text-primary)">
+              <h4 class="text-(--text-primary) text-sm font-medium">
                 {{ tool.display_name }}
               </h4>
-              <p class="mt-0.5 line-clamp-2 text-xs text-(--text-secondary)">
+              <p class="text-(--text-secondary) mt-0.5 line-clamp-2 text-xs">
                 {{ tool.description }}
               </p>
             </div>
@@ -266,7 +266,7 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <div class="flex items-center gap-2 text-[11px] text-(--text-secondary)">
+          <div class="text-(--text-secondary) flex items-center gap-2 text-[11px]">
             <Tag :value="tool.category" severity="secondary" class="text-[10px]" />
             <span v-if="tool.installed_version">v{{ tool.installed_version }}</span>
             <span v-else-if="tool.available_versions.length"
@@ -280,7 +280,7 @@ onUnmounted(() => {
               :show-value="true"
               class="h-1.5"
             />
-            <span class="text-[11px] text-(--text-secondary)">{{
+            <span class="text-(--text-secondary) text-[11px]">{{
               getProgress(tool)!.message
             }}</span>
           </div>
@@ -293,7 +293,7 @@ onUnmounted(() => {
 
       <p
         v-if="!pluginStore.loading && !pluginStore.error && filteredTools.length === 0"
-        class="py-4 text-center text-xs text-(--text-secondary) opacity-70"
+        class="text-(--text-secondary) py-4 text-center text-xs opacity-70"
       >
         No tools found.
       </p>

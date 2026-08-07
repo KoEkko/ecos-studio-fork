@@ -1,10 +1,10 @@
 <template>
   <div class="step-config-root flex h-full min-h-0 w-full min-w-0 flex-col">
-    <div class="shrink-0 border-b border-(--border-color) bg-(--bg-primary) px-3 py-2">
-      <h2 class="truncate text-[12px] font-bold text-(--text-primary)">
+    <div class="border-(--border-color) bg-(--bg-primary) shrink-0 border-b px-3 py-2">
+      <h2 class="text-(--text-primary) truncate text-[12px] font-bold">
         {{ stepTitle }}
       </h2>
-      <p class="mt-0.5 text-[10px] tracking-wider text-(--text-secondary) uppercase">
+      <p class="text-(--text-secondary) mt-0.5 text-[10px] uppercase tracking-wider">
         Step configuration
       </p>
     </div>
@@ -15,8 +15,8 @@
         v-if="!hasFlowStep"
         class="sc-scroll flex flex-col items-center justify-center px-2 py-12 text-center"
       >
-        <i class="ri-route-line mb-3 text-4xl text-(--text-secondary) opacity-40"></i>
-        <p class="text-[12px] leading-relaxed text-(--text-secondary)">
+        <i class="ri-route-line text-(--text-secondary) mb-3 text-4xl opacity-40"></i>
+        <p class="text-(--text-secondary) text-[12px] leading-relaxed">
           Open a flow step (e.g. Floorplan) to view and edit the configuration file for
           this step.
         </p>
@@ -24,8 +24,8 @@
 
       <!-- Loading -->
       <div v-else-if="loading" class="flex flex-col items-center justify-center py-20">
-        <i class="ri-loader-4-line spin text-3xl text-(--accent-color)"></i>
-        <p class="mt-3 text-[11px] text-(--text-secondary)">Loading configuration…</p>
+        <i class="ri-loader-4-line spin text-(--accent-color) text-3xl"></i>
+        <p class="text-(--text-secondary) mt-3 text-[11px]">Loading configuration…</p>
       </div>
 
       <!-- Runtime error -->
@@ -35,11 +35,11 @@
       >
         <div class="flex items-start gap-2">
           <i class="ri-error-warning-line mt-0.5 shrink-0 text-lg text-red-400"></i>
-          <p class="text-[12px] leading-relaxed break-words text-red-300">{{ error }}</p>
+          <p class="break-words text-[12px] leading-relaxed text-red-300">{{ error }}</p>
         </div>
         <button
           type="button"
-          class="mt-3 cursor-pointer text-[11px] text-(--accent-color) hover:underline"
+          class="text-(--accent-color) mt-3 cursor-pointer text-[11px] hover:underline"
           @click="refetch"
         >
           Retry
@@ -52,12 +52,12 @@
         class="flex flex-col items-center justify-center px-2 py-12 text-center"
       >
         <i
-          class="ri-file-settings-line mb-3 text-4xl text-(--text-secondary) opacity-40"
+          class="ri-file-settings-line text-(--text-secondary) mb-3 text-4xl opacity-40"
         ></i>
-        <p class="text-[12px] leading-relaxed text-(--text-secondary)">N/A</p>
+        <p class="text-(--text-secondary) text-[12px] leading-relaxed">N/A</p>
         <p
           v-if="runtimeMessages.length"
-          class="mt-2 text-[10px] break-words text-(--text-secondary) opacity-80"
+          class="text-(--text-secondary) mt-2 break-words text-[10px] opacity-80"
         >
           {{ runtimeMessages.join(' ') }}
         </p>
@@ -71,7 +71,7 @@
         >
           <div class="flex items-start gap-2">
             <i class="ri-folder-warning-line mt-0.5 shrink-0 text-lg text-amber-400"></i>
-            <p class="text-[11px] leading-relaxed break-words text-amber-200/95">
+            <p class="break-words text-[11px] leading-relaxed text-amber-200/95">
               {{ stepConfigReadError }}
             </p>
           </div>
@@ -144,7 +144,7 @@
                     <span>Raw text (invalid JSON)</span>
                   </div>
                   <div class="card-body">
-                    <p class="mb-2 text-[11px] text-(--text-secondary)">
+                    <p class="text-(--text-secondary) mb-2 text-[11px]">
                       Edit and save; structured editing returns after a successful save
                       with valid JSON.
                     </p>
@@ -166,7 +166,7 @@
                 </template>
               </template>
 
-              <p v-else class="px-1 text-[11px] text-(--text-secondary) italic">
+              <p v-else class="text-(--text-secondary) px-1 text-[11px] italic">
                 (empty file)
               </p>
             </div>

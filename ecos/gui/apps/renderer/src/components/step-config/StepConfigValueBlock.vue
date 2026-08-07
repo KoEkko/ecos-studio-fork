@@ -132,7 +132,7 @@ function setPrim(i: number, v: unknown): void {
       />
       <div v-else-if="typeof model === 'boolean'" class="flex items-center gap-2">
         <Checkbox :model-value="model" binary @update:model-value="setScalar($event)" />
-        <span class="text-[11px] text-(--text-secondary)">{{
+        <span class="text-(--text-secondary) text-[11px]">{{
           model ? 'true' : 'false'
         }}</span>
       </div>
@@ -224,7 +224,7 @@ function setPrim(i: number, v: unknown): void {
           </tr>
         </tbody>
       </table>
-      <div class="border-t border-(--border-color) bg-(--bg-secondary)/40 px-2 py-2">
+      <div class="border-(--border-color) bg-(--bg-secondary)/40 border-t px-2 py-2">
         <button type="button" class="sc-pro-btn" @click="addRow(uniformTable.keys)">
           <i class="ri-add-line"></i>
           Add row

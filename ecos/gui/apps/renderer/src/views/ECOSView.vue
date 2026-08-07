@@ -1,18 +1,18 @@
 <template>
   <div
-    class="relative flex h-full w-full flex-col items-center justify-center overflow-hidden text-(--text-primary)"
+    class="text-(--text-primary) relative flex h-full w-full flex-col items-center justify-center overflow-hidden"
   >
     <div class="relative z-10 flex w-full max-w-4xl flex-col items-center px-8">
       <!-- Logo + Title -->
       <div class="mb-10 flex items-center justify-center">
         <div class="relative">
           <div
-            class="absolute -inset-4 rounded-full bg-(--accent-color)/10 blur-xl"
+            class="bg-(--accent-color)/10 absolute -inset-4 rounded-full blur-xl"
           ></div>
-          <i class="ri-cpu-line relative text-6xl text-(--accent-color)"></i>
+          <i class="ri-cpu-line text-(--accent-color) relative text-6xl"></i>
         </div>
         <div class="ml-5 flex flex-col">
-          <h1 class="text-4xl font-bold tracking-tight text-(--text-primary)">
+          <h1 class="text-(--text-primary) text-4xl font-bold tracking-tight">
             ECOS Studio
           </h1>
         </div>
@@ -21,31 +21,31 @@
       <!-- Design Tools -->
       <div class="mb-8 w-full max-w-2xl">
         <h3
-          class="mb-3 px-1 text-xs font-semibold tracking-wider text-(--text-secondary) uppercase"
+          class="text-(--text-secondary) mb-3 px-1 text-xs font-semibold uppercase tracking-wider"
         >
           Design Tools
         </h3>
         <div class="grid grid-cols-2 gap-4">
           <!-- Frontend Design -->
           <div
-            class="group relative flex cursor-default flex-col items-center justify-center overflow-hidden rounded-xl border border-(--border-color) bg-(--bg-secondary) py-8 opacity-50 transition-all duration-200"
+            class="border-(--border-color) bg-(--bg-secondary) group relative flex cursor-default flex-col items-center justify-center overflow-hidden rounded-xl border py-8 opacity-50 transition-all duration-200"
           >
             <div
-              class="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-(--bg-primary)"
+              class="bg-(--bg-primary) mb-3 flex h-12 w-12 items-center justify-center rounded-xl"
             >
-              <i class="ri-code-s-slash-line text-2xl text-(--text-secondary)"></i>
+              <i class="ri-code-s-slash-line text-(--text-secondary) text-2xl"></i>
             </div>
-            <span class="mb-1 text-sm font-medium text-(--text-primary)"
+            <span class="text-(--text-primary) mb-1 text-sm font-medium"
               >Frontend Design</span
             >
-            <span class="text-xs text-(--text-secondary)"
+            <span class="text-(--text-secondary) text-xs"
               >RTL / Verilog / SystemVerilog</span
             >
             <div
-              class="absolute inset-0 flex items-center justify-center bg-(--bg-primary)/60"
+              class="bg-(--bg-primary)/60 absolute inset-0 flex items-center justify-center"
             >
               <span
-                class="rounded-full border border-(--border-color) bg-(--bg-secondary) px-3 py-1 text-xs font-medium text-(--text-secondary)"
+                class="border-(--border-color) bg-(--bg-secondary) text-(--text-secondary) rounded-full border px-3 py-1 text-xs font-medium"
                 >Coming Soon</span
               >
             </div>
@@ -53,19 +53,19 @@
           <!-- Backend Design -->
           <button
             @click="navigateToECC"
-            class="group flex cursor-pointer flex-col items-center justify-center rounded-xl border border-(--border-color) bg-(--bg-secondary) py-8 transition-all duration-200 hover:scale-[1.02] hover:border-(--accent-color) hover:shadow-(--accent-color)/5 hover:shadow-lg"
+            class="border-(--border-color) bg-(--bg-secondary) hover:border-(--accent-color) hover:shadow-(--accent-color)/5 group flex cursor-pointer flex-col items-center justify-center rounded-xl border py-8 transition-all duration-200 hover:scale-[1.02] hover:shadow-lg"
           >
             <div
-              class="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-(--bg-primary) transition-colors group-hover:bg-(--accent-color)/10"
+              class="bg-(--bg-primary) group-hover:bg-(--accent-color)/10 mb-3 flex h-12 w-12 items-center justify-center rounded-xl transition-colors"
             >
               <i
-                class="ri-cpu-line text-2xl text-(--text-secondary) transition-colors group-hover:text-(--accent-color)"
+                class="ri-cpu-line text-(--text-secondary) group-hover:text-(--accent-color) text-2xl transition-colors"
               ></i>
             </div>
-            <span class="mb-1 text-sm font-medium text-(--text-primary)"
+            <span class="text-(--text-primary) mb-1 text-sm font-medium"
               >Backend Design</span
             >
-            <span class="text-xs text-(--text-secondary)">Synthesis → P&R → GDS</span>
+            <span class="text-(--text-secondary) text-xs">Synthesis → P&R → GDS</span>
           </button>
         </div>
       </div>
@@ -77,28 +77,28 @@
             <div class="space-y-2">
               <button
                 @click="navigateToTools"
-                class="group flex w-full cursor-pointer items-center gap-3 rounded-lg border border-(--border-color) bg-(--bg-secondary) px-4 py-3 text-left transition-all duration-200 hover:border-(--accent-color)"
+                class="border-(--border-color) bg-(--bg-secondary) hover:border-(--accent-color) group flex w-full cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 text-left transition-all duration-200"
               >
-                <i class="ri-tools-line text-lg text-(--accent-color)"></i>
+                <i class="ri-tools-line text-(--accent-color) text-lg"></i>
                 <span class="min-w-0 flex-1">
-                  <span class="block text-sm font-medium text-(--text-primary)"
+                  <span class="text-(--text-primary) block text-sm font-medium"
                     >Resource Manager</span
                   >
-                  <span class="block truncate text-xs text-(--text-secondary)"
+                  <span class="text-(--text-secondary) block truncate text-xs"
                     >EDA tools and PDKs</span
                   >
                 </span>
                 <i
-                  class="ri-arrow-right-s-line text-lg text-(--text-secondary) transition-colors group-hover:text-(--accent-color)"
+                  class="ri-arrow-right-s-line text-(--text-secondary) group-hover:text-(--accent-color) text-lg transition-colors"
                 ></i>
               </button>
 
               <button
                 @click="handleNotReady"
-                class="group flex w-full cursor-pointer items-center gap-3 rounded-lg border border-(--border-color) bg-(--bg-secondary) px-4 py-3 text-left opacity-50 transition-all duration-200 hover:border-(--accent-color)"
+                class="border-(--border-color) bg-(--bg-secondary) hover:border-(--accent-color) group flex w-full cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 text-left opacity-50 transition-all duration-200"
               >
-                <i class="ri-puzzle-line text-lg text-(--text-secondary)"></i>
-                <span class="text-sm text-(--text-primary)">IP Catalog</span>
+                <i class="ri-puzzle-line text-(--text-secondary) text-lg"></i>
+                <span class="text-(--text-primary) text-sm">IP Catalog</span>
               </button>
             </div>
           </div>
@@ -107,28 +107,28 @@
             <div class="space-y-2">
               <button
                 @click="navigateToMpcResources"
-                class="group flex w-full cursor-pointer items-center gap-3 rounded-lg border border-(--border-color) bg-(--bg-secondary) px-4 py-3 text-left transition-all duration-200 hover:border-(--accent-color)"
+                class="border-(--border-color) bg-(--bg-secondary) hover:border-(--accent-color) group flex w-full cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 text-left transition-all duration-200"
               >
-                <i class="ri-layout-grid-line text-lg text-(--accent-color)"></i>
+                <i class="ri-layout-grid-line text-(--accent-color) text-lg"></i>
                 <span class="min-w-0 flex-1">
-                  <span class="block text-sm font-medium text-(--text-primary)"
+                  <span class="text-(--text-primary) block text-sm font-medium"
                     >MPC Resources</span
                   >
-                  <span class="block truncate text-xs text-(--text-secondary)"
+                  <span class="text-(--text-secondary) block truncate text-xs"
                     >Templates and core constraints</span
                   >
                 </span>
                 <i
-                  class="ri-arrow-right-s-line text-lg text-(--text-secondary) transition-colors group-hover:text-(--accent-color)"
+                  class="ri-arrow-right-s-line text-(--text-secondary) group-hover:text-(--accent-color) text-lg transition-colors"
                 ></i>
               </button>
 
               <button
                 @click="handleNotReady"
-                class="group flex w-full cursor-pointer items-center gap-3 rounded-lg border border-(--border-color) bg-(--bg-secondary) px-4 py-3 text-left opacity-50 transition-all duration-200 hover:border-(--accent-color)"
+                class="border-(--border-color) bg-(--bg-secondary) hover:border-(--accent-color) group flex w-full cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 text-left opacity-50 transition-all duration-200"
               >
-                <i class="ri-bar-chart-box-line text-lg text-(--text-secondary)"></i>
-                <span class="text-sm text-(--text-primary)">Benchmarks</span>
+                <i class="ri-bar-chart-box-line text-(--text-secondary) text-lg"></i>
+                <span class="text-(--text-primary) text-sm">Benchmarks</span>
               </button>
             </div>
           </div>
@@ -137,10 +137,10 @@
       <!-- Project Management entry -->
       <button
         @click="navigateToProjects"
-        class="group flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-(--border-color) px-6 py-3 text-(--text-secondary) transition-all duration-200 hover:border-(--accent-color) hover:text-(--accent-color)"
+        class="border-(--border-color) text-(--text-secondary) hover:border-(--accent-color) hover:text-(--accent-color) group flex cursor-pointer items-center gap-3 rounded-xl border border-dashed px-6 py-3 transition-all duration-200"
       >
         <i
-          class="ri-folder-settings-line text-lg transition-colors group-hover:text-(--accent-color)"
+          class="ri-folder-settings-line group-hover:text-(--accent-color) text-lg transition-colors"
         ></i>
         <span class="text-sm font-medium">Project Management</span>
         <i

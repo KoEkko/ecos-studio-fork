@@ -2,7 +2,7 @@
   <div class="flex h-full">
     <!-- 标签切换栏 -->
     <div
-      class="flex w-12 flex-col items-center gap-3 border-l border-(--border-color) bg-(--bg-sidebar) py-3"
+      class="border-(--border-color) bg-(--bg-sidebar) flex w-12 flex-col items-center gap-3 border-l py-3"
     >
       <button
         @click="activeTab = 'chat'"
@@ -19,7 +19,7 @@
     </div>
 
     <!-- 内容面板 -->
-    <div class="flex flex-1 flex-col overflow-hidden bg-(--bg-primary)">
+    <div class="bg-(--bg-primary) flex flex-1 flex-col overflow-hidden">
       <!-- AI Chat 面板 -->
       <div v-if="activeTab === 'chat'" class="flex h-full flex-col">
         <ChatPanel :messages="messages" @send-message="handleSendMessage" />
