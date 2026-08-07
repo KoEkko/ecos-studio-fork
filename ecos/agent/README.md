@@ -64,11 +64,11 @@ Workspace 目录名。
 
 按上下文分流：
 
-- **未打开 workspace（首页）**：Topbar Chat 打开右侧 Agent 抽屉。开场给出主 CTA
+- **未打开 workspace（首页）**：Topbar Chat 打开 Agent 聊天。开场给出主 CTA
   「开始创建 Workspace」，也可直接用自然语言说明意图（例如已有 Project 路径、
   Workspace 名、设计名）；寒暄或无关输入会留在开场；Agent 可提供只读答复，无法处理时会提示错误或重新展示可用选项。随后选择或新建Project，再创建其下的 Workspace 并运行完整流程。
-- **已打开 workspace**：Topbar Chat 展开右侧聊天栏（Home / 步骤页共用）。欢迎语
-  同时展示 Project 与 Workspace。操作是「修改参数（只保存）」「从指定阶段重跑」
+- **已打开 workspace**：Home / 步骤页共用 Topbar Chat。欢迎语同时展示 Project 与
+  Workspace。操作是「修改参数（只保存）」「从指定阶段重跑」
   「继续未完成 flow」「在当前 Project 下新建 Workspace」。Standalone workspace
   （无 `project.json` 父目录）不提供第 4 项。自然语言仅在能明确映射到上述操作时
   前进；其他输入会给出只读答复并保留当前操作选项。
