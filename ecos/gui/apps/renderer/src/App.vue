@@ -282,13 +282,7 @@ async function createWorkspaceFromAgent(
     workspacePath,
   })
   agentShell.setMode('workspace')
-  await router.push({
-    path: '/workspace/home',
-    query: {
-      projectRoot: contract.project_context.project_root,
-      projectName: contract.project_context.project_name,
-    },
-  })
+  await router.push('/workspace/home')
   await nextTick()
   return { created: true, workspacePath }
 }
