@@ -11,7 +11,6 @@ import {
   type ProjectQorWorkspaceComparison,
 } from '@/utils/projectQorTrend'
 import { readOptionalProjectTextFile } from '@/utils/projectFiles'
-import { resolveProjectRouteContextForWorkspace } from '@/utils/projectManifestRegistration'
 import {
   readProjectWorkspaceAnalysisInputs,
   readProjectWorkspaceFlowStates,
@@ -78,16 +77,9 @@ export function useHomeQorComparison() {
   async function refresh(): Promise<void> {
     const token = ++requestToken
     const workspacePath = currentProject.value?.path
-    if (!workspacePath) {
+    const projectRoot = routeString(route.query.projectRoot)
+    if (!workspacePath || !projectRoot) {
       state.value = EMPTY_STATE
-      return
-    }
-
-    const projectRoot =
-      routeString(route.query.projectRoot) ??
-      (await resolveProjectRouteContextForWorkspace(workspacePath))?.projectRoot
-    if (token !== requestToken || !projectRoot) {
-      if (token === requestToken) state.value = EMPTY_STATE
       return
     }
 
