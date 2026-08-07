@@ -16,28 +16,28 @@
     <!-- Map 消息 - 热力图/密度图展示 -->
     <div
       v-else-if="message.type === 'map' && message.mapData"
-      class="map-message-container border-(--border-color) bg-(--bg-secondary) text-(--text-primary) w-full min-w-0 max-w-full overflow-hidden rounded-xl border text-sm shadow-sm"
+      class="map-message-container w-full max-w-full min-w-0 overflow-hidden rounded-xl border border-(--border-color) bg-(--bg-secondary) text-sm text-(--text-primary) shadow-sm"
     >
       <!-- 标题栏 -->
       <div
-        class="border-(--border-color) bg-linear-to-r from-(--accent-color)/10 flex items-center gap-2 border-b to-transparent px-4 py-3"
+        class="flex items-center gap-2 border-b border-(--border-color) bg-linear-to-r from-(--accent-color)/10 to-transparent px-4 py-3"
       >
         <div
-          class="bg-(--accent-color)/20 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+          class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-(--accent-color)/20"
         >
-          <i class="ri-map-2-line text-(--accent-color) text-base"></i>
+          <i class="ri-map-2-line text-base text-(--accent-color)"></i>
         </div>
         <div class="min-w-0 flex-1 overflow-hidden">
-          <h3 class="text-(--text-primary) truncate text-xs font-semibold">
+          <h3 class="truncate text-xs font-semibold text-(--text-primary)">
             {{ message.mapData.title }}
           </h3>
-          <span class="text-(--text-secondary) text-[10px]">{{
+          <span class="text-[10px] text-(--text-secondary)">{{
             message.mapData.step
           }}</span>
         </div>
         <span
           v-if="message.mapData.category"
-          class="bg-(--accent-color)/10 text-(--accent-color) shrink-0 rounded-full px-2 py-0.5 text-[10px]"
+          class="shrink-0 rounded-full bg-(--accent-color)/10 px-2 py-0.5 text-[10px] text-(--accent-color)"
         >
           {{ message.mapData.category }}
         </span>
@@ -59,12 +59,12 @@
           message.mapData.info.length > 0 &&
           message.mapData.info[0] !== ''
         "
-        class="border-(--border-color)/50 overflow-hidden border-b px-4 py-3"
+        class="overflow-hidden border-b border-(--border-color)/50 px-4 py-3"
       >
         <div class="mb-2 flex items-center gap-2">
-          <i class="ri-bar-chart-2-line text-(--accent-color) shrink-0 text-xs"></i>
+          <i class="ri-bar-chart-2-line shrink-0 text-xs text-(--accent-color)"></i>
           <span
-            class="text-(--text-secondary) text-[10px] font-medium uppercase tracking-wide"
+            class="text-[10px] font-medium tracking-wide text-(--text-secondary) uppercase"
             >Statistics</span
           >
         </div>
@@ -72,13 +72,13 @@
           <div
             v-for="(infoLine, idx) in message.mapData.info.filter((l) => l)"
             :key="idx"
-            class="bg-(--bg-primary)/50 flex min-w-0 items-center justify-between overflow-hidden rounded-lg px-3 py-1.5"
+            class="flex min-w-0 items-center justify-between overflow-hidden rounded-lg bg-(--bg-primary)/50 px-3 py-1.5"
           >
-            <span class="text-(--text-secondary) mr-2 truncate text-[11px]">{{
+            <span class="mr-2 truncate text-[11px] text-(--text-secondary)">{{
               parseInfoKey(infoLine)
             }}</span>
             <span
-              class="text-(--accent-color) shrink-0 font-mono text-[11px] font-medium"
+              class="shrink-0 font-mono text-[11px] font-medium text-(--accent-color)"
               >{{ parseInfoValue(infoLine) }}</span
             >
           </div>
@@ -88,16 +88,16 @@
       <!-- 图片展示 -->
       <div class="overflow-hidden p-3">
         <div
-          class="border-(--border-color)/30 bg-(--bg-tertiary) relative overflow-hidden rounded-xl border"
+          class="relative overflow-hidden rounded-xl border border-(--border-color)/30 bg-(--bg-tertiary)"
         >
           <!-- 加载状态 -->
           <div
             v-if="mapImageLoading"
-            class="bg-(--bg-secondary)/80 absolute inset-0 z-10 flex items-center justify-center"
+            class="absolute inset-0 z-10 flex items-center justify-center bg-(--bg-secondary)/80"
           >
             <div class="text-center">
-              <i class="ri-loader-4-line text-(--accent-color) animate-spin text-2xl"></i>
-              <p class="text-(--text-secondary) mt-2 text-[10px]">Loading...</p>
+              <i class="ri-loader-4-line animate-spin text-2xl text-(--accent-color)"></i>
+              <p class="mt-2 text-[10px] text-(--text-secondary)">Loading...</p>
             </div>
           </div>
 
@@ -106,7 +106,7 @@
             :src="message.mapData.imageUrl"
             :alt="message.mapData.title"
             :class="[
-              'map-image block h-auto w-full min-w-0 max-w-full object-contain',
+              'map-image block h-auto w-full max-w-full min-w-0 object-contain',
               message.mapData.compact ? 'max-h-[220px]' : 'max-h-[400px]',
             ]"
             @load="handleMapImageLoad"
@@ -116,7 +116,7 @@
           <!-- 颜色条图例 -->
           <div
             v-if="message.mapData.showLegend !== false"
-            class="border-(--border-color)/50 bg-(--bg-secondary)/90 absolute bottom-3 right-3 flex flex-col items-end gap-1 rounded-lg border p-2"
+            class="absolute right-3 bottom-3 flex flex-col items-end gap-1 rounded-lg border border-(--border-color)/50 bg-(--bg-secondary)/90 p-2"
           >
             <div
               class="h-24 w-4 overflow-hidden rounded"
@@ -132,7 +132,7 @@
               "
             ></div>
             <div
-              class="text-(--text-secondary) flex h-24 flex-col justify-between font-mono text-[8px]"
+              class="flex h-24 flex-col justify-between font-mono text-[8px] text-(--text-secondary)"
             >
               <span>1.0</span>
               <span>0.8</span>
@@ -145,7 +145,7 @@
 
         <!-- 文件路径 -->
         <div
-          class="text-(--text-secondary)/60 mt-2 flex min-w-0 items-center gap-1.5 overflow-hidden text-[9px]"
+          class="mt-2 flex min-w-0 items-center gap-1.5 overflow-hidden text-[9px] text-(--text-secondary)/60"
         >
           <i class="ri-folder-line shrink-0"></i>
           <span class="truncate">{{ message.mapData.localPath }}</span>
@@ -156,15 +156,15 @@
     <!-- Info 消息 -->
     <div
       v-else-if="message.type === 'info' && message.infoData"
-      class="border-(--border-color) bg-(--bg-secondary) text-(--text-primary) w-full min-w-0 overflow-hidden rounded-lg border p-2 text-sm"
+      class="w-full min-w-0 overflow-hidden rounded-lg border border-(--border-color) bg-(--bg-secondary) p-2 text-sm text-(--text-primary)"
     >
       <!-- 标题栏（全屏查阅在右上角） -->
-      <div class="border-(--border-color) flex items-center gap-2 border-b px-3 py-2">
+      <div class="flex items-center gap-2 border-b border-(--border-color) px-3 py-2">
         <div class="flex min-w-0 flex-1 items-center gap-2">
-          <i class="ri-file-list-3-line text-(--accent-color) shrink-0"></i>
+          <i class="ri-file-list-3-line shrink-0 text-(--accent-color)"></i>
           <span class="truncate text-xs font-semibold">{{ message.infoData.title }}</span>
           <span
-            class="bg-(--bg-primary) text-(--text-secondary) shrink-0 rounded px-2 py-0.5 text-[10px]"
+            class="shrink-0 rounded bg-(--bg-primary) px-2 py-0.5 text-[10px] text-(--text-secondary)"
           >
             {{ message.infoData.step }}
           </span>
@@ -197,14 +197,14 @@
               <tr
                 v-for="(value, key) in item.content"
                 :key="key"
-                class="border-(--border-color)/30 hover:bg-(--bg-primary)/30 border-b"
+                class="border-b border-(--border-color)/30 hover:bg-(--bg-primary)/30"
               >
                 <td
-                  class="text-(--text-secondary) w-[40%] whitespace-nowrap px-3 py-2 font-medium"
+                  class="w-[40%] px-3 py-2 font-medium whitespace-nowrap text-(--text-secondary)"
                 >
                   {{ key }}
                 </td>
-                <td class="text-(--text-primary) px-3 py-2">{{ formatValue(value) }}</td>
+                <td class="px-3 py-2 text-(--text-primary)">{{ formatValue(value) }}</td>
               </tr>
             </tbody>
           </table>
@@ -214,7 +214,7 @@
         <div v-else-if="item.format === 'json'" class="overflow-hidden p-3">
           <pre
             :class="[
-              'nested-report-scroll text-content-pre bg-(--bg-primary) overflow-auto whitespace-pre rounded p-3 font-mono text-[11px]',
+              'nested-report-scroll text-content-pre overflow-auto rounded bg-(--bg-primary) p-3 font-mono text-[11px] whitespace-pre',
               message.infoData.compact ? 'max-h-[220px]' : 'max-h-[400px]',
             ]"
             @wheel="onNestedReportWheel"
@@ -233,7 +233,7 @@
                 <th
                   v-for="header in csvHeaders(item.content)"
                   :key="header"
-                  class="border-(--border-color) text-(--text-secondary) border-b px-3 py-2 text-left font-medium"
+                  class="border-b border-(--border-color) px-3 py-2 text-left font-medium text-(--text-secondary)"
                 >
                   {{ header }}
                 </th>
@@ -243,7 +243,7 @@
               <tr
                 v-for="(row, rowIndex) in csvRows(item.content)"
                 :key="rowIndex"
-                class="border-(--border-color)/30 hover:bg-(--bg-primary)/30 border-b"
+                class="border-b border-(--border-color)/30 hover:bg-(--bg-primary)/30"
               >
                 <td v-for="(cell, cellIndex) in row" :key="cellIndex" class="px-3 py-2">
                   {{ cell }}
@@ -257,7 +257,7 @@
         <div v-else-if="item.format === 'html'" class="overflow-hidden p-3">
           <div
             :class="[
-              'border-(--border-color)/30 bg-(--bg-primary) overflow-hidden rounded-lg border',
+              'overflow-hidden rounded-lg border border-(--border-color)/30 bg-(--bg-primary)',
               message.infoData.compact ? 'max-h-[220px]' : 'max-h-[350px]',
             ]"
           >
@@ -276,13 +276,13 @@
         <div v-else class="overflow-hidden p-3">
           <div
             :class="[
-              'border-(--border-color)/30 bg-(--bg-primary) overflow-hidden rounded-lg border',
+              'overflow-hidden rounded-lg border border-(--border-color)/30 bg-(--bg-primary)',
               message.infoData.compact ? 'max-h-[220px]' : 'max-h-[350px]',
             ]"
           >
             <pre
               :class="[
-                'nested-report-scroll info-text-embed-compact text-content-pre bg-(--bg-primary) overflow-auto whitespace-pre rounded-none p-3 font-mono',
+                'nested-report-scroll info-text-embed-compact text-content-pre overflow-auto rounded-none bg-(--bg-primary) p-3 font-mono whitespace-pre',
                 message.infoData.compact ? 'max-h-[220px]' : 'max-h-[350px]',
               ]"
               @wheel="onNestedReportWheel"
@@ -296,9 +296,9 @@
     <div
       v-else
       :class="[
-        'message-bubble group relative w-full min-w-0 max-w-full text-sm',
+        'message-bubble group relative w-full max-w-full min-w-0 text-sm',
         message.role === 'user'
-          ? 'border-(--border-color) bg-(--bg-secondary) text-(--text-primary) rounded-lg border'
+          ? 'rounded-lg border border-(--border-color) bg-(--bg-secondary) text-(--text-primary)'
           : 'message-bubble--assistant text-(--text-primary)',
       ]"
     >
@@ -307,15 +307,15 @@
         <p class="text-xs opacity-90">{{ message.image.label }}:</p>
         <p
           v-if="message.image.description"
-          class="mb-2 whitespace-pre-line text-xs opacity-90"
+          class="mb-2 text-xs whitespace-pre-line opacity-90"
         >
           {{ message.image.description }}
         </p>
-        <div class="group relative mb-2 min-w-0 max-w-full overflow-hidden rounded-lg">
+        <div class="group relative mb-2 max-w-full min-w-0 overflow-hidden rounded-lg">
           <img
             :src="message.image.url"
             :alt="message.image.label"
-            class="h-auto max-h-[400px] w-full min-w-0 max-w-full object-contain"
+            class="h-auto max-h-[400px] w-full max-w-full min-w-0 object-contain"
             loading="lazy"
             @load="handleImageLoad"
           />
@@ -364,7 +364,7 @@
         <!-- 错误状态 -->
         <div
           v-else-if="message.status === 'error'"
-          class="text-(--danger-color) flex items-center gap-2"
+          class="flex items-center gap-2 text-(--danger-color)"
         >
           <i class="ri-error-warning-line"></i>
           <span>{{ message.content || 'Failed to send message' }}</span>

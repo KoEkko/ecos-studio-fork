@@ -1,5 +1,5 @@
 <template>
-  <div class="bg-(--bg-primary) flex h-full flex-col overflow-hidden">
+  <div class="flex h-full flex-col overflow-hidden bg-(--bg-primary)">
     <!-- 装饰性背景渐变 -->
     <div class="welcome-gradient pointer-events-none absolute inset-0 opacity-5"></div>
 
@@ -14,7 +14,7 @@
       "
     ></div>
 
-    <router-view class="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden" />
+    <router-view class="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto" />
   </div>
 </template>
 

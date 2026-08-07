@@ -32,10 +32,10 @@
         tabindex="0"
       >
         <table
-          class="text-(--text-secondary) w-full table-fixed border-collapse text-left text-xs"
+          class="w-full table-fixed border-collapse text-left text-xs text-(--text-secondary)"
         >
           <thead>
-            <tr class="border-(--border-color) border-b">
+            <tr class="border-b border-(--border-color)">
               <th scope="col" class="w-[38%] py-2 font-medium">Key</th>
               <th scope="col" class="py-2 font-medium">Value</th>
             </tr>
@@ -44,15 +44,15 @@
             <tr
               v-for="[key, value] in rows"
               :key="key"
-              class="border-(--border-color)/60 border-b last:border-b-0"
+              class="border-b border-(--border-color)/60 last:border-b-0"
             >
               <th
                 scope="row"
-                class="text-(--text-secondary) py-2 pr-3 align-top font-medium"
+                class="py-2 pr-3 align-top font-medium text-(--text-secondary)"
               >
                 {{ key }}
               </th>
-              <td class="text-(--text-primary) break-all py-2">{{ value }}</td>
+              <td class="py-2 break-all text-(--text-primary)">{{ value }}</td>
             </tr>
           </tbody>
         </table>
@@ -75,10 +75,10 @@
         tabindex="0"
       >
         <table
-          class="text-(--text-secondary) w-full table-fixed border-collapse text-left text-xs"
+          class="w-full table-fixed border-collapse text-left text-xs text-(--text-secondary)"
         >
           <thead>
-            <tr class="border-(--border-color) border-b">
+            <tr class="border-b border-(--border-color)">
               <th scope="col" class="w-[38%] py-2 font-medium">Key</th>
               <th scope="col" class="py-2 font-medium">Value</th>
             </tr>
@@ -87,22 +87,22 @@
             <tr
               v-for="[key, value] in rows"
               :key="key"
-              class="border-(--border-color)/60 border-b last:border-b-0"
+              class="border-b border-(--border-color)/60 last:border-b-0"
             >
               <th
                 scope="row"
-                class="text-(--text-secondary) py-2 pr-3 align-top font-medium"
+                class="py-2 pr-3 align-top font-medium text-(--text-secondary)"
               >
                 {{ key }}
               </th>
-              <td class="text-(--text-primary) break-all py-2">{{ value }}</td>
+              <td class="py-2 break-all text-(--text-primary)">{{ value }}</td>
             </tr>
           </tbody>
         </table>
       </div>
       <p
         v-if="confirmationText"
-        class="selectable text-(--text-primary) whitespace-pre-line text-xs leading-5"
+        class="selectable text-xs leading-5 whitespace-pre-line text-(--text-primary)"
         :class="rows.length ? 'mt-4' : ''"
       >
         {{ confirmationText }}

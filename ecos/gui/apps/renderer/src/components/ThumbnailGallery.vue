@@ -1,7 +1,7 @@
 <template>
-  <div class="bg-(--bg-primary) flex h-full flex-col">
+  <div class="flex h-full flex-col bg-(--bg-primary)">
     <!-- Tabs 标题栏 -->
-    <div class="border-(--border-color) flex items-center border-b">
+    <div class="flex items-center border-b border-(--border-color)">
       <button
         v-for="tab in tabs"
         :key="tab.id"
@@ -10,7 +10,7 @@
           'flex flex-1 items-center justify-center gap-2 border-b-2 px-4 py-2 text-xs font-medium transition-all',
           activeTab === tab.id
             ? 'border-(--accent-color) bg-(--accent-color)/5 text-(--accent-color)'
-            : 'text-(--text-secondary) hover:bg-(--bg-secondary)/50 hover:text-(--text-primary) border-transparent',
+            : 'border-transparent text-(--text-secondary) hover:bg-(--bg-secondary)/50 hover:text-(--text-primary)',
         ]"
       >
         <i :class="tab.icon"></i>
@@ -23,16 +23,16 @@
       <!-- 加载状态 -->
       <div v-if="isLoadingTab" class="flex h-full items-center justify-center">
         <div class="text-center">
-          <i class="ri-loader-4-line text-(--accent-color) animate-spin text-2xl"></i>
-          <p class="text-(--text-secondary) mt-2 text-[11px]">Loading...</p>
+          <i class="ri-loader-4-line animate-spin text-2xl text-(--accent-color)"></i>
+          <p class="mt-2 text-[11px] text-(--text-secondary)">Loading...</p>
         </div>
       </div>
 
       <!-- 无 step 时的提示 -->
       <div v-else-if="!currentStep" class="flex h-full items-center justify-center">
         <div class="px-4 text-center">
-          <i class="ri-information-line text-(--text-secondary) text-3xl opacity-50"></i>
-          <p class="text-(--text-secondary) mt-2 text-[11px]">
+          <i class="ri-information-line text-3xl text-(--text-secondary) opacity-50"></i>
+          <p class="mt-2 text-[11px] text-(--text-secondary)">
             Please select a flow step first
           </p>
         </div>
@@ -44,8 +44,8 @@
         class="flex h-full items-center justify-center"
       >
         <div class="px-4 text-center">
-          <i class="ri-file-list-3-line text-(--text-secondary) text-3xl opacity-50"></i>
-          <p class="text-(--text-secondary) mt-2 text-[11px]">No data</p>
+          <i class="ri-file-list-3-line text-3xl text-(--text-secondary) opacity-50"></i>
+          <p class="mt-2 text-[11px] text-(--text-secondary)">No data</p>
         </div>
       </div>
 
@@ -65,7 +65,7 @@
               'transition-all duration-200 ease-out',
               'border',
               loadingKey === key
-                ? 'border-(--border-color) bg-(--bg-secondary) pointer-events-none opacity-60'
+                ? 'pointer-events-none border-(--border-color) bg-(--bg-secondary) opacity-60'
                 : [
                     'border-(--border-color)/50 bg-(--bg-secondary)/50',
                     'hover:border-(--border-color) hover:bg-(--bg-secondary)',

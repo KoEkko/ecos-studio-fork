@@ -3,10 +3,10 @@
     <div class="design-files-dialog">
       <div class="design-files-dialog-header">
         <div>
-          <h3 class="text-(--text-primary) text-lg font-semibold">
+          <h3 class="text-lg font-semibold text-(--text-primary)">
             Manage RTL Design Files
           </h3>
-          <p class="text-(--text-secondary) mt-1 text-xs">
+          <p class="mt-1 text-xs text-(--text-secondary)">
             Browse folders or files, then use the transfer panel to add or remove RTL from
             this workspace.
           </p>
@@ -17,7 +17,7 @@
       </div>
 
       <div class="design-files-dialog-body">
-        <p v-if="loading" class="text-(--text-secondary) flex items-center gap-2 text-sm">
+        <p v-if="loading" class="flex items-center gap-2 text-sm text-(--text-secondary)">
           <i class="ri-loader-4-line animate-spin"></i>
           Loading workspace RTL files...
         </p>
@@ -37,21 +37,21 @@
           >
             <div class="flex flex-col items-center">
               <div
-                class="border-(--border-color) bg-(--bg-secondary)/50 mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border"
+                class="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-(--border-color) bg-(--bg-secondary)/50"
               >
-                <i class="ri-upload-cloud-2-line text-(--text-secondary) text-3xl"></i>
+                <i class="ri-upload-cloud-2-line text-3xl text-(--text-secondary)"></i>
               </div>
-              <h4 class="text-(--text-primary) mb-1 text-base font-semibold">
+              <h4 class="mb-1 text-base font-semibold text-(--text-primary)">
                 Add RTL Design Files
               </h4>
-              <p class="text-(--text-secondary) mb-4 max-w-md text-sm">
+              <p class="mb-4 max-w-md text-sm text-(--text-secondary)">
                 Browse individual HDL files or scan a design folder to populate the
                 transfer panel.
               </p>
               <div class="relative">
                 <button
                   type="button"
-                  class="bg-(--accent-color) inline-flex items-center gap-2 rounded-xl px-6 py-2.5 font-medium text-white hover:opacity-90"
+                  class="inline-flex items-center gap-2 rounded-xl bg-(--accent-color) px-6 py-2.5 font-medium text-white hover:opacity-90"
                   @click="toggleBrowseMenu"
                 >
                   Browse
@@ -62,11 +62,11 @@
                 </button>
                 <div
                   v-if="showBrowseMenu"
-                  class="border-(--border-color) bg-(--bg-primary) absolute left-1/2 top-[calc(100%+0.5rem)] z-20 w-56 -translate-x-1/2 overflow-hidden rounded-xl border shadow-lg"
+                  class="absolute top-[calc(100%+0.5rem)] left-1/2 z-20 w-56 -translate-x-1/2 overflow-hidden rounded-xl border border-(--border-color) bg-(--bg-primary) shadow-lg"
                 >
                   <button
                     type="button"
-                    class="text-(--text-primary) hover:bg-(--bg-secondary)/60 flex w-full items-center gap-2 px-4 py-3 text-left text-sm"
+                    class="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-(--text-primary) hover:bg-(--bg-secondary)/60"
                     @click="browseRtlFiles"
                   >
                     <i class="ri-file-code-line text-blue-500"></i>
@@ -74,7 +74,7 @@
                   </button>
                   <button
                     type="button"
-                    class="border-(--border-color)/60 text-(--text-primary) hover:bg-(--bg-secondary)/60 flex w-full items-center gap-2 border-t px-4 py-3 text-left text-sm"
+                    class="flex w-full items-center gap-2 border-t border-(--border-color)/60 px-4 py-3 text-left text-sm text-(--text-primary) hover:bg-(--bg-secondary)/60"
                     @click="browseRtlFolder"
                   >
                     <i class="ri-folder-open-line text-yellow-500/80"></i>
@@ -85,7 +85,7 @@
 
               <div
                 v-if="isScanningDirectory"
-                class="text-(--text-secondary) mt-4 flex items-center justify-center gap-2 text-sm"
+                class="mt-4 flex items-center justify-center gap-2 text-sm text-(--text-secondary)"
               >
                 <i class="ri-loader-4-line animate-spin"></i>
                 Scanning RTL files in the selected directory...
@@ -112,7 +112,7 @@
             v-else-if="
               rtlSourceDirectory && !isScanningDirectory && scannedRtlFiles.length === 0
             "
-            class="text-(--text-secondary) mt-4 flex items-center gap-1 text-xs"
+            class="mt-4 flex items-center gap-1 text-xs text-(--text-secondary)"
           >
             <i class="ri-information-line"></i>
             No RTL files were found in the selected directory.
@@ -120,16 +120,16 @@
 
           <div class="mt-6 space-y-3">
             <div class="flex items-center justify-between">
-              <h4 class="text-(--text-primary) text-sm font-semibold">
+              <h4 class="text-sm font-semibold text-(--text-primary)">
                 Workspace RTL Files
-                <span class="bg-(--bg-secondary) ml-2 rounded-full px-2 py-0.5 text-xs">{{
+                <span class="ml-2 rounded-full bg-(--bg-secondary) px-2 py-0.5 text-xs">{{
                   workingPaths.length
                 }}</span>
               </h4>
             </div>
             <p
               v-if="workingPaths.length === 0"
-              class="text-(--text-secondary) px-1 text-sm"
+              class="px-1 text-sm text-(--text-secondary)"
             >
               No RTL files in this workspace yet. Browse files or a folder above to add
               some.
@@ -138,22 +138,22 @@
               <div
                 v-for="file in workingPaths"
                 :key="file"
-                class="border-(--border-color) bg-(--bg-secondary)/30 hover:bg-(--bg-secondary)/60 group flex items-center justify-between rounded-xl border px-4 py-3 transition-colors duration-200"
+                class="group flex items-center justify-between rounded-xl border border-(--border-color) bg-(--bg-secondary)/30 px-4 py-3 transition-colors duration-200 hover:bg-(--bg-secondary)/60"
               >
                 <div class="flex min-w-0 items-center gap-3">
                   <i class="ri-file-code-line shrink-0 text-blue-500"></i>
                   <div class="min-w-0">
-                    <p class="text-(--text-primary) truncate text-sm font-medium">
+                    <p class="truncate text-sm font-medium text-(--text-primary)">
                       {{ basename(file) }}
                     </p>
-                    <p class="text-(--text-secondary) truncate text-xs opacity-70">
+                    <p class="truncate text-xs text-(--text-secondary) opacity-70">
                       {{ file }}
                     </p>
                   </div>
                 </div>
                 <button
                   type="button"
-                  class="text-(--text-secondary) flex h-8 w-8 shrink-0 items-center justify-center rounded-lg opacity-0 hover:bg-red-500/10 hover:text-red-500 group-hover:opacity-100"
+                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-(--text-secondary) opacity-0 group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-500"
                   title="Remove from workspace"
                   @click="removeWorkspaceFile(file)"
                 >
@@ -188,16 +188,16 @@
 
     <div v-if="showRunResultsConfirm" class="design-files-confirm-overlay">
       <div class="design-files-confirm-dialog">
-        <h4 class="text-(--text-primary) text-base font-semibold">
+        <h4 class="text-base font-semibold text-(--text-primary)">
           Keep Current Run Results?
         </h4>
-        <p class="text-(--text-secondary) mt-2 text-sm leading-relaxed">
+        <p class="mt-2 text-sm leading-relaxed text-(--text-secondary)">
           RTL design files were updated. Do you want to keep the existing flow run results
           and artifacts in this workspace?
         </p>
-        <p class="text-(--text-secondary) mt-3 text-xs leading-relaxed">
+        <p class="mt-3 text-xs leading-relaxed text-(--text-secondary)">
           Choosing
-          <span class="text-(--text-primary) font-medium">Clear and Reset</span> reuses
+          <span class="font-medium text-(--text-primary)">Clear and Reset</span> reuses
           the same cleanup logic as ReRun: step outputs are removed and home/flow state is
           reset.
         </p>

@@ -1,21 +1,21 @@
 <template>
   <div
-    class="step-qor-root bg-(--bg-primary) flex h-full min-h-0 w-full min-w-0 flex-col"
+    class="step-qor-root flex h-full min-h-0 w-full min-w-0 flex-col bg-(--bg-primary)"
   >
     <header
-      class="border-(--border-color) flex shrink-0 items-start justify-between border-b px-3 py-2"
+      class="flex shrink-0 items-start justify-between border-b border-(--border-color) px-3 py-2"
     >
       <div class="min-w-0">
-        <h2 class="text-(--text-primary) truncate text-[12px] font-bold">
+        <h2 class="truncate text-[12px] font-bold text-(--text-primary)">
           {{ panelTitle }}
         </h2>
-        <p class="text-(--text-secondary) mt-0.5 text-[10px] uppercase tracking-wider">
+        <p class="mt-0.5 text-[10px] tracking-wider text-(--text-secondary) uppercase">
           Workspace step analysis
         </p>
       </div>
       <button
         type="button"
-        class="border-(--border-color) text-(--text-secondary) hover:border-(--accent-color) hover:text-(--accent-color) inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border"
+        class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border border-(--border-color) text-(--text-secondary) hover:border-(--accent-color) hover:text-(--accent-color)"
         title="Refresh QoR analysis"
         aria-label="Refresh QoR analysis"
         :disabled="loading"
@@ -29,18 +29,18 @@
       v-if="loading"
       class="flex min-h-0 flex-1 flex-col items-center justify-center px-4 text-center"
     >
-      <i class="ri-loader-4-line spin text-(--accent-color) text-3xl"></i>
-      <p class="text-(--text-secondary) mt-3 text-[11px]">Loading QoR analysis...</p>
+      <i class="ri-loader-4-line spin text-3xl text-(--accent-color)"></i>
+      <p class="mt-3 text-[11px] text-(--text-secondary)">Loading QoR analysis...</p>
     </div>
 
     <div v-else-if="error" class="m-3 rounded border border-red-500/40 bg-red-500/10 p-3">
       <div class="flex items-start gap-2">
         <i class="ri-error-warning-line mt-0.5 shrink-0 text-lg text-red-400"></i>
-        <p class="break-words text-[12px] leading-relaxed text-red-300">{{ error }}</p>
+        <p class="text-[12px] leading-relaxed break-words text-red-300">{{ error }}</p>
       </div>
       <button
         type="button"
-        class="text-(--accent-color) mt-3 text-[11px] hover:underline"
+        class="mt-3 text-[11px] text-(--accent-color) hover:underline"
         @click="refetch"
       >
         Retry
@@ -52,9 +52,9 @@
       class="flex min-h-0 flex-1 flex-col items-center justify-center px-4 text-center"
     >
       <i
-        class="ri-bar-chart-box-line text-(--text-secondary) mb-3 text-4xl opacity-40"
+        class="ri-bar-chart-box-line mb-3 text-4xl text-(--text-secondary) opacity-40"
       ></i>
-      <p class="text-(--text-secondary) text-[12px] leading-relaxed">
+      <p class="text-[12px] leading-relaxed text-(--text-secondary)">
         QoR analysis is available after this step produces analysis artifacts.
       </p>
     </div>
@@ -63,13 +63,13 @@
       v-else-if="isEmpty"
       class="flex min-h-0 flex-1 flex-col items-center justify-center px-4 text-center"
     >
-      <i class="ri-file-chart-line text-(--text-secondary) mb-3 text-4xl opacity-40"></i>
-      <p class="text-(--text-secondary) text-[12px] leading-relaxed">
+      <i class="ri-file-chart-line mb-3 text-4xl text-(--text-secondary) opacity-40"></i>
+      <p class="text-[12px] leading-relaxed text-(--text-secondary)">
         This step has no detailed QoR analysis yet.
       </p>
       <p
         v-if="messages.length"
-        class="text-(--text-secondary) mt-2 text-[10px] leading-relaxed"
+        class="mt-2 text-[10px] leading-relaxed text-(--text-secondary)"
       >
         {{ messages.join(' ') }}
       </p>
@@ -78,7 +78,7 @@
     <div v-else class="min-h-0 flex-1 overflow-auto">
       <section
         v-if="integrity.status === 'incomplete' || warnings.length"
-        class="border-(--border-color) border-b px-3 py-2 text-[10px] text-amber-400"
+        class="border-b border-(--border-color) px-3 py-2 text-[10px] text-amber-400"
         aria-label="Step QoR analysis warnings"
       >
         <p v-if="integrity.status === 'incomplete'">
@@ -93,11 +93,11 @@
       </section>
       <section
         v-if="metrics.length"
-        class="border-(--border-color) border-b px-3 py-2"
+        class="border-b border-(--border-color) px-3 py-2"
         aria-label="Step QoR metric overview"
       >
         <div
-          class="text-(--text-secondary) mb-1 flex items-center justify-between gap-3 text-[10px]"
+          class="mb-1 flex items-center justify-between gap-3 text-[10px] text-(--text-secondary)"
         >
           <span>Metric overview</span>
           <span
@@ -119,8 +119,8 @@
             :key="metric.id"
             class="inline-flex min-w-0 gap-1"
           >
-            <span class="text-(--text-secondary) truncate">{{ metric.displayName }}</span>
-            <strong class="text-(--text-primary) shrink-0 font-medium">
+            <span class="truncate text-(--text-secondary)">{{ metric.displayName }}</span>
+            <strong class="shrink-0 font-medium text-(--text-primary)">
               {{ formatMetric(metric.value) }}{{ metric.unit ? ` ${metric.unit}` : '' }}
             </strong>
           </span>
@@ -132,7 +132,7 @@
 
       <section v-if="detail && kind === 'route'" class="min-w-max">
         <div
-          class="border-(--border-color) text-(--text-secondary) flex items-center justify-between border-b px-3 py-2 text-[10px]"
+          class="flex items-center justify-between border-b border-(--border-color) px-3 py-2 text-[10px] text-(--text-secondary)"
         >
           <span>{{ routeLayers.length }} layers</span>
           <span v-if="routeFinalIteration !== null"
@@ -144,10 +144,10 @@
           aria-label="Route layer QoR analysis"
         >
           <thead
-            class="bg-(--bg-secondary) text-(--text-secondary) sticky top-0 text-[10px]"
+            class="sticky top-0 bg-(--bg-secondary) text-[10px] text-(--text-secondary)"
           >
             <tr>
-              <th class="bg-(--bg-secondary) sticky left-0 z-10 px-3 py-2 font-semibold">
+              <th class="sticky left-0 z-10 bg-(--bg-secondary) px-3 py-2 font-semibold">
                 Layer
               </th>
               <th class="px-2 py-2 font-semibold">LA Demand</th>
@@ -164,10 +164,10 @@
             <tr
               v-for="layer in routeLayers"
               :key="layer.id"
-              class="border-(--border-color)/70 hover:bg-(--bg-hover) border-b"
+              class="border-b border-(--border-color)/70 hover:bg-(--bg-hover)"
             >
               <th
-                class="bg-(--bg-primary) text-(--text-primary) sticky left-0 px-3 py-2 font-medium"
+                class="sticky left-0 bg-(--bg-primary) px-3 py-2 font-medium text-(--text-primary)"
               >
                 {{ layer.label }}
               </th>
@@ -190,7 +190,7 @@
 
       <section v-else-if="detail && kind === 'place'" class="min-w-max">
         <div
-          class="border-(--border-color) text-(--text-secondary) border-b px-3 py-2 text-[10px]"
+          class="border-b border-(--border-color) px-3 py-2 text-[10px] text-(--text-secondary)"
         >
           {{ placeMaps.length }} declared map sources
         </div>
@@ -199,7 +199,7 @@
           aria-label="Place map QoR analysis"
         >
           <thead
-            class="bg-(--bg-secondary) text-(--text-secondary) sticky top-0 text-[10px]"
+            class="sticky top-0 bg-(--bg-secondary) text-[10px] text-(--text-secondary)"
           >
             <tr>
               <th class="px-3 py-2 font-semibold">Group</th>
@@ -215,12 +215,12 @@
             <tr
               v-for="map in placeMaps"
               :key="map.id"
-              class="border-(--border-color)/70 hover:bg-(--bg-hover) border-b"
+              class="border-b border-(--border-color)/70 hover:bg-(--bg-hover)"
               :title="map.sourceFile"
             >
-              <td class="text-(--text-primary) px-3 py-2 font-medium">{{ map.group }}</td>
+              <td class="px-3 py-2 font-medium text-(--text-primary)">{{ map.group }}</td>
               <td class="px-2 py-2">{{ map.metric }}</td>
-              <td class="text-(--text-secondary) px-2 py-2">
+              <td class="px-2 py-2 text-(--text-secondary)">
                 {{ map.direction || '-' }}
               </td>
               <td class="px-2 py-2">{{ formatMetric(map.max) }}</td>
@@ -238,7 +238,7 @@
 
       <section v-else-if="detail && kind === 'rcx'" class="min-w-max">
         <div
-          class="border-(--border-color) text-(--text-secondary) flex items-center justify-between border-b px-3 py-2 text-[10px]"
+          class="flex items-center justify-between border-b border-(--border-color) px-3 py-2 text-[10px] text-(--text-secondary)"
         >
           <span>{{ rcxCoverage.status || 'unavailable' }} RC corner coverage</span>
           <span
@@ -253,7 +253,7 @@
           aria-label="RCX parasitic corner analysis"
         >
           <thead
-            class="bg-(--bg-secondary) text-(--text-secondary) sticky top-0 text-[10px]"
+            class="sticky top-0 bg-(--bg-secondary) text-[10px] text-(--text-secondary)"
           >
             <tr>
               <th class="px-3 py-2 font-semibold">RC corner</th>
@@ -267,9 +267,9 @@
             <tr
               v-for="corner in rcxCorners"
               :key="corner.id"
-              class="border-(--border-color)/70 hover:bg-(--bg-hover) border-b"
+              class="border-b border-(--border-color)/70 hover:bg-(--bg-hover)"
             >
-              <th class="text-(--text-primary) px-3 py-2 font-medium">
+              <th class="px-3 py-2 font-medium text-(--text-primary)">
                 {{ corner.label }}
               </th>
               <td class="px-2 py-2" :class="rcxStatusClass(corner.availability)">
@@ -285,7 +285,7 @@
 
       <section v-else-if="detail && kind === 'sta'" class="min-w-max">
         <div
-          class="border-(--border-color) flex border-b px-3 pt-2"
+          class="flex border-b border-(--border-color) px-3 pt-2"
           role="tablist"
           aria-label="STA QoR analysis view"
         >
@@ -314,7 +314,7 @@
           aria-label="STA path group summary"
         >
           <thead
-            class="bg-(--bg-secondary) text-(--text-secondary) sticky top-0 text-[10px]"
+            class="sticky top-0 bg-(--bg-secondary) text-[10px] text-(--text-secondary)"
           >
             <tr>
               <th class="px-3 py-2 font-semibold">Path group</th>
@@ -331,10 +331,10 @@
             <tr
               v-for="group in staGroups"
               :key="group.name"
-              class="border-(--border-color)/70 hover:bg-(--bg-hover) border-b"
+              class="border-b border-(--border-color)/70 hover:bg-(--bg-hover)"
             >
               <th
-                class="text-(--text-primary) px-3 py-2 font-medium"
+                class="px-3 py-2 font-medium text-(--text-primary)"
                 :title="group.cornerHint"
               >
                 {{ group.name }}
@@ -367,7 +367,7 @@
           aria-label="STA corner path group records"
         >
           <thead
-            class="bg-(--bg-secondary) text-(--text-secondary) sticky top-0 text-[10px]"
+            class="sticky top-0 bg-(--bg-secondary) text-[10px] text-(--text-secondary)"
           >
             <tr>
               <th class="px-3 py-2 font-semibold">PVT + RC corner</th>
@@ -385,11 +385,11 @@
             <tr
               v-for="record in staRecords"
               :key="record.id"
-              class="border-(--border-color)/70 hover:bg-(--bg-hover) border-b"
+              class="border-b border-(--border-color)/70 hover:bg-(--bg-hover)"
               :title="record.sourceFile"
             >
               <th
-                class="text-(--text-primary) px-3 py-2 font-medium"
+                class="px-3 py-2 font-medium text-(--text-primary)"
                 :title="record.corner"
               >
                 {{ record.cornerLabel }}
@@ -421,7 +421,7 @@
 
       <footer
         v-if="metricsPath"
-        class="border-(--border-color) text-(--text-secondary) border-t px-3 py-2 text-[10px]"
+        class="border-t border-(--border-color) px-3 py-2 text-[10px] text-(--text-secondary)"
         :title="metricsPath"
       >
         {{ sourceFileName(metricsPath) }}

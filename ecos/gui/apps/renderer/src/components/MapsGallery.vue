@@ -8,23 +8,23 @@
         @click="handleMapClick(key as string, item)"
         :class="[
           'group relative cursor-pointer overflow-hidden rounded-lg',
-          'border-(--border-color)/50 bg-(--bg-secondary) border',
+          'border border-(--border-color)/50 bg-(--bg-secondary)',
           'transition-all duration-200 ease-out',
           'hover:border-(--accent-color)/50 hover:shadow-(--accent-color)/10 hover:shadow-md',
           'hover:-translate-y-0.5',
           selectedKey === key
-            ? 'border-(--accent-color) ring-(--accent-color) ring-2'
+            ? 'border-(--accent-color) ring-2 ring-(--accent-color)'
             : '',
         ]"
       >
         <!-- 图片容器 -->
-        <div class="aspect-4/3 bg-(--bg-tertiary) relative overflow-hidden">
+        <div class="relative aspect-4/3 overflow-hidden bg-(--bg-tertiary)">
           <!-- 加载状态 -->
           <div
             v-if="loadingImages[key as string]"
             class="absolute inset-0 flex items-center justify-center"
           >
-            <i class="ri-loader-4-line text-(--accent-color) animate-spin text-lg"></i>
+            <i class="ri-loader-4-line animate-spin text-lg text-(--accent-color)"></i>
           </div>
 
           <!-- 图片 -->
@@ -41,20 +41,20 @@
           <!-- 加载失败占位 -->
           <div
             v-if="errorImages[key as string]"
-            class="text-(--text-secondary)/50 absolute inset-0 flex flex-col items-center justify-center"
+            class="absolute inset-0 flex flex-col items-center justify-center text-(--text-secondary)/50"
           >
             <i class="ri-image-line text-lg"></i>
           </div>
 
           <!-- 悬浮遮罩 -->
           <div
-            class="bg-linear-to-t absolute inset-0 from-black/50 to-transparent opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+            class="absolute inset-0 bg-linear-to-t from-black/50 to-transparent opacity-0 transition-opacity duration-200 group-hover:opacity-100"
           ></div>
 
           <!-- 选中标记 -->
-          <div v-if="selectedKey === key" class="absolute right-1 top-1">
+          <div v-if="selectedKey === key" class="absolute top-1 right-1">
             <div
-              class="bg-(--accent-color) flex h-4 w-4 items-center justify-center rounded-full"
+              class="flex h-4 w-4 items-center justify-center rounded-full bg-(--accent-color)"
             >
               <i class="ri-check-line text-[10px] text-white"></i>
             </div>
@@ -64,7 +64,7 @@
         <!-- 标题 -->
         <div class="p-1.5">
           <h4
-            class="text-(--text-primary) group-hover:text-(--accent-color) truncate text-[10px] font-medium transition-colors"
+            class="truncate text-[10px] font-medium text-(--text-primary) transition-colors group-hover:text-(--accent-color)"
           >
             {{ formatMapName(key as string) }}
           </h4>
@@ -77,8 +77,8 @@
       v-if="Object.keys(mapsData).length === 0"
       class="flex flex-col items-center justify-center py-8"
     >
-      <i class="ri-image-line text-(--text-secondary)/30 mb-2 text-4xl"></i>
-      <p class="text-(--text-secondary) text-xs">No data</p>
+      <i class="ri-image-line mb-2 text-4xl text-(--text-secondary)/30"></i>
+      <p class="text-xs text-(--text-secondary)">No data</p>
     </div>
   </div>
 </template>

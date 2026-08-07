@@ -2,32 +2,32 @@
   <div class="design-file-transfer">
     <div class="mb-3 flex items-center justify-between gap-3">
       <div class="min-w-0">
-        <h4 class="text-(--text-primary) text-sm font-semibold">Directory Selection</h4>
-        <p class="text-(--text-secondary) mt-0.5 truncate text-xs" :title="rootPath">
+        <h4 class="text-sm font-semibold text-(--text-primary)">Directory Selection</h4>
+        <p class="mt-0.5 truncate text-xs text-(--text-secondary)" :title="rootPath">
           {{ rootPath }}
         </p>
       </div>
-      <span class="text-(--text-secondary) shrink-0 text-xs font-medium">
+      <span class="shrink-0 text-xs font-medium text-(--text-secondary)">
         {{ selectedFiles.length }} / {{ allFiles.length }} selected
       </span>
     </div>
 
     <div class="flex min-h-64 gap-3">
       <div
-        class="border-(--border-color) bg-(--bg-secondary)/20 flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border"
+        class="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-(--border-color) bg-(--bg-secondary)/20"
       >
         <div
-          class="border-(--border-color)/60 bg-(--bg-secondary)/40 border-b px-4 py-2.5"
+          class="border-b border-(--border-color)/60 bg-(--bg-secondary)/40 px-4 py-2.5"
         >
           <span
-            class="text-(--text-secondary) text-xs font-semibold uppercase tracking-wider"
+            class="text-xs font-semibold tracking-wider text-(--text-secondary) uppercase"
             >Available Files</span
           >
         </div>
         <div class="custom-scrollbar flex-1 overflow-y-auto p-2">
           <p
             v-if="availableFiles.length === 0"
-            class="text-(--text-secondary) px-2 py-4 text-center text-xs"
+            class="px-2 py-4 text-center text-xs text-(--text-secondary)"
           >
             All RTL files in this directory are selected.
           </p>
@@ -82,20 +82,20 @@
       </div>
 
       <div
-        class="border-(--border-color) bg-(--bg-secondary)/20 flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border"
+        class="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-(--border-color) bg-(--bg-secondary)/20"
       >
         <div
-          class="border-(--border-color)/60 bg-(--bg-secondary)/40 border-b px-4 py-2.5"
+          class="border-b border-(--border-color)/60 bg-(--bg-secondary)/40 px-4 py-2.5"
         >
           <span
-            class="text-(--text-secondary) text-xs font-semibold uppercase tracking-wider"
+            class="text-xs font-semibold tracking-wider text-(--text-secondary) uppercase"
             >Selected Files</span
           >
         </div>
         <div class="custom-scrollbar flex-1 space-y-1 overflow-y-auto p-2">
           <p
             v-if="selectedFiles.length === 0"
-            class="text-(--text-secondary) px-2 py-4 text-center text-xs"
+            class="px-2 py-4 text-center text-xs text-(--text-secondary)"
           >
             No RTL files selected from this directory.
           </p>
@@ -106,15 +106,15 @@
             class="flex w-full cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors duration-200"
             :class="
               rightSelection.includes(file)
-                ? 'border-(--accent-color)/30 bg-(--accent-color)/10 border'
-                : 'hover:bg-(--bg-secondary)/60 border border-transparent'
+                ? 'border border-(--accent-color)/30 bg-(--accent-color)/10'
+                : 'border border-transparent hover:bg-(--bg-secondary)/60'
             "
             :title="`${displayRelativePath(file)} — double-click to remove`"
             @click="toggleRightSelection(file)"
             @dblclick.prevent="removeFile(file)"
           >
             <i class="ri-file-code-line shrink-0 text-blue-500"></i>
-            <span class="text-(--text-primary) truncate text-sm" :title="file">{{
+            <span class="truncate text-sm text-(--text-primary)" :title="file">{{
               displayRelativePath(file)
             }}</span>
           </button>

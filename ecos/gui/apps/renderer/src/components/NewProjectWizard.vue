@@ -4,11 +4,11 @@
     @click.self="closeWizard"
   >
     <div
-      class="new-workspace-wizard-panel border-(--border-color) bg-(--bg-primary) relative flex h-[88vh] max-h-[900px] w-full max-w-6xl flex-col overflow-hidden rounded-[20px] border shadow-[0_28px_70px_-24px_rgba(0,0,0,0.55)]"
+      class="new-workspace-wizard-panel relative flex h-[88vh] max-h-[900px] w-full max-w-6xl flex-col overflow-hidden rounded-[20px] border border-(--border-color) bg-(--bg-primary) shadow-[0_28px_70px_-24px_rgba(0,0,0,0.55)]"
     >
       <button
         @click="closeWizard"
-        class="border-(--border-color) bg-(--bg-secondary)/60 text-(--text-secondary) hover:bg-(--bg-secondary) hover:text-(--text-primary) absolute right-5 top-5 z-20 flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border transition-colors duration-200"
+        class="absolute top-5 right-5 z-20 flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-(--border-color) bg-(--bg-secondary)/60 text-(--text-secondary) transition-colors duration-200 hover:bg-(--bg-secondary) hover:text-(--text-primary)"
         title="Close"
       >
         <i class="ri-close-line text-lg"></i>
@@ -16,19 +16,19 @@
 
       <div class="flex min-h-0 flex-1 flex-col md:flex-row">
         <aside
-          class="border-(--border-color) bg-(--bg-secondary)/35 flex w-full shrink-0 flex-col border-b p-6 md:w-72 md:border-b-0 md:border-r"
+          class="flex w-full shrink-0 flex-col border-b border-(--border-color) bg-(--bg-secondary)/35 p-6 md:w-72 md:border-r md:border-b-0"
         >
           <div class="mb-7">
-            <h1 class="text-(--text-primary) text-2xl font-bold">{{ wizardTitle }}</h1>
-            <p class="text-(--text-secondary) mt-1 text-sm">
+            <h1 class="text-2xl font-bold text-(--text-primary)">{{ wizardTitle }}</h1>
+            <p class="mt-1 text-sm text-(--text-secondary)">
               Build a project-scoped RTL2GDS workspace.
             </p>
             <div
               v-if="sourceContext"
-              class="border-(--accent-color)/35 bg-(--accent-color)/10 mt-4 rounded-lg border p-3 text-xs"
+              class="mt-4 rounded-lg border border-(--accent-color)/35 bg-(--accent-color)/10 p-3 text-xs"
             >
-              <p class="text-(--text-primary) font-bold">Created from</p>
-              <p class="text-(--text-secondary) mt-1 truncate">
+              <p class="font-bold text-(--text-primary)">Created from</p>
+              <p class="mt-1 truncate text-(--text-secondary)">
                 {{ sourceContext.projectName || projectContext.project_name }} /
                 {{ sourceContext.workspaceName || sourceContext.workspaceId }} /
                 {{ sourceContext.step }} output
@@ -47,7 +47,7 @@
                   ? 'border-(--accent-color) bg-(--accent-color)/10 text-(--text-primary)'
                   : step.id <= highestStep
                     ? 'border-(--border-color) bg-(--bg-primary)/65 text-(--text-primary) hover:border-(--accent-color)/50'
-                    : 'border-(--border-color)/70 text-(--text-secondary) bg-transparent',
+                    : 'border-(--border-color)/70 bg-transparent text-(--text-secondary)',
               ]"
               @click="handleStepClick(step.id)"
             >
@@ -68,7 +68,7 @@
                 <span class="block truncate text-sm font-semibold">{{ step.title }}</span>
                 <span
                   v-if="currentStep === step.id"
-                  class="text-(--accent-color) mt-0.5 block text-[11px] font-semibold uppercase tracking-wide"
+                  class="mt-0.5 block text-[11px] font-semibold tracking-wide text-(--accent-color) uppercase"
                   >Active</span
                 >
               </span>
@@ -92,8 +92,8 @@
                 class="mx-auto w-full max-w-3xl"
               >
                 <header class="mb-7">
-                  <h2 class="text-(--text-primary) text-2xl font-bold">Project Setup</h2>
-                  <p class="text-(--text-secondary) mt-2 text-sm">
+                  <h2 class="text-2xl font-bold text-(--text-primary)">Project Setup</h2>
+                  <p class="mt-2 text-sm text-(--text-secondary)">
                     Choose the project that will own this workspace, or define a project
                     root for a new project.
                   </p>
@@ -108,10 +108,10 @@
                 </div>
 
                 <div
-                  class="border-(--border-color) bg-(--bg-secondary)/20 rounded-xl border p-5"
+                  class="rounded-xl border border-(--border-color) bg-(--bg-secondary)/20 p-5"
                 >
                   <div
-                    class="border-(--border-color) bg-(--bg-primary)/80 mb-5 inline-flex rounded-lg border p-1"
+                    class="mb-5 inline-flex rounded-lg border border-(--border-color) bg-(--bg-primary)/80 p-1"
                   >
                     <button
                       type="button"
@@ -142,7 +142,7 @@
                   <div v-if="projectContext.mode === 'select'" class="space-y-5">
                     <div>
                       <label
-                        class="text-(--text-primary) mb-2 block text-sm font-semibold"
+                        class="mb-2 block text-sm font-semibold text-(--text-primary)"
                         >Project Root <span class="text-red-500">*</span></label
                       >
                       <div class="flex gap-3">
@@ -151,12 +151,12 @@
                           readonly
                           type="text"
                           placeholder="/projects/gcd_backend"
-                          class="border-(--border-color) bg-(--bg-primary)/75 text-(--text-primary) min-w-0 flex-1 rounded-lg border px-3 py-2.5 text-sm outline-none"
+                          class="min-w-0 flex-1 rounded-lg border border-(--border-color) bg-(--bg-primary)/75 px-3 py-2.5 text-sm text-(--text-primary) outline-none"
                           @click="selectProjectRoot"
                         />
                         <button
                           type="button"
-                          class="border-(--border-color) bg-(--bg-primary)/75 text-(--text-primary) hover:bg-(--bg-secondary) inline-flex shrink-0 items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold transition-colors duration-200"
+                          class="inline-flex shrink-0 items-center gap-2 rounded-lg border border-(--border-color) bg-(--bg-primary)/75 px-4 py-2.5 text-sm font-semibold text-(--text-primary) transition-colors duration-200 hover:bg-(--bg-secondary)"
                           @click="selectProjectRoot"
                         >
                           <i class="ri-folder-open-line"></i>
@@ -167,14 +167,14 @@
 
                     <div
                       v-if="projectHistory.length > 0"
-                      class="border-(--border-color) bg-(--bg-primary)/55 rounded-lg border p-3"
+                      class="rounded-lg border border-(--border-color) bg-(--bg-primary)/55 p-3"
                     >
                       <div class="mb-3 flex items-center justify-between gap-3">
                         <span
-                          class="text-(--text-secondary) text-xs font-semibold uppercase tracking-wide"
+                          class="text-xs font-semibold tracking-wide text-(--text-secondary) uppercase"
                           >Recent Projects</span
                         >
-                        <span class="text-(--text-secondary) text-[11px]"
+                        <span class="text-[11px] text-(--text-secondary)"
                           >{{ projectHistory.length }} projects</span
                         >
                       </div>
@@ -196,44 +196,44 @@
                         >
                           <span class="min-w-0">
                             <span
-                              class="text-(--text-primary) block truncate text-sm font-semibold"
+                              class="block truncate text-sm font-semibold text-(--text-primary)"
                               >{{ project.name }}</span
                             >
                             <span
-                              class="text-(--text-secondary) mt-0.5 block truncate font-mono text-[11px]"
+                              class="mt-0.5 block truncate font-mono text-[11px] text-(--text-secondary)"
                               :title="project.path"
                               >{{ project.path }}</span
                             >
                           </span>
                           <i
-                            class="ri-arrow-right-s-line text-(--text-secondary) shrink-0"
+                            class="ri-arrow-right-s-line shrink-0 text-(--text-secondary)"
                           ></i>
                         </button>
                       </div>
                     </div>
                     <p
                       v-else-if="isLoadingProjectHistory"
-                      class="text-(--text-secondary) text-xs"
+                      class="text-xs text-(--text-secondary)"
                     >
                       Loading recent projects...
                     </p>
                     <p
                       v-else-if="projectHistoryError"
-                      class="text-(--text-secondary) text-xs"
+                      class="text-xs text-(--text-secondary)"
                     >
                       {{ projectHistoryError }}
                     </p>
 
                     <div>
                       <label
-                        class="text-(--text-primary) mb-2 block text-sm font-semibold"
+                        class="mb-2 block text-sm font-semibold text-(--text-primary)"
                         >Project Name</label
                       >
                       <input
                         v-model="projectContext.project_name"
                         type="text"
                         placeholder="gcd_backend"
-                        class="border-(--border-color) bg-(--bg-primary)/75 text-(--text-primary) focus:border-(--accent-color) w-full rounded-lg border px-3 py-2.5 text-sm outline-none"
+                        class="w-full rounded-lg border border-(--border-color) bg-(--bg-primary)/75 px-3 py-2.5 text-sm text-(--text-primary) outline-none focus:border-(--accent-color)"
                       />
                     </div>
                   </div>
@@ -241,14 +241,14 @@
                   <div v-else class="space-y-5">
                     <div>
                       <label
-                        class="text-(--text-primary) mb-2 block text-sm font-semibold"
+                        class="mb-2 block text-sm font-semibold text-(--text-primary)"
                         >Project Name <span class="text-red-500">*</span></label
                       >
                       <input
                         v-model="projectContext.project_name"
                         type="text"
                         placeholder="gcd_backend"
-                        class="border-(--border-color) bg-(--bg-primary)/75 text-(--text-primary) focus:border-(--accent-color) w-full rounded-lg border px-3 py-2.5 text-sm outline-none"
+                        class="w-full rounded-lg border border-(--border-color) bg-(--bg-primary)/75 px-3 py-2.5 text-sm text-(--text-primary) outline-none focus:border-(--accent-color)"
                       />
                       <p v-if="projectNameError" class="mt-2 text-xs text-red-500">
                         {{ projectNameError }}
@@ -257,7 +257,7 @@
 
                     <div>
                       <label
-                        class="text-(--text-primary) mb-2 block text-sm font-semibold"
+                        class="mb-2 block text-sm font-semibold text-(--text-primary)"
                         >Project Parent Path <span class="text-red-500">*</span></label
                       >
                       <div class="flex gap-3">
@@ -266,12 +266,12 @@
                           readonly
                           type="text"
                           placeholder="/projects"
-                          class="border-(--border-color) bg-(--bg-primary)/75 text-(--text-primary) min-w-0 flex-1 rounded-lg border px-3 py-2.5 text-sm outline-none"
+                          class="min-w-0 flex-1 rounded-lg border border-(--border-color) bg-(--bg-primary)/75 px-3 py-2.5 text-sm text-(--text-primary) outline-none"
                           @click="selectProjectParentPath"
                         />
                         <button
                           type="button"
-                          class="border-(--border-color) bg-(--bg-primary)/75 text-(--text-primary) hover:bg-(--bg-secondary) inline-flex shrink-0 items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold transition-colors duration-200"
+                          class="inline-flex shrink-0 items-center gap-2 rounded-lg border border-(--border-color) bg-(--bg-primary)/75 px-4 py-2.5 text-sm font-semibold text-(--text-primary) transition-colors duration-200 hover:bg-(--bg-secondary)"
                           @click="selectProjectParentPath"
                         >
                           <i class="ri-folder-open-line"></i>
@@ -282,16 +282,16 @@
                   </div>
 
                   <div
-                    class="border-(--border-color) bg-(--bg-primary)/70 mt-6 rounded-lg border p-4"
+                    class="mt-6 rounded-lg border border-(--border-color) bg-(--bg-primary)/70 p-4"
                   >
                     <div class="grid gap-3 text-sm md:grid-cols-2">
                       <div>
                         <span
-                          class="text-(--text-secondary) block text-xs font-semibold uppercase tracking-wide"
+                          class="block text-xs font-semibold tracking-wide text-(--text-secondary) uppercase"
                           >Project Path</span
                         >
                         <p
-                          class="text-(--text-primary) mt-1 truncate font-mono"
+                          class="mt-1 truncate font-mono text-(--text-primary)"
                           :title="projectContext.project_root"
                         >
                           {{ projectContext.project_root || '-' }}
@@ -299,11 +299,11 @@
                       </div>
                       <div>
                         <span
-                          class="text-(--text-secondary) block text-xs font-semibold uppercase tracking-wide"
+                          class="block text-xs font-semibold tracking-wide text-(--text-secondary) uppercase"
                           >Project Metadata</span
                         >
                         <p
-                          class="text-(--text-primary) mt-1 truncate font-mono"
+                          class="mt-1 truncate font-mono text-(--text-primary)"
                           :title="projectContext.project_json_path"
                         >
                           {{ projectContext.project_json_path || '-' }}
@@ -320,17 +320,17 @@
                 class="mx-auto w-full max-w-3xl"
               >
                 <header class="mb-7">
-                  <h2 class="text-(--text-primary) text-2xl font-bold">Basic Info</h2>
-                  <p class="text-(--text-secondary) mt-2 text-sm">
+                  <h2 class="text-2xl font-bold text-(--text-primary)">Basic Info</h2>
+                  <p class="mt-2 text-sm text-(--text-secondary)">
                     Name the workspace and confirm where it will be created.
                   </p>
                 </header>
 
                 <div
-                  class="border-(--border-color) bg-(--bg-secondary)/20 space-y-6 rounded-xl border p-5"
+                  class="space-y-6 rounded-xl border border-(--border-color) bg-(--bg-secondary)/20 p-5"
                 >
                   <div>
-                    <label class="text-(--text-primary) mb-2 block text-sm font-semibold"
+                    <label class="mb-2 block text-sm font-semibold text-(--text-primary)"
                       >Workspace Name <span class="text-red-500">*</span></label
                     >
                     <input
@@ -338,7 +338,7 @@
                       type="text"
                       placeholder="density_065_from_floorplan"
                       :disabled="lockWorkspaceDirectory"
-                      class="text-(--text-primary) w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition-colors duration-200"
+                      class="w-full rounded-lg border px-3 py-2.5 text-sm text-(--text-primary) transition-colors duration-200 outline-none"
                       :class="
                         workspaceNameError
                           ? 'border-red-500 bg-red-500/5'
@@ -354,31 +354,31 @@
                   </div>
 
                   <div>
-                    <label class="text-(--text-primary) mb-2 block text-sm font-semibold"
+                    <label class="mb-2 block text-sm font-semibold text-(--text-primary)"
                       >Description</label
                     >
                     <textarea
                       v-model="config.parameters.description"
                       rows="3"
                       placeholder="Optional workspace notes"
-                      class="border-(--border-color) bg-(--bg-primary)/75 text-(--text-primary) focus:border-(--accent-color) w-full resize-none rounded-lg border px-3 py-2.5 text-sm outline-none"
+                      class="w-full resize-none rounded-lg border border-(--border-color) bg-(--bg-primary)/75 px-3 py-2.5 text-sm text-(--text-primary) outline-none focus:border-(--accent-color)"
                     ></textarea>
                   </div>
 
                   <div>
-                    <label class="text-(--text-primary) mb-2 block text-sm font-semibold"
+                    <label class="mb-2 block text-sm font-semibold text-(--text-primary)"
                       >Workspace Location</label
                     >
                     <div
-                      class="border-(--border-color) bg-(--bg-primary)/75 rounded-lg border px-3 py-3"
+                      class="rounded-lg border border-(--border-color) bg-(--bg-primary)/75 px-3 py-3"
                     >
                       <p
-                        class="text-(--text-primary) truncate font-mono text-sm"
+                        class="truncate font-mono text-sm text-(--text-primary)"
                         :title="workspaceLocation"
                       >
                         {{ workspaceLocation || '-' }}
                       </p>
-                      <p class="text-(--text-secondary) mt-2 text-xs">
+                      <p class="mt-2 text-xs text-(--text-secondary)">
                         project root + Workspace Name
                       </p>
                     </div>
@@ -387,7 +387,7 @@
                     </p>
                     <p
                       v-else-if="managedWorkspacePreview"
-                      class="text-(--text-secondary) mt-2 text-xs"
+                      class="mt-2 text-xs text-(--text-secondary)"
                     >
                       Workspace will be created at {{ managedWorkspacePreview }}.
                     </p>
@@ -401,42 +401,42 @@
                 class="mx-auto w-full max-w-5xl"
               >
                 <header class="mb-7">
-                  <h2 class="text-(--text-primary) text-2xl font-bold">Flow Setup</h2>
-                  <p class="text-(--text-secondary) mt-2 text-sm">
+                  <h2 class="text-2xl font-bold text-(--text-primary)">Flow Setup</h2>
+                  <p class="mt-2 text-sm text-(--text-secondary)">
                     Select a continuous harden flow range. Step order remains fixed.
                   </p>
                 </header>
 
                 <div
-                  class="border-(--border-color) bg-(--bg-secondary)/20 rounded-xl border p-5"
+                  class="rounded-xl border border-(--border-color) bg-(--bg-secondary)/20 p-5"
                 >
                   <div
-                    class="border-(--border-color) bg-(--bg-primary)/70 mb-5 grid gap-3 rounded-lg border p-4 text-sm md:grid-cols-3"
+                    class="mb-5 grid gap-3 rounded-lg border border-(--border-color) bg-(--bg-primary)/70 p-4 text-sm md:grid-cols-3"
                   >
                     <div>
                       <span
-                        class="text-(--text-secondary) block text-xs font-semibold uppercase tracking-wide"
+                        class="block text-xs font-semibold tracking-wide text-(--text-secondary) uppercase"
                         >Start Step</span
                       >
-                      <p class="text-(--text-primary) mt-1 font-semibold">
+                      <p class="mt-1 font-semibold text-(--text-primary)">
                         {{ flowStartStep }}
                       </p>
                     </div>
                     <div>
                       <span
-                        class="text-(--text-secondary) block text-xs font-semibold uppercase tracking-wide"
+                        class="block text-xs font-semibold tracking-wide text-(--text-secondary) uppercase"
                         >End Step</span
                       >
-                      <p class="text-(--text-primary) mt-1 font-semibold">
+                      <p class="mt-1 font-semibold text-(--text-primary)">
                         {{ flowEndStep }}
                       </p>
                     </div>
                     <div>
                       <span
-                        class="text-(--text-secondary) block text-xs font-semibold uppercase tracking-wide"
+                        class="block text-xs font-semibold tracking-wide text-(--text-secondary) uppercase"
                         >Selected Steps</span
                       >
-                      <p class="text-(--text-primary) mt-1 font-semibold">
+                      <p class="mt-1 font-semibold text-(--text-primary)">
                         {{ selectedFlowSteps.length }}
                       </p>
                     </div>
@@ -444,7 +444,7 @@
 
                   <p
                     v-if="sourceContext"
-                    class="border-(--border-color) bg-(--bg-primary)/60 text-(--text-secondary) mb-5 rounded-lg border px-4 py-3 text-xs"
+                    class="mb-5 rounded-lg border border-(--border-color) bg-(--bg-primary)/60 px-4 py-3 text-xs text-(--text-secondary)"
                   >
                     Cannot select steps before the source output. This workspace starts at
                     {{ sourceContext.startStep || flowStartStep }} and reuses previous
@@ -463,7 +463,7 @@
                         class="flex min-h-[104px] w-full cursor-pointer flex-col rounded-xl border p-4 text-left transition-colors duration-200"
                         :class="[
                           isFlowStepLocked(step.name)
-                            ? 'border-(--border-color)/60 bg-(--bg-secondary)/25 cursor-not-allowed opacity-45'
+                            ? 'cursor-not-allowed border-(--border-color)/60 bg-(--bg-secondary)/25 opacity-45'
                             : isFlowStepSelected(step.name)
                               ? 'border-(--accent-color) bg-(--accent-color)/10'
                               : 'border-(--border-color) bg-(--bg-primary)/65 hover:border-(--accent-color)/45',
@@ -483,23 +483,23 @@
                             >
                               <span>{{ index + 1 }}</span>
                             </span>
-                            <span class="text-(--text-primary) font-semibold">{{
+                            <span class="font-semibold text-(--text-primary)">{{
                               step.name
                             }}</span>
                           </span>
                           <input
                             type="checkbox"
-                            class="accent-(--accent-color) h-4 w-4"
+                            class="h-4 w-4 accent-(--accent-color)"
                             :checked="isFlowStepSelected(step.name)"
                             readonly
                           />
                         </span>
-                        <span class="text-(--text-secondary) text-xs leading-5">{{
+                        <span class="text-xs leading-5 text-(--text-secondary)">{{
                           step.description
                         }}</span>
                         <span
                           v-if="isFlowStepLocked(step.name)"
-                          class="text-(--text-secondary) mt-2 text-[11px] font-semibold"
+                          class="mt-2 text-[11px] font-semibold text-(--text-secondary)"
                         >
                           Reused from source
                         </span>
@@ -523,18 +523,18 @@
                 class="mx-auto w-full max-w-5xl"
               >
                 <header class="mb-7">
-                  <h2 class="text-(--text-primary) text-2xl font-bold">Design Files</h2>
-                  <p class="text-(--text-secondary) mt-2 text-sm">
+                  <h2 class="text-2xl font-bold text-(--text-primary)">Design Files</h2>
+                  <p class="mt-2 text-sm text-(--text-secondary)">
                     Inputs adapt to the first selected flow step. Constraints are imported
                     here.
                   </p>
                 </header>
 
                 <div
-                  class="border-(--border-color) bg-(--bg-secondary)/20 grid min-h-[520px] overflow-hidden rounded-xl border lg:grid-cols-[240px_1fr]"
+                  class="grid min-h-[520px] overflow-hidden rounded-xl border border-(--border-color) bg-(--bg-secondary)/20 lg:grid-cols-[240px_1fr]"
                 >
                   <nav
-                    class="border-(--border-color) bg-(--bg-primary)/60 border-b p-3 lg:border-b-0 lg:border-r"
+                    class="border-b border-(--border-color) bg-(--bg-primary)/60 p-3 lg:border-r lg:border-b-0"
                   >
                     <button
                       v-for="item in designInputTypes"
@@ -544,15 +544,15 @@
                       :class="
                         activeDesignInputType === item.key
                           ? 'border-(--accent-color) bg-(--accent-color)/10'
-                          : 'hover:border-(--border-color) hover:bg-(--bg-secondary)/60 border-transparent'
+                          : 'border-transparent hover:border-(--border-color) hover:bg-(--bg-secondary)/60'
                       "
                       @click="activeDesignInputType = item.key"
                     >
                       <span>
-                        <span class="text-(--text-primary) block text-sm font-semibold">{{
+                        <span class="block text-sm font-semibold text-(--text-primary)">{{
                           item.label
                         }}</span>
-                        <span class="text-(--text-secondary) mt-1 block text-xs">{{
+                        <span class="mt-1 block text-xs text-(--text-secondary)">{{
                           item.required ? 'Required' : 'Optional'
                         }}</span>
                       </span>
@@ -580,21 +580,21 @@
                         "
                       >
                         <div
-                          class="border-(--border-color) bg-(--bg-secondary)/50 text-(--text-secondary) mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl border"
+                          class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl border border-(--border-color) bg-(--bg-secondary)/50 text-(--text-secondary)"
                         >
                           <i class="ri-upload-cloud-2-line text-3xl"></i>
                         </div>
-                        <h3 class="text-(--text-primary) text-base font-bold">
+                        <h3 class="text-base font-bold text-(--text-primary)">
                           Add RTL Design Files
                         </h3>
-                        <p class="text-(--text-secondary) mt-2 text-sm">
+                        <p class="mt-2 text-sm text-(--text-secondary)">
                           Supports .v, .sv, .vhd, .vhdl, and .gz-compressed RTL files or a
                           design folder.
                         </p>
                         <div class="relative mt-5 inline-block">
                           <button
                             type="button"
-                            class="bg-(--accent-color) inline-flex cursor-pointer items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-opacity duration-200 hover:opacity-90"
+                            class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-(--accent-color) px-5 py-2.5 text-sm font-semibold text-white transition-opacity duration-200 hover:opacity-90"
                             @click="toggleBrowseMenu"
                           >
                             Browse
@@ -605,11 +605,11 @@
                           </button>
                           <div
                             v-if="showBrowseMenu"
-                            class="border-(--border-color) bg-(--bg-primary) absolute left-1/2 top-[calc(100%+0.5rem)] z-20 w-60 -translate-x-1/2 overflow-hidden rounded-lg border shadow-lg"
+                            class="absolute top-[calc(100%+0.5rem)] left-1/2 z-20 w-60 -translate-x-1/2 overflow-hidden rounded-lg border border-(--border-color) bg-(--bg-primary) shadow-lg"
                           >
                             <button
                               type="button"
-                              class="text-(--text-primary) hover:bg-(--bg-secondary)/60 flex w-full cursor-pointer items-center gap-2 px-4 py-3 text-left text-sm transition-colors duration-200"
+                              class="flex w-full cursor-pointer items-center gap-2 px-4 py-3 text-left text-sm text-(--text-primary) transition-colors duration-200 hover:bg-(--bg-secondary)/60"
                               @click="browseRtlFiles"
                             >
                               <i class="ri-file-code-line text-blue-500"></i>
@@ -617,7 +617,7 @@
                             </button>
                             <button
                               type="button"
-                              class="border-(--border-color)/60 text-(--text-primary) hover:bg-(--bg-secondary)/60 flex w-full cursor-pointer items-center gap-2 border-t px-4 py-3 text-left text-sm transition-colors duration-200"
+                              class="flex w-full cursor-pointer items-center gap-2 border-t border-(--border-color)/60 px-4 py-3 text-left text-sm text-(--text-primary) transition-colors duration-200 hover:bg-(--bg-secondary)/60"
                               @click="browseRtlFolder"
                             >
                               <i class="ri-folder-open-line text-yellow-500"></i>
@@ -636,7 +636,7 @@
                         </p>
                         <p
                           v-else-if="isScanningDirectory"
-                          class="text-(--text-secondary) mt-5 text-xs"
+                          class="mt-5 text-xs text-(--text-secondary)"
                         >
                           <i class="ri-loader-4-line animate-spin"></i>
                           Scanning RTL files in the selected directory...
@@ -653,14 +653,14 @@
 
                       <div
                         v-if="manuallyAddedFiles.length > 0"
-                        class="border-(--border-color) bg-(--bg-primary)/65 rounded-xl border p-4"
+                        class="rounded-xl border border-(--border-color) bg-(--bg-primary)/65 p-4"
                       >
                         <div class="mb-3 flex items-center justify-between">
-                          <h4 class="text-(--text-primary) text-sm font-semibold">
+                          <h4 class="text-sm font-semibold text-(--text-primary)">
                             Added RTL Files
                           </h4>
                           <span
-                            class="bg-(--bg-secondary) text-(--text-secondary) rounded-md px-2 py-0.5 text-xs"
+                            class="rounded-md bg-(--bg-secondary) px-2 py-0.5 text-xs text-(--text-secondary)"
                             >{{ manuallyAddedFiles.length }}</span
                           >
                         </div>
@@ -670,21 +670,21 @@
                           <div
                             v-for="file in manuallyAddedFiles"
                             :key="file"
-                            class="border-(--border-color) bg-(--bg-secondary)/25 flex items-center justify-between gap-3 rounded-lg border px-3 py-2"
+                            class="flex items-center justify-between gap-3 rounded-lg border border-(--border-color) bg-(--bg-secondary)/25 px-3 py-2"
                           >
                             <div class="min-w-0">
                               <p
-                                class="text-(--text-primary) truncate text-sm font-medium"
+                                class="truncate text-sm font-medium text-(--text-primary)"
                               >
                                 {{ getFileName(file) }}
                               </p>
-                              <p class="text-(--text-secondary) truncate text-xs">
+                              <p class="truncate text-xs text-(--text-secondary)">
                                 {{ file }}
                               </p>
                             </div>
                             <button
                               type="button"
-                              class="text-(--text-secondary) flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors duration-200 hover:bg-red-500/10 hover:text-red-500"
+                              class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-(--text-secondary) transition-colors duration-200 hover:bg-red-500/10 hover:text-red-500"
                               @click="removeManualFile(file)"
                             >
                               <i class="ri-delete-bin-line"></i>
@@ -696,19 +696,19 @@
 
                     <div
                       v-else
-                      class="border-(--border-color) bg-(--bg-primary)/65 rounded-xl border p-5"
+                      class="rounded-xl border border-(--border-color) bg-(--bg-primary)/65 p-5"
                     >
                       <div class="mb-5 flex items-start justify-between gap-4">
                         <div>
-                          <h3 class="text-(--text-primary) text-lg font-bold">
+                          <h3 class="text-lg font-bold text-(--text-primary)">
                             {{ activeDesignInput?.label }}
                           </h3>
-                          <p class="text-(--text-secondary) mt-1 text-sm">
+                          <p class="mt-1 text-sm text-(--text-secondary)">
                             {{ activeDesignInput?.description }}
                           </p>
                         </div>
                         <span
-                          class="border-(--border-color) bg-(--bg-secondary)/55 text-(--text-secondary) rounded-md border px-2 py-1 text-xs font-semibold"
+                          class="rounded-md border border-(--border-color) bg-(--bg-secondary)/55 px-2 py-1 text-xs font-semibold text-(--text-secondary)"
                         >
                           {{ activeDesignInput?.required ? 'Required' : 'Optional' }}
                         </span>
@@ -720,11 +720,11 @@
                           readonly
                           type="text"
                           placeholder="No file imported"
-                          class="border-(--border-color) bg-(--bg-secondary)/35 text-(--text-primary) min-w-0 flex-1 rounded-lg border px-3 py-2.5 text-sm outline-none"
+                          class="min-w-0 flex-1 rounded-lg border border-(--border-color) bg-(--bg-secondary)/35 px-3 py-2.5 text-sm text-(--text-primary) outline-none"
                         />
                         <button
                           type="button"
-                          class="bg-(--accent-color) inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-opacity duration-200 hover:opacity-90"
+                          class="inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg bg-(--accent-color) px-5 py-2.5 text-sm font-semibold text-white transition-opacity duration-200 hover:opacity-90"
                           @click="importDesignInput(activeDesignInputType)"
                         >
                           <i class="ri-upload-2-line"></i>
@@ -737,7 +737,7 @@
                       </div>
                       <p
                         v-if="activeDesignInputType === 'sdc'"
-                        class="text-(--text-secondary) mt-3 text-xs"
+                        class="mt-3 text-xs text-(--text-secondary)"
                       >
                         SDC is optional and stored with the design inputs.
                       </p>
@@ -755,8 +755,8 @@
                 class="mx-auto flex h-full w-full max-w-5xl flex-col"
               >
                 <header class="mb-4 shrink-0">
-                  <h2 class="text-(--text-primary) text-xl font-bold">PDK Config</h2>
-                  <p class="text-(--text-secondary) mt-1 text-xs">
+                  <h2 class="text-xl font-bold text-(--text-primary)">PDK Config</h2>
+                  <p class="mt-1 text-xs text-(--text-secondary)">
                     Select an imported PDK, then use ECC defaults or customize PDK
                     resource files.
                   </p>
@@ -766,15 +766,15 @@
                   class="grid min-h-0 flex-1 grid-rows-[auto_auto_minmax(0,1fr)] gap-3"
                 >
                   <section
-                    class="border-(--border-color) bg-(--bg-secondary)/20 rounded-xl border p-3"
+                    class="rounded-xl border border-(--border-color) bg-(--bg-secondary)/20 p-3"
                   >
                     <div class="mb-3 flex items-center justify-between gap-3">
-                      <h3 class="text-(--text-primary) text-sm font-bold">
+                      <h3 class="text-sm font-bold text-(--text-primary)">
                         Process Design Kit
                       </h3>
                       <button
                         type="button"
-                        class="text-(--accent-color) hover:bg-(--accent-color)/10 inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold transition-colors duration-200"
+                        class="inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-(--accent-color) transition-colors duration-200 hover:bg-(--accent-color)/10"
                         @click="handleImportPdk"
                       >
                         <i class="ri-add-line"></i>
@@ -800,12 +800,12 @@
                       >
                         <span class="mb-1 flex items-start justify-between gap-3">
                           <span>
-                            <span class="text-(--text-primary) block font-semibold">{{
+                            <span class="block font-semibold text-(--text-primary)">{{
                               pdk.name
                             }}</span>
                             <span
                               v-if="pdk.techNode"
-                              class="bg-(--bg-secondary) text-(--text-secondary) mt-1 inline-block rounded-md px-2 py-0.5 text-xs"
+                              class="mt-1 inline-block rounded-md bg-(--bg-secondary) px-2 py-0.5 text-xs text-(--text-secondary)"
                               >{{ pdk.techNode }}</span
                             >
                           </span>
@@ -815,14 +815,14 @@
                           ></i>
                         </span>
                         <span
-                          class="text-(--text-secondary) block truncate font-mono text-xs"
+                          class="block truncate font-mono text-xs text-(--text-secondary)"
                           :title="pdk.path"
                           >{{ pdk.path }}</span
                         >
                         <button
                           v-if="selectedPdkId !== pdk.id"
                           type="button"
-                          class="text-(--text-secondary) absolute right-3 top-3 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md opacity-0 transition-colors duration-200 hover:bg-red-500/10 hover:text-red-500 group-hover:opacity-100"
+                          class="absolute top-3 right-3 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-(--text-secondary) opacity-0 transition-colors duration-200 group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-500"
                           title="Remove PDK"
                           @click.stop="handleRemovePdk(pdk.id)"
                         >
@@ -833,17 +833,17 @@
 
                     <div
                       v-else
-                      class="border-(--border-color) bg-(--bg-primary)/55 rounded-lg border border-dashed p-8 text-center"
+                      class="rounded-lg border border-dashed border-(--border-color) bg-(--bg-primary)/55 p-8 text-center"
                     >
                       <div
-                        class="bg-(--accent-color)/10 text-(--accent-color) mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl"
+                        class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-(--accent-color)/10 text-(--accent-color)"
                       >
                         <i class="ri-database-2-line text-2xl"></i>
                       </div>
-                      <h4 class="text-(--text-primary) font-semibold">No PDK Imported</h4>
+                      <h4 class="font-semibold text-(--text-primary)">No PDK Imported</h4>
                       <button
                         type="button"
-                        class="bg-(--accent-color) mt-4 inline-flex cursor-pointer items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-opacity duration-200 hover:opacity-90"
+                        class="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-lg bg-(--accent-color) px-5 py-2.5 text-sm font-semibold text-white transition-opacity duration-200 hover:opacity-90"
                         @click="handleImportPdk"
                       >
                         <i class="ri-folder-add-line"></i>
@@ -853,11 +853,11 @@
                   </section>
 
                   <section
-                    class="border-(--border-color) bg-(--bg-secondary)/20 rounded-xl border p-3"
+                    class="rounded-xl border border-(--border-color) bg-(--bg-secondary)/20 p-3"
                   >
                     <div class="mb-3">
-                      <h3 class="text-(--text-primary) text-sm font-bold">Config Mode</h3>
-                      <p class="text-(--text-secondary) mt-1 text-xs">
+                      <h3 class="text-sm font-bold text-(--text-primary)">Config Mode</h3>
+                      <p class="mt-1 text-xs text-(--text-secondary)">
                         Default Config uses ECC default PDK config. Manual Config lets you
                         choose Tech LEF, Cell LEF, and Liberty.
                       </p>
@@ -885,11 +885,11 @@
                           <i v-else class="ri-circle-line"></i>
                         </span>
                         <span>
-                          <span class="text-(--text-primary) block text-sm font-bold"
+                          <span class="block text-sm font-bold text-(--text-primary)"
                             >Default Config</span
                           >
                           <span
-                            class="text-(--text-secondary) mt-1 block text-xs leading-5"
+                            class="mt-1 block text-xs leading-5 text-(--text-secondary)"
                             >Use ECC default PDK config for the selected PDK.</span
                           >
                         </span>
@@ -917,11 +917,11 @@
                           <i v-else class="ri-circle-line"></i>
                         </span>
                         <span>
-                          <span class="text-(--text-primary) block text-sm font-bold"
+                          <span class="block text-sm font-bold text-(--text-primary)"
                             >Manual Config</span
                           >
                           <span
-                            class="text-(--text-secondary) mt-1 block text-xs leading-5"
+                            class="mt-1 block text-xs leading-5 text-(--text-secondary)"
                             >Customize Tech LEF, Cell LEF, and Liberty.</span
                           >
                         </span>
@@ -931,28 +931,28 @@
 
                   <section
                     v-if="pdkConfigMode === 'default'"
-                    class="border-(--border-color) bg-(--bg-secondary)/20 rounded-xl border p-3"
+                    class="rounded-xl border border-(--border-color) bg-(--bg-secondary)/20 p-3"
                   >
                     <div
-                      class="border-(--accent-color)/35 bg-(--accent-color)/10 rounded-lg border p-4"
+                      class="rounded-lg border border-(--accent-color)/35 bg-(--accent-color)/10 p-4"
                     >
                       <div class="mb-3 flex items-center gap-3">
                         <div
-                          class="bg-(--accent-color) flex h-10 w-10 items-center justify-center rounded-lg text-white"
+                          class="flex h-10 w-10 items-center justify-center rounded-lg bg-(--accent-color) text-white"
                         >
                           <i class="ri-check-double-line text-xl"></i>
                         </div>
                         <div>
-                          <h3 class="text-(--text-primary) text-base font-bold">
+                          <h3 class="text-base font-bold text-(--text-primary)">
                             Use ECC default PDK config
                           </h3>
-                          <p class="text-(--text-secondary) mt-1 text-sm">
+                          <p class="mt-1 text-sm text-(--text-secondary)">
                             Tech LEF, Cell LEF, and Liberty will be resolved by ECC
                             defaults for the selected PDK.
                           </p>
                         </div>
                       </div>
-                      <p class="text-(--text-secondary) text-xs">
+                      <p class="text-xs text-(--text-secondary)">
                         Switch to Manual Config only when this workspace needs a custom
                         PDK resource set.
                       </p>
@@ -961,20 +961,20 @@
 
                   <section
                     v-else
-                    class="border-(--border-color) bg-(--bg-secondary)/20 flex min-h-0 flex-col overflow-hidden rounded-xl border p-3"
+                    class="flex min-h-0 flex-col overflow-hidden rounded-xl border border-(--border-color) bg-(--bg-secondary)/20 p-3"
                   >
                     <div class="mb-3 flex items-start justify-between gap-4">
                       <div>
-                        <h3 class="text-(--text-primary) text-sm font-bold">
+                        <h3 class="text-sm font-bold text-(--text-primary)">
                           Manual PDK Resources
                         </h3>
-                        <p class="text-(--text-secondary) mt-1 text-xs">
+                        <p class="mt-1 text-xs text-(--text-secondary)">
                           Review each resource type on the left, then update the selection
                           from the current PDK folder when needed.
                         </p>
                       </div>
                       <span
-                        class="bg-(--bg-primary)/70 text-(--text-secondary) rounded-md px-2 py-1 text-xs"
+                        class="rounded-md bg-(--bg-primary)/70 px-2 py-1 text-xs text-(--text-secondary)"
                       >
                         {{ activeManualPdkSelections.length }} selected
                       </span>
@@ -997,11 +997,11 @@
                           @click="activePdkWizardStep = item.key"
                         >
                           <span class="min-w-0">
-                            <span class="text-(--text-primary) block text-sm font-bold">{{
+                            <span class="block text-sm font-bold text-(--text-primary)">{{
                               item.title
                             }}</span>
                             <span
-                              class="text-(--text-secondary) mt-1 block text-xs leading-5"
+                              class="mt-1 block text-xs leading-5 text-(--text-secondary)"
                               >{{ item.description }}</span
                             >
                           </span>
@@ -1019,20 +1019,20 @@
                       </aside>
 
                       <section
-                        class="pdk-resource-detail-panel border-(--border-color) bg-(--bg-primary)/65 flex min-h-0 flex-col rounded-xl border p-3"
+                        class="pdk-resource-detail-panel flex min-h-0 flex-col rounded-xl border border-(--border-color) bg-(--bg-primary)/65 p-3"
                       >
                         <header class="mb-3 flex items-start justify-between gap-4">
                           <div class="min-w-0">
-                            <h4 class="text-(--text-primary) text-sm font-bold">
+                            <h4 class="text-sm font-bold text-(--text-primary)">
                               {{ activePdkStep?.title }}
                             </h4>
-                            <p class="text-(--text-secondary) mt-1 text-xs leading-5">
+                            <p class="mt-1 text-xs leading-5 text-(--text-secondary)">
                               {{ activePdkStep?.description }}
                             </p>
                           </div>
                           <button
                             type="button"
-                            class="border-(--border-color) bg-(--bg-secondary)/45 text-(--text-secondary) hover:border-(--accent-color)/45 hover:bg-(--accent-color)/10 hover:text-(--text-primary) inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border transition-colors duration-200"
+                            class="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-(--border-color) bg-(--bg-secondary)/45 text-(--text-secondary) transition-colors duration-200 hover:border-(--accent-color)/45 hover:bg-(--accent-color)/10 hover:text-(--text-primary)"
                             title="Update selection"
                             @click="
                               activePdkStep && openPdkResourcePicker(activePdkStep.key)
@@ -1043,18 +1043,18 @@
                         </header>
 
                         <div
-                          class="border-(--border-color) bg-(--bg-secondary)/20 flex min-h-0 flex-1 flex-col rounded-xl border p-3"
+                          class="flex min-h-0 flex-1 flex-col rounded-xl border border-(--border-color) bg-(--bg-secondary)/20 p-3"
                         >
                           <div class="mb-3 flex items-center justify-between gap-3">
                             <div>
                               <h5
-                                class="text-(--text-secondary) text-xs font-bold uppercase tracking-wide"
+                                class="text-xs font-bold tracking-wide text-(--text-secondary) uppercase"
                               >
                                 Selected Files
                               </h5>
                             </div>
                             <span
-                              class="bg-(--bg-primary)/75 text-(--text-secondary) rounded-md px-2 py-1 text-[11px] font-semibold"
+                              class="rounded-md bg-(--bg-primary)/75 px-2 py-1 text-[11px] font-semibold text-(--text-secondary)"
                             >
                               {{ activeManualPdkSelections.length }}
                             </span>
@@ -1065,7 +1065,7 @@
                           >
                             <p
                               v-if="activeManualPdkSelections.length === 0"
-                              class="border-(--border-color) text-(--text-secondary) rounded-lg border border-dashed px-4 py-6 text-center text-xs"
+                              class="rounded-lg border border-dashed border-(--border-color) px-4 py-6 text-center text-xs text-(--text-secondary)"
                             >
                               No file selected.
                             </p>
@@ -1077,16 +1077,16 @@
                               :title="file"
                             >
                               <i
-                                class="ri-file-list-3-line text-(--accent-color) mt-0.5 shrink-0"
+                                class="ri-file-list-3-line mt-0.5 shrink-0 text-(--accent-color)"
                               ></i>
                               <span class="min-w-0">
                                 <span
-                                  class="text-(--text-primary) block truncate text-sm font-semibold"
+                                  class="block truncate text-sm font-semibold text-(--text-primary)"
                                 >
                                   {{ displayPdkResourceName(file) }}
                                 </span>
                                 <span
-                                  class="text-(--text-secondary) mt-1 block break-all font-mono text-[11px] leading-5"
+                                  class="mt-1 block font-mono text-[11px] leading-5 break-all text-(--text-secondary)"
                                 >
                                   {{ file }}
                                 </span>
@@ -1106,63 +1106,63 @@
                 class="mx-auto w-full max-w-4xl"
               >
                 <header class="mb-7">
-                  <h2 class="text-(--text-primary) text-2xl font-bold">Spec Setting</h2>
-                  <p class="text-(--text-secondary) mt-2 text-sm">
+                  <h2 class="text-2xl font-bold text-(--text-primary)">Spec Setting</h2>
+                  <p class="mt-2 text-sm text-(--text-secondary)">
                     These values are saved into the workspace home parameters.json.
                   </p>
                 </header>
 
                 <p
                   v-if="isLoadingProjectManifest"
-                  class="text-(--text-secondary) mb-5 text-sm"
+                  class="mb-5 text-sm text-(--text-secondary)"
                 >
                   Loading project constraints...
                 </p>
 
                 <div
-                  class="border-(--border-color) bg-(--bg-secondary)/20 space-y-5 rounded-xl border p-5"
+                  class="space-y-5 rounded-xl border border-(--border-color) bg-(--bg-secondary)/20 p-5"
                 >
                   <div class="grid gap-5 md:grid-cols-2">
                     <div>
                       <label
-                        class="text-(--text-primary) mb-2 block text-sm font-semibold"
+                        class="mb-2 block text-sm font-semibold text-(--text-primary)"
                         >Design Name <span class="text-red-500">*</span></label
                       >
                       <input
                         v-model="config.parameters.design"
                         type="text"
                         placeholder="gcd"
-                        class="border-(--border-color) bg-(--bg-primary)/75 text-(--text-primary) focus:border-(--accent-color) w-full rounded-lg border px-3 py-2.5 text-sm outline-none"
+                        class="w-full rounded-lg border border-(--border-color) bg-(--bg-primary)/75 px-3 py-2.5 text-sm text-(--text-primary) outline-none focus:border-(--accent-color)"
                         @input="designNameTouched = true"
                       />
                     </div>
                     <div>
                       <label
-                        class="text-(--text-primary) mb-2 block text-sm font-semibold"
+                        class="mb-2 block text-sm font-semibold text-(--text-primary)"
                         >Top Module Name <span class="text-red-500">*</span></label
                       >
                       <input
                         v-model="config.parameters.top_module"
                         type="text"
                         placeholder="top"
-                        class="border-(--border-color) bg-(--bg-primary)/75 text-(--text-primary) focus:border-(--accent-color) w-full rounded-lg border px-3 py-2.5 text-sm outline-none"
+                        class="w-full rounded-lg border border-(--border-color) bg-(--bg-primary)/75 px-3 py-2.5 text-sm text-(--text-primary) outline-none focus:border-(--accent-color)"
                       />
                     </div>
                     <div>
                       <label
-                        class="text-(--text-primary) mb-2 block text-sm font-semibold"
+                        class="mb-2 block text-sm font-semibold text-(--text-primary)"
                         >Clock Signal Name <span class="text-red-500">*</span></label
                       >
                       <input
                         v-model="config.parameters.clock"
                         type="text"
                         placeholder="clk"
-                        class="border-(--border-color) bg-(--bg-primary)/75 text-(--text-primary) focus:border-(--accent-color) w-full rounded-lg border px-3 py-2.5 text-sm outline-none"
+                        class="w-full rounded-lg border border-(--border-color) bg-(--bg-primary)/75 px-3 py-2.5 text-sm text-(--text-primary) outline-none focus:border-(--accent-color)"
                       />
                     </div>
                     <div>
                       <label
-                        class="text-(--text-primary) mb-2 block text-sm font-semibold"
+                        class="mb-2 block text-sm font-semibold text-(--text-primary)"
                         >Frequency max [MHz] <span class="text-red-500">*</span></label
                       >
                       <input
@@ -1170,12 +1170,12 @@
                         type="number"
                         min="1"
                         step="1"
-                        class="border-(--border-color) bg-(--bg-primary)/75 text-(--text-primary) focus:border-(--accent-color) w-full rounded-lg border px-3 py-2.5 text-sm outline-none"
+                        class="w-full rounded-lg border border-(--border-color) bg-(--bg-primary)/75 px-3 py-2.5 text-sm text-(--text-primary) outline-none focus:border-(--accent-color)"
                       />
                     </div>
                     <div>
                       <label
-                        class="text-(--text-primary) mb-2 block text-sm font-semibold"
+                        class="mb-2 block text-sm font-semibold text-(--text-primary)"
                         >Max Fanout <span class="text-red-500">*</span></label
                       >
                       <input
@@ -1183,27 +1183,27 @@
                         type="number"
                         min="1"
                         step="1"
-                        class="border-(--border-color) bg-(--bg-primary)/75 text-(--text-primary) focus:border-(--accent-color) w-full rounded-lg border px-3 py-2.5 text-sm outline-none"
+                        class="w-full rounded-lg border border-(--border-color) bg-(--bg-primary)/75 px-3 py-2.5 text-sm text-(--text-primary) outline-none focus:border-(--accent-color)"
                       />
                     </div>
                   </div>
 
                   <div
-                    class="border-(--border-color) bg-(--bg-primary)/65 rounded-xl border p-4"
+                    class="rounded-xl border border-(--border-color) bg-(--bg-primary)/65 p-4"
                   >
                     <div
                       v-if="projectMpc"
-                      class="border-(--accent-color)/30 bg-(--accent-color)/8 mb-4 rounded-lg border px-3 py-2.5"
+                      class="mb-4 rounded-lg border border-(--accent-color)/30 bg-(--accent-color)/8 px-3 py-2.5"
                     >
-                      <p class="text-(--text-primary) text-xs font-semibold">
+                      <p class="text-xs font-semibold text-(--text-primary)">
                         MPC core template: {{ projectMpc.display_name }} /
                         {{ projectMpc.design.design_name }}
                       </p>
                     </div>
                     <div class="mb-4 flex items-center justify-between gap-3">
-                      <h3 class="text-(--text-primary) text-sm font-bold">Die Area</h3>
+                      <h3 class="text-sm font-bold text-(--text-primary)">Die Area</h3>
                       <div
-                        class="border-(--border-color) bg-(--bg-secondary)/40 inline-flex rounded-lg border p-1"
+                        class="inline-flex rounded-lg border border-(--border-color) bg-(--bg-secondary)/40 p-1"
                       >
                         <button
                           type="button"
@@ -1236,7 +1236,7 @@
                       <div class="grid gap-5 md:grid-cols-2">
                         <div>
                           <label
-                            class="text-(--text-primary) mb-2 block text-sm font-semibold"
+                            class="mb-2 block text-sm font-semibold text-(--text-primary)"
                             >Width</label
                           >
                           <input
@@ -1244,12 +1244,12 @@
                             type="number"
                             min="1"
                             step="1"
-                            class="border-(--border-color) bg-(--bg-secondary)/35 text-(--text-primary) focus:border-(--accent-color) w-full rounded-lg border px-3 py-2.5 text-sm outline-none"
+                            class="w-full rounded-lg border border-(--border-color) bg-(--bg-secondary)/35 px-3 py-2.5 text-sm text-(--text-primary) outline-none focus:border-(--accent-color)"
                           />
                         </div>
                         <div>
                           <label
-                            class="text-(--text-primary) mb-2 block text-sm font-semibold"
+                            class="mb-2 block text-sm font-semibold text-(--text-primary)"
                             >Height</label
                           >
                           <input
@@ -1257,14 +1257,14 @@
                             type="number"
                             min="1"
                             step="1"
-                            class="border-(--border-color) bg-(--bg-secondary)/35 text-(--text-primary) focus:border-(--accent-color) w-full rounded-lg border px-3 py-2.5 text-sm outline-none"
+                            class="w-full rounded-lg border border-(--border-color) bg-(--bg-secondary)/35 px-3 py-2.5 text-sm text-(--text-primary) outline-none focus:border-(--accent-color)"
                           />
                         </div>
                       </div>
 
                       <div
                         v-if="dieAreaMode === 'width_height' && projectMpc"
-                        class="text-(--text-secondary) mt-4 space-y-1 text-xs"
+                        class="mt-4 space-y-1 text-xs text-(--text-secondary)"
                       >
                         <p>
                           MPC die-area bounds: min
@@ -1293,7 +1293,7 @@
                     <div v-else class="grid gap-5 md:grid-cols-2">
                       <div>
                         <label
-                          class="text-(--text-primary) mb-2 block text-sm font-semibold"
+                          class="mb-2 block text-sm font-semibold text-(--text-primary)"
                           >Utilitization</label
                         >
                         <input
@@ -1302,12 +1302,12 @@
                           min="0.01"
                           max="1"
                           step="0.01"
-                          class="border-(--border-color) bg-(--bg-secondary)/35 text-(--text-primary) focus:border-(--accent-color) w-full rounded-lg border px-3 py-2.5 text-sm outline-none"
+                          class="w-full rounded-lg border border-(--border-color) bg-(--bg-secondary)/35 px-3 py-2.5 text-sm text-(--text-primary) outline-none focus:border-(--accent-color)"
                         />
                       </div>
                       <div>
                         <label
-                          class="text-(--text-primary) mb-2 block text-sm font-semibold"
+                          class="mb-2 block text-sm font-semibold text-(--text-primary)"
                           >Margin</label
                         >
                         <input
@@ -1315,32 +1315,32 @@
                           type="number"
                           min="0"
                           step="1"
-                          class="border-(--border-color) bg-(--bg-secondary)/35 text-(--text-primary) focus:border-(--accent-color) w-full rounded-lg border px-3 py-2.5 text-sm outline-none"
+                          class="w-full rounded-lg border border-(--border-color) bg-(--bg-secondary)/35 px-3 py-2.5 text-sm text-(--text-primary) outline-none focus:border-(--accent-color)"
                         />
                       </div>
                     </div>
                     <p
                       v-if="dieAreaMode === 'utilitization_margin' && projectMpc"
-                      class="text-(--text-secondary) mt-4 text-xs"
+                      class="mt-4 text-xs text-(--text-secondary)"
                     >
                       MPC die-area bounds are checked after the flow runs for this mode.
                     </p>
                   </div>
 
                   <div
-                    class="border-(--border-color) bg-(--bg-primary)/65 rounded-xl border p-4"
+                    class="rounded-xl border border-(--border-color) bg-(--bg-primary)/65 p-4"
                   >
-                    <h3 class="text-(--text-primary) text-sm font-bold">
+                    <h3 class="text-sm font-bold text-(--text-primary)">
                       Placement Defaults
                     </h3>
-                    <p class="text-(--text-secondary) mt-1 text-xs">
+                    <p class="mt-1 text-xs text-(--text-secondary)">
                       Passed to the initial placement configuration when the workspace is
                       created.
                     </p>
                     <div class="mt-4 grid gap-5 md:grid-cols-2">
                       <div>
                         <label
-                          class="text-(--text-primary) mb-2 block text-sm font-semibold"
+                          class="mb-2 block text-sm font-semibold text-(--text-primary)"
                           >Target Density</label
                         >
                         <input
@@ -1349,12 +1349,12 @@
                           min="0.1"
                           max="1"
                           step="0.01"
-                          class="border-(--border-color) bg-(--bg-secondary)/35 text-(--text-primary) focus:border-(--accent-color) w-full rounded-lg border px-3 py-2.5 text-sm outline-none"
+                          class="w-full rounded-lg border border-(--border-color) bg-(--bg-secondary)/35 px-3 py-2.5 text-sm text-(--text-primary) outline-none focus:border-(--accent-color)"
                         />
                       </div>
                       <div>
                         <label
-                          class="text-(--text-primary) mb-2 block text-sm font-semibold"
+                          class="mb-2 block text-sm font-semibold text-(--text-primary)"
                           >Target Overflow</label
                         >
                         <input
@@ -1363,7 +1363,7 @@
                           min="0.01"
                           max="1"
                           step="0.01"
-                          class="border-(--border-color) bg-(--bg-secondary)/35 text-(--text-primary) focus:border-(--accent-color) w-full rounded-lg border px-3 py-2.5 text-sm outline-none"
+                          class="w-full rounded-lg border border-(--border-color) bg-(--bg-secondary)/35 px-3 py-2.5 text-sm text-(--text-primary) outline-none focus:border-(--accent-color)"
                         />
                       </div>
                     </div>
@@ -1374,12 +1374,12 @@
           </section>
 
           <footer
-            class="border-(--border-color) bg-(--bg-primary) flex shrink-0 items-center justify-between border-t px-6 py-4 md:px-8"
+            class="flex shrink-0 items-center justify-between border-t border-(--border-color) bg-(--bg-primary) px-6 py-4 md:px-8"
           >
             <button
               v-if="currentStep > 1"
               type="button"
-              class="border-(--border-color) bg-(--bg-secondary)/45 text-(--text-primary) hover:bg-(--bg-secondary) inline-flex cursor-pointer items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold transition-colors duration-200"
+              class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-(--border-color) bg-(--bg-secondary)/45 px-4 py-2.5 text-sm font-semibold text-(--text-primary) transition-colors duration-200 hover:bg-(--bg-secondary)"
               @click="prevStep"
             >
               <i class="ri-arrow-left-line"></i>
@@ -1390,7 +1390,7 @@
             <div class="flex items-center gap-3">
               <button
                 type="button"
-                class="text-(--text-secondary) hover:bg-(--bg-secondary)/55 hover:text-(--text-primary) cursor-pointer rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors duration-200"
+                class="cursor-pointer rounded-lg px-4 py-2.5 text-sm font-semibold text-(--text-secondary) transition-colors duration-200 hover:bg-(--bg-secondary)/55 hover:text-(--text-primary)"
                 @click="closeWizard"
               >
                 Cancel
@@ -1398,7 +1398,7 @@
               <button
                 v-if="currentStep < steps.length"
                 type="button"
-                class="bg-(--accent-color) inline-flex cursor-pointer items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-opacity duration-200 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
+                class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-(--accent-color) px-5 py-2.5 text-sm font-semibold text-white transition-opacity duration-200 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
                 :disabled="!canProceed"
                 @click="nextStep"
               >
@@ -1408,7 +1408,7 @@
               <button
                 v-else
                 type="button"
-                class="bg-(--accent-color) inline-flex cursor-pointer items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-bold text-white transition-opacity duration-200 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
+                class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-(--accent-color) px-5 py-2.5 text-sm font-bold text-white transition-opacity duration-200 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
                 :disabled="!canProceed || isCreating"
                 @click="createWorkspace"
               >

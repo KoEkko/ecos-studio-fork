@@ -1,6 +1,6 @@
 <template>
   <nav
-    class="border-(--border-color) bg-(--bg-sidebar) flex h-full w-[64px] shrink-0 flex-col overflow-y-auto border-r py-3"
+    class="flex h-full w-[64px] shrink-0 flex-col overflow-y-auto border-r border-(--border-color) bg-(--bg-sidebar) py-3"
     aria-label="Flow step navigation"
   >
     <router-link
@@ -14,7 +14,7 @@
     >
       <span
         v-if="currentStage === stage.path"
-        class="bg-(--accent-color) absolute bottom-2 left-0 top-2 w-1 rounded-r-full shadow-[0_0_10px_var(--accent-color)]"
+        class="absolute top-2 bottom-2 left-0 w-1 rounded-r-full bg-(--accent-color) shadow-[0_0_10px_var(--accent-color)]"
         aria-hidden="true"
       />
 
@@ -22,33 +22,33 @@
         <i :class="stage.icon" class="mb-1.5 inline-block text-xl" aria-hidden="true" />
         <i
           v-if="stage.state === 'Success'"
-          class="ri-checkbox-circle-fill bg-(--bg-sidebar) absolute -top-0.5 right-0 rounded-full text-[10px] text-green-500"
+          class="ri-checkbox-circle-fill absolute -top-0.5 right-0 rounded-full bg-(--bg-sidebar) text-[10px] text-green-500"
           aria-label="Completed"
         />
         <i
           v-else-if="stage.state === 'Ongoing'"
-          class="ri-loader-4-line bg-(--bg-sidebar) absolute -top-0.5 right-0 animate-spin rounded-full text-[10px] text-blue-400"
+          class="ri-loader-4-line absolute -top-0.5 right-0 animate-spin rounded-full bg-(--bg-sidebar) text-[10px] text-blue-400"
           aria-label="Running"
         />
         <i
           v-else-if="stage.state === 'Pending'"
-          class="ri-time-line bg-(--bg-sidebar) text-(--text-secondary) absolute -top-0.5 right-0 rounded-full text-[10px]"
+          class="ri-time-line absolute -top-0.5 right-0 rounded-full bg-(--bg-sidebar) text-[10px] text-(--text-secondary)"
           aria-label="Pending"
         />
         <i
           v-else-if="stage.state === 'Invalid'"
-          class="ri-error-warning-fill bg-(--bg-sidebar) absolute -top-0.5 right-0 rounded-full text-[10px] text-red-500"
+          class="ri-error-warning-fill absolute -top-0.5 right-0 rounded-full bg-(--bg-sidebar) text-[10px] text-red-500"
           aria-label="Failed"
         />
         <i
           v-else-if="stage.state === 'Incomplete'"
-          class="ri-indeterminate-circle-fill bg-(--bg-sidebar) absolute -top-0.5 right-0 rounded-full text-[10px] text-amber-500"
+          class="ri-indeterminate-circle-fill absolute -top-0.5 right-0 rounded-full bg-(--bg-sidebar) text-[10px] text-amber-500"
           aria-label="Incomplete"
         />
       </span>
 
       <span
-        class="w-full max-w-full break-words text-center text-[8px] font-bold uppercase leading-tight"
+        class="w-full max-w-full text-center text-[8px] leading-tight font-bold break-words uppercase"
       >
         {{ stage.label }}
       </span>

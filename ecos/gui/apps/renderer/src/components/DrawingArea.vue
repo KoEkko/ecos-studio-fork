@@ -354,15 +354,15 @@ onUnmounted(() => {
       </div>
 
       <div
-        class="pointer-events-none absolute right-2 top-2 z-20 flex flex-col items-end gap-1"
+        class="pointer-events-none absolute top-2 right-2 z-20 flex flex-col items-end gap-1"
       >
         <div
           v-if="cursorEda"
-          class="border-(--border-color) bg-(--bg-primary)/90 text-(--text-primary) rounded border px-2 py-1 font-mono text-[11px] tabular-nums shadow-sm"
+          class="rounded border border-(--border-color) bg-(--bg-primary)/90 px-2 py-1 font-mono text-[11px] text-(--text-primary) tabular-nums shadow-sm"
         >
           <span class="text-(--text-secondary)">X</span>
           {{ formatCursorCoord(cursorEda.x) }}
-          <span class="text-(--text-secondary) ml-2">Y</span>
+          <span class="ml-2 text-(--text-secondary)">Y</span>
           {{ formatCursorCoord(cursorEda.y) }}
         </div>
       </div>

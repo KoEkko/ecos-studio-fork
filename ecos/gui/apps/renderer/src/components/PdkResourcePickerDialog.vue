@@ -4,31 +4,31 @@
     @click.self="closeDialog"
   >
     <section
-      class="border-(--border-color) bg-(--bg-primary) flex h-[78vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border shadow-[0_28px_70px_-24px_rgba(0,0,0,0.55)]"
+      class="flex h-[78vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-(--border-color) bg-(--bg-primary) shadow-[0_28px_70px_-24px_rgba(0,0,0,0.55)]"
       role="dialog"
       aria-modal="true"
       aria-labelledby="pdk-resource-picker-title"
     >
       <header
-        class="border-(--border-color) flex shrink-0 items-start justify-between gap-4 border-b px-5 py-4"
+        class="flex shrink-0 items-start justify-between gap-4 border-b border-(--border-color) px-5 py-4"
       >
         <div class="min-w-0">
-          <p class="text-(--accent-color) text-xs font-bold uppercase tracking-wide">
+          <p class="text-xs font-bold tracking-wide text-(--accent-color) uppercase">
             PDK Resource Selection
           </p>
           <h2
             id="pdk-resource-picker-title"
-            class="text-(--text-primary) mt-1 text-xl font-bold"
+            class="mt-1 text-xl font-bold text-(--text-primary)"
           >
             {{ resourceTitle }}
           </h2>
-          <p class="text-(--text-secondary) mt-1 text-xs">
+          <p class="mt-1 text-xs text-(--text-secondary)">
             {{ directories.length }} folders · {{ availableFiles.length }} resource files
           </p>
         </div>
         <button
           type="button"
-          class="border-(--border-color) bg-(--bg-secondary)/60 text-(--text-secondary) hover:text-(--text-primary) flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border transition-colors duration-200"
+          class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-(--border-color) bg-(--bg-secondary)/60 text-(--text-secondary) transition-colors duration-200 hover:text-(--text-primary)"
           title="Close"
           @click="closeDialog"
         >
@@ -37,20 +37,20 @@
       </header>
 
       <div
-        class="border-(--border-color) bg-(--bg-secondary)/20 flex shrink-0 items-center gap-3 border-b px-5 py-3"
+        class="flex shrink-0 items-center gap-3 border-b border-(--border-color) bg-(--bg-secondary)/20 px-5 py-3"
       >
         <label
-          class="border-(--border-color) bg-(--bg-primary)/80 flex min-w-0 flex-1 items-center gap-2 rounded-lg border px-3 py-2"
+          class="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-(--border-color) bg-(--bg-primary)/80 px-3 py-2"
         >
           <i class="ri-search-line text-(--text-secondary)"></i>
           <input
             v-model="searchQuery"
             type="text"
-            class="text-(--text-primary) min-w-0 flex-1 bg-transparent text-sm outline-none"
+            class="min-w-0 flex-1 bg-transparent text-sm text-(--text-primary) outline-none"
             placeholder="Search file or folder"
           />
         </label>
-        <span class="text-(--text-secondary) shrink-0 text-xs font-semibold">
+        <span class="shrink-0 text-xs font-semibold text-(--text-secondary)">
           {{ draftSelectedFiles.length }} / {{ availableFiles.length }} selected
         </span>
       </div>
@@ -59,14 +59,14 @@
         class="grid min-h-0 flex-1 gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_72px_minmax(0,1fr)]"
       >
         <section
-          class="border-(--border-color) bg-(--bg-secondary)/20 flex min-w-0 flex-col overflow-hidden rounded-xl border"
+          class="flex min-w-0 flex-col overflow-hidden rounded-xl border border-(--border-color) bg-(--bg-secondary)/20"
         >
           <div
-            class="border-(--border-color)/60 bg-(--bg-secondary)/40 flex items-center justify-between gap-3 border-b px-4 py-3"
+            class="flex items-center justify-between gap-3 border-b border-(--border-color)/60 bg-(--bg-secondary)/40 px-4 py-3"
           >
             <div>
-              <h3 class="text-(--text-primary) text-sm font-bold">PDK Folder Browser</h3>
-              <p class="text-(--text-secondary) mt-0.5 text-xs">
+              <h3 class="text-sm font-bold text-(--text-primary)">PDK Folder Browser</h3>
+              <p class="mt-0.5 text-xs text-(--text-secondary)">
                 {{ filteredAvailableFiles.length }} available files
               </p>
             </div>
@@ -74,7 +74,7 @@
           <div class="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-3">
             <p
               v-if="filteredAvailableFiles.length === 0"
-              class="border-(--border-color) text-(--text-secondary) rounded-lg border border-dashed px-4 py-8 text-center text-xs"
+              class="rounded-lg border border-dashed border-(--border-color) px-4 py-8 text-center text-xs text-(--text-secondary)"
             >
               No matching files.
             </p>
@@ -92,7 +92,7 @@
         <div class="flex flex-col items-center justify-center gap-3">
           <button
             type="button"
-            class="border-(--accent-color) bg-(--accent-color) flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border text-white shadow-sm transition-opacity duration-200 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-35"
+            class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border border-(--accent-color) bg-(--accent-color) text-white shadow-sm transition-opacity duration-200 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-35"
             title="Add to selection"
             :disabled="availableSelection.length === 0"
             @click="addSelected"
@@ -101,7 +101,7 @@
           </button>
           <button
             type="button"
-            class="border-(--accent-color) bg-(--accent-color) flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border text-white shadow-sm transition-opacity duration-200 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-35"
+            class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border border-(--accent-color) bg-(--accent-color) text-white shadow-sm transition-opacity duration-200 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-35"
             title="Remove from selection"
             :disabled="selectedSelection.length === 0"
             @click="removeSelected"
@@ -111,14 +111,14 @@
         </div>
 
         <section
-          class="border-(--border-color) bg-(--bg-secondary)/20 flex min-w-0 flex-col overflow-hidden rounded-xl border"
+          class="flex min-w-0 flex-col overflow-hidden rounded-xl border border-(--border-color) bg-(--bg-secondary)/20"
         >
           <div
-            class="border-(--border-color)/60 bg-(--bg-secondary)/40 flex items-center justify-between gap-3 border-b px-4 py-3"
+            class="flex items-center justify-between gap-3 border-b border-(--border-color)/60 bg-(--bg-secondary)/40 px-4 py-3"
           >
             <div>
-              <h3 class="text-(--text-primary) text-sm font-bold">Selected Paths</h3>
-              <p class="text-(--text-secondary) mt-0.5 text-xs">
+              <h3 class="text-sm font-bold text-(--text-primary)">Selected Paths</h3>
+              <p class="mt-0.5 text-xs text-(--text-secondary)">
                 {{ draftSelectedFiles.length }} selected
               </p>
             </div>
@@ -126,7 +126,7 @@
           <div class="custom-scrollbar min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
             <p
               v-if="draftSelectedFiles.length === 0"
-              class="border-(--border-color) text-(--text-secondary) rounded-lg border border-dashed px-4 py-8 text-center text-xs"
+              class="rounded-lg border border-dashed border-(--border-color) px-4 py-8 text-center text-xs text-(--text-secondary)"
             >
               No file selected.
             </p>
@@ -138,18 +138,18 @@
               :class="
                 selectedSelection.includes(file)
                   ? 'border-(--accent-color)/40 bg-(--accent-color)/10'
-                  : 'hover:bg-(--bg-secondary)/60 border-transparent'
+                  : 'border-transparent hover:bg-(--bg-secondary)/60'
               "
               :title="file"
               @click="toggleSelectedSelection(file)"
             >
-              <i class="ri-file-list-3-line text-(--accent-color) shrink-0"></i>
+              <i class="ri-file-list-3-line shrink-0 text-(--accent-color)"></i>
               <span class="min-w-0">
-                <span class="text-(--text-primary) block truncate text-sm">{{
+                <span class="block truncate text-sm text-(--text-primary)">{{
                   displayRelativePath(file)
                 }}</span>
                 <span
-                  class="text-(--text-secondary) mt-1 block break-all font-mono text-[11px]"
+                  class="mt-1 block font-mono text-[11px] break-all text-(--text-secondary)"
                   >{{ file }}</span
                 >
               </span>
@@ -159,18 +159,18 @@
       </div>
 
       <footer
-        class="border-(--border-color) flex shrink-0 items-center justify-end gap-3 border-t px-5 py-4"
+        class="flex shrink-0 items-center justify-end gap-3 border-t border-(--border-color) px-5 py-4"
       >
         <button
           type="button"
-          class="border-(--border-color) bg-(--bg-primary)/75 text-(--text-primary) hover:border-(--accent-color)/45 rounded-md border px-4 py-2 text-xs font-semibold transition-colors duration-200"
+          class="rounded-md border border-(--border-color) bg-(--bg-primary)/75 px-4 py-2 text-xs font-semibold text-(--text-primary) transition-colors duration-200 hover:border-(--accent-color)/45"
           @click="closeDialog"
         >
           Cancel
         </button>
         <button
           type="button"
-          class="bg-(--accent-color) rounded-md px-4 py-2 text-xs font-bold text-white transition-opacity duration-200 hover:opacity-90"
+          class="rounded-md bg-(--accent-color) px-4 py-2 text-xs font-bold text-white transition-opacity duration-200 hover:opacity-90"
           @click="saveSelection"
         >
           Save

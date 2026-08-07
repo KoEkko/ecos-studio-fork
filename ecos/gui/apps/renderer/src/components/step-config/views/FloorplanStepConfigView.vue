@@ -142,7 +142,7 @@ function setTrackNum(
       <div class="sc-pro-hero__accent" />
       <div class="sc-pro-hero__body">
         <div class="sc-pro-hero__label">Tap distance</div>
-        <div class="field mb-0 mt-1 w-full min-w-0 max-w-xs">
+        <div class="field mt-1 mb-0 w-full max-w-xs min-w-0">
           <InputNumber
             v-model="
               (draft.Floorplan as Record<string, unknown>)['Tap distance'] as number
@@ -634,11 +634,11 @@ function setTrackNum(
         <div
           v-for="(item, i) in pdn()['Connect layers'] as Record<string, unknown>[]"
           :key="i"
-          class="sc-pro-subpanel min-w-0 max-w-full"
+          class="sc-pro-subpanel max-w-full min-w-0"
         >
           <div class="mb-2 flex min-w-0 items-center justify-between gap-2">
             <span
-              class="text-(--text-secondary) min-w-0 truncate text-[10px] font-bold uppercase"
+              class="min-w-0 truncate text-[10px] font-bold text-(--text-secondary) uppercase"
               >Pair {{ i + 1 }}</span
             >
             <button
@@ -649,13 +649,13 @@ function setTrackNum(
               <i class="ri-delete-bin-line"></i>
             </button>
           </div>
-          <div class="field mb-0 min-w-0 max-w-full">
+          <div class="field mb-0 max-w-full min-w-0">
             <label>layers (comma-separated)</label>
             <InputText
               :model-value="(item.layers as string[] | undefined)?.join(', ') ?? ''"
               size="small"
               fluid
-              class="sc-mono w-full min-w-0 max-w-full"
+              class="sc-mono w-full max-w-full min-w-0"
               @update:model-value="
                 setConnectLayersFromText(item as Record<string, unknown>, $event)
               "

@@ -2,7 +2,7 @@
   <div v-if="node.kind === 'directory'">
     <div
       v-if="node.path !== rootPath"
-      class="text-(--text-primary) flex items-center gap-2 px-2 py-1.5 text-sm"
+      class="flex items-center gap-2 px-2 py-1.5 text-sm text-(--text-primary)"
     >
       <i class="ri-folder-line shrink-0 text-yellow-500/80"></i>
       <span class="truncate">{{ node.name }}</span>
@@ -25,15 +25,15 @@
     class="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors duration-200"
     :class="
       selectedPaths.includes(node.path)
-        ? 'border-(--accent-color)/30 bg-(--accent-color)/10 border'
-        : 'hover:bg-(--bg-secondary)/60 border border-transparent'
+        ? 'border border-(--accent-color)/30 bg-(--accent-color)/10'
+        : 'border border-transparent hover:bg-(--bg-secondary)/60'
     "
     :title="`${node.name} — double-click to add`"
     @click="$emit('toggle', node.path)"
     @dblclick.prevent="$emit('add', node.path)"
   >
     <i class="ri-file-code-line shrink-0 text-blue-500"></i>
-    <span class="text-(--text-primary) truncate text-sm">{{ node.name }}</span>
+    <span class="truncate text-sm text-(--text-primary)">{{ node.name }}</span>
   </button>
 </template>
 
