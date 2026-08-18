@@ -1,4 +1,6 @@
 export enum CMDEnum {
+  catalog_list = 'catalog_list',
+  validate_frontend_config = 'validate_frontend_config',
   create_workspace = 'create_workspace',
   load_workspace = 'load_workspace',
   rtl2gds = 'rtl2gds',
@@ -21,6 +23,15 @@ export enum InfoEnum {
   checklist = 'checklist',
   sta = 'sta',
   config = 'config',
+  frontend_detail = 'frontend_detail',
+}
+
+export enum FrontendStepEnum {
+  PREPARE = 'prepare',
+  REVIEW = 'review',
+  ELAB = 'elab',
+  LINT = 'lint',
+  SIM = 'sim',
 }
 
 export enum StepEnum {
@@ -187,6 +198,41 @@ export const STEP_METADATA: Record<string, StepMetadata> = {
     icon: 'ri-file-text-line',
     path: StepEnum.ABSTRACT_LEF,
     showInSidebar: false,
+    group: 'run',
+  },
+  [FrontendStepEnum.PREPARE]: {
+    label: 'Prepare',
+    icon: 'ri-file-list-3-line',
+    path: FrontendStepEnum.PREPARE,
+    showInSidebar: true,
+    group: 'run',
+  },
+  [FrontendStepEnum.REVIEW]: {
+    label: 'RTL Review',
+    icon: 'ri-search-eye-line',
+    path: FrontendStepEnum.REVIEW,
+    showInSidebar: true,
+    group: 'run',
+  },
+  [FrontendStepEnum.ELAB]: {
+    label: 'Elab',
+    icon: 'ri-node-tree',
+    path: FrontendStepEnum.ELAB,
+    showInSidebar: true,
+    group: 'run',
+  },
+  [FrontendStepEnum.LINT]: {
+    label: 'Lint',
+    icon: 'ri-bug-line',
+    path: FrontendStepEnum.LINT,
+    showInSidebar: true,
+    group: 'run',
+  },
+  [FrontendStepEnum.SIM]: {
+    label: 'Sim',
+    icon: 'ri-play-circle-line',
+    path: FrontendStepEnum.SIM,
+    showInSidebar: true,
     group: 'run',
   },
 }

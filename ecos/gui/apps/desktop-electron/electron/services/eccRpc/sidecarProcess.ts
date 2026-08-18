@@ -34,14 +34,24 @@ export type EccRpcSidecarSpawn = (
 
 export interface EccRpcSidecarProcessOptions {
   command?: string
+  commandArgs?: string[]
   env?: NodeJS.ProcessEnv
   envProvider?: () => NodeJS.ProcessEnv | Promise<NodeJS.ProcessEnv>
   logDirectoryProvider?: () => string | null
   onEvent?: (event: EccRuntimeEvent) => void
   onNotification?: (notification: JsonRpcNotificationPayload) => void
+  resolveLaunch?: (
+    env: NodeJS.ProcessEnv,
+  ) => EccRpcSidecarLaunch | Promise<EccRpcSidecarLaunch>
   shutdownTimeoutMs?: number
   spawn?: EccRpcSidecarSpawn
   tempDir?: string
+}
+
+export interface EccRpcSidecarLaunch {
+  args: string[]
+  command: string
+  env?: NodeJS.ProcessEnv
 }
 
 export class EccRpcShutdownDeferredError extends Error {
@@ -110,6 +120,7 @@ export class EccRpcSidecarProcess {
   private forceKillTimer: ReturnType<typeof setTimeout> | null = null
   private shuttingDown = false
   private spawnEnv: NodeJS.ProcessEnv | null = null
+  private spawnLaunchKey: string | null = null
   logFile: string | null = null
 
   constructor(private readonly options: EccRpcSidecarProcessOptions = {}) {
@@ -122,8 +133,25 @@ export class EccRpcSidecarProcess {
   }
 
   async start(): Promise<EccJsonRpcClient> {
-    const env = await this.resolveEnv()
-    if (this.client && environmentsEqual(this.spawnEnv, env)) {
+    const baseEnv = await this.resolveEnv()
+    const launch = this.options.resolveLaunch
+      ? await this.options.resolveLaunch(baseEnv)
+      : {
+          args: this.options.commandArgs ?? [
+            'rpc',
+            'serve',
+            '--stdio',
+            '--persistent-db',
+          ],
+          command: this.command,
+        }
+    const env = launch.env ?? baseEnv
+    const launchKey = JSON.stringify([launch.command, launch.args])
+    if (
+      this.client &&
+      environmentsEqual(this.spawnEnv, env) &&
+      this.spawnLaunchKey === launchKey
+    ) {
       return this.client
     }
     if (this.client) {
@@ -139,19 +167,16 @@ export class EccRpcSidecarProcess {
       `[sidecar] spawning ${this.command} rpc serve --stdio --persistent-db\n`,
     )
 
-    const child = this.spawnImpl(
-      this.command,
-      ['rpc', 'serve', '--stdio', '--persistent-db'],
-      {
-        env,
-        stdio: ['pipe', 'pipe', 'pipe'],
-      },
-    )
+    const child = this.spawnImpl(launch.command, launch.args, {
+      env,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
     this.child = child
     this.spawnEnv = { ...env }
+    this.spawnLaunchKey = launchKey
 
     const client = new EccJsonRpcClient({
-      onNotification: (notification) => this.options.onNotification?.(notification),
+      onNotification: this.options.onNotification,
       writeFrame: (frame) => {
         if (!child.stdin?.writable) {
           throw new Error('ECC RPC sidecar stdin is not writable.')
@@ -219,6 +244,7 @@ export class EccRpcSidecarProcess {
         this.client = null
         this.child = null
         this.spawnEnv = null
+        this.spawnLaunchKey = null
       }
       this.options.onEvent?.({
         code,
