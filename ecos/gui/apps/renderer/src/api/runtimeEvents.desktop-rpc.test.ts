@@ -560,11 +560,27 @@ describe('createRuntimeEventClient desktop design runtime events', () => {
     client.connect()
     bridge.emit(
       asDesignEvent({
+        code: 'command_failed',
+        details: { step: 'synth' },
+        logFile: '/tmp/ecc-runtime.log',
         message: 'flow failed',
         method: 'flow.run',
         operationId: 'operation-failed',
         type: 'operation.failed',
         workspaceHandle: 'workspace-handle-1',
+      }),
+    )
+    expect(allHandler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          cmd: 'rtl2gds',
+          errorCode: 'command_failed',
+          errorDetails: { step: 'synth' },
+          logFile: '/tmp/ecc-runtime.log',
+          type: 'error',
+        }),
+        message: ['flow failed'],
+        response: 'error',
       }),
     )
     bridge.emit(

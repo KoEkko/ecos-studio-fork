@@ -269,7 +269,6 @@ export function configureElectronLoggerFile(
     typeof filePathOrConfig === 'string'
       ? null
       : (filePathOrConfig.latestFilePath ?? null)
-
   mkdirSync(dirname(sessionFilePath), { recursive: true })
   writeFileSync(sessionFilePath, '', 'utf8')
   if (latestFilePath && latestFilePath !== sessionFilePath) {

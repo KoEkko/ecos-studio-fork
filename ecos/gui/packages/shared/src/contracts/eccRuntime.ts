@@ -419,7 +419,9 @@ export type EccRuntimeEvent =
       workspaceHandle?: string
     }
   | {
+      code?: string
       executionScope?: 'single_step' | 'full_flow'
+      details?: unknown
       logFile?: string
       message: string
       method: string

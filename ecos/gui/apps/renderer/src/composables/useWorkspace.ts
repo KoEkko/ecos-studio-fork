@@ -24,6 +24,7 @@ import {
 import { finishRuntimeStepRender } from './runtimeStepRenderSync'
 import { setDesktopWindowTitle } from './windowTitle'
 import { useAgentShellStore } from '@/stores/agentShellStore'
+import { useNotificationStore } from '@/stores/notificationStore'
 import {
   useWorkspaceLifecycle,
   type WorkspaceSession,
@@ -183,6 +184,7 @@ function scheduleStepRenderedAck(options: {
 // Runtime event connection（workspace 级别，跟随 workspace 生命周期）
 const runtimeEventClient = ref<RuntimeEventClient | null>(null)
 const runtimeEvents = ref<RuntimeEventResponse[]>([])
+const notificationStore = useNotificationStore()
 const handledRefreshRuntimeEvents = new Set<string>()
 const handledRuntimeProtocolEvents = new Set<string>()
 const pendingStepRenderedAcks = new Map<string, Promise<void>>()
@@ -254,6 +256,13 @@ export function useWorkspace() {
     detail?: string
     life?: number
   }) {
+    if (options.severity === 'error' || options.severity === 'warn') {
+      notificationStore.addNotification({
+        severity: options.severity,
+        title: options.summary,
+        message: options.detail || options.summary,
+      })
+    }
     if (_toast) {
       _toast.add({
         severity: options.severity ?? 'info',
@@ -1613,6 +1622,20 @@ export function useWorkspace() {
     // 注册通用处理器，收集所有通知到 runtimeEvents
     client.onAll((response) => {
       if (!workspaceLifecycle.isCurrentSession(sessionId)) return
+      if (response.response === 'error' || response.data?.type === 'error') {
+        const rawMessage = response.message?.[0] || 'ECC runtime operation failed.'
+        const [message, ...detailLines] = rawMessage.split('\n')
+        notificationStore.addNotification({
+          severity: 'error',
+          title:
+            response.data?.method === 'runtime.exited'
+              ? 'ECC sidecar stopped'
+              : 'Flow failed',
+          message: message?.trim() || 'ECC runtime operation failed.',
+          detail: detailLines.join('\n').trim() || undefined,
+          logFile: asString(response.data?.logFile),
+        })
+      }
       // 过滤心跳消息，不记录到 messages
       if (response.data?.type !== 'heartbeat') {
         const runtimeEventId = asString(response.data?.runtimeEventId)

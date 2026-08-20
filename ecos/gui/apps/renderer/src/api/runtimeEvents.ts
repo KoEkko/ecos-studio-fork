@@ -186,6 +186,8 @@ function responseFromRuntimeEvent(
     cmd: command,
     designTool: event.designTool,
     directory: 'workspaceDirectory' in event ? event.workspaceDirectory : undefined,
+    errorCode: 'code' in event ? event.code : undefined,
+    errorDetails: 'details' in event ? event.details : undefined,
     executionScope,
     jobId: 'operationId' in event ? event.operationId : undefined,
     logFile: 'logFile' in event ? event.logFile : undefined,

@@ -627,6 +627,8 @@ export class EccWorkspaceRuntime {
           })
         } else {
           this.emit({
+            code: normalized.code,
+            details: normalized.details,
             logFile: normalized.logFile,
             message: normalized.message,
             method,
