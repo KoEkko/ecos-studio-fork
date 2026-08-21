@@ -617,7 +617,9 @@ describe('createRuntimeEventClient desktop design runtime events', () => {
     bridge.emit(
       asDesignEvent({
         code: 1,
-        message: 'ECC RPC sidecar exited unexpectedly',
+        interruptedOperationId: 'operation-interrupted',
+        message:
+          'ECC RPC sidecar exited unexpectedly\nLast output:\nfatal: missing liberty file',
         reason: 'unexpected',
         signal: null,
         type: 'runtime.exited',
@@ -627,6 +629,13 @@ describe('createRuntimeEventClient desktop design runtime events', () => {
 
     expect(allHandler).toHaveBeenCalledTimes(1)
     expect(errorHandler).toHaveBeenCalledOnce()
-    expect(errorHandler).toHaveBeenCalledWith('ECC RPC sidecar exited unexpectedly')
+    expect(errorHandler).toHaveBeenCalledWith(
+      'ECC RPC sidecar exited unexpectedly\nLast output:\nfatal: missing liberty file',
+    )
+    expect(allHandler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ jobId: 'operation-interrupted' }),
+      }),
+    )
   })
 })

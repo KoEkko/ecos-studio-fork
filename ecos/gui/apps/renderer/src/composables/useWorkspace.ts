@@ -1625,14 +1625,35 @@ export function useWorkspace() {
       if (response.response === 'error' || response.data?.type === 'error') {
         const rawMessage = response.message?.[0] || 'ECC runtime operation failed.'
         const [message, ...detailLines] = rawMessage.split('\n')
+        const operationId = asString(response.data?.jobId)
+        const step = asString(response.data?.step)
+        const interrupted = response.data?.errorCode === 'interrupted'
+        const errorDetails = response.data?.errorDetails
+        const previousRun =
+          typeof errorDetails === 'object' &&
+          errorDetails !== null &&
+          'previousRun' in errorDetails &&
+          errorDetails.previousRun === true
+        const stepTitle = step
+          ? `${step.charAt(0).toUpperCase()}${step.slice(1)}`
+          : 'Flow'
         notificationStore.addNotification({
+          key: operationId,
           severity: 'error',
           title:
             response.data?.method === 'runtime.exited'
               ? 'ECC sidecar stopped'
-              : 'Flow failed',
+              : previousRun
+                ? `Previous ${stepTitle} run was interrupted`
+                : interrupted
+                  ? `${stepTitle} interrupted`
+                  : `${stepTitle} failed`,
           message: message?.trim() || 'ECC runtime operation failed.',
-          detail: detailLines.join('\n').trim() || undefined,
+          detail:
+            detailLines.join('\n').trim() ||
+            (interrupted
+              ? 'The step was marked Incomplete and was not rerun automatically.'
+              : 'Review the step log before rerunning.'),
           logFile: asString(response.data?.logFile),
         })
       }

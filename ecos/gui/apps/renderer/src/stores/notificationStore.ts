@@ -9,6 +9,7 @@ export interface AppNotification {
   message: string
   detail?: string
   logFile?: string
+  key?: string
   createdAt: number
   read: boolean
 }
@@ -24,6 +25,14 @@ function addNotification(
 ): void {
   const message = compactMessage(input.message)
   if (!message) return
+
+  const keyed = input.key
+    ? notifications.value.find((item) => item.key === input.key)
+    : undefined
+  if (keyed) {
+    Object.assign(keyed, input, { message, read: false })
+    return
+  }
 
   const duplicate = notifications.value.find(
     (item) =>

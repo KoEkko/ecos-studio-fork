@@ -10,12 +10,7 @@ import { handleSecondInstance } from '../services/appSecondInstance'
 import { createAgentRuntimeFromEnvironment } from '../services/agent/agentProviderRuntimeFactory'
 import { CodexDependencyService } from '../services/agent/codexDependencyService'
 import { AppInfoService } from '../services/appInfoService'
-import {
-  getElectronLatestMainLogFile,
-  getElectronMainLogFile,
-  getLogSessionDirectory,
-  pruneOldLogSessions,
-} from '../services/desktopLogPaths'
+import { prepareDesktopLogs } from '../services/desktopLogPaths'
 import { createEccRuntimeEnv, resolveEccExecutable } from '../services/eccRpc/runtimeEnv'
 import { EccRpcRuntimeService } from '../services/eccRpc/runtimeService'
 import { WorkspaceSnapshotLoader } from '../services/eccRpc/workspaceSnapshotLoader'
@@ -93,15 +88,9 @@ configureGpuMode({
   platform: process.platform,
 })
 
-const mainLogFile = getElectronMainLogFile()
-const mainLatestLogFile = getElectronLatestMainLogFile()
-configureElectronLoggerFile({
-  latestFilePath: mainLatestLogFile,
-  sessionFilePath: mainLogFile,
-})
-pruneOldLogSessions()
+const { mainLogFile, sessionDirectory: logSessionDirectory } = prepareDesktopLogs()
+configureElectronLoggerFile(mainLogFile)
 electronLogger.status('[desktop] Logs: %s', mainLogFile)
-electronLogger.status('[desktop] Latest logs: %s', mainLatestLogFile)
 electronLogger.status('[runtime] Runtime: ECC RPC + frontend RPC')
 registerSurferProtocolSchemes(protocol)
 
@@ -162,8 +151,7 @@ function getDesktopServices() {
         command: eccExecutable ?? 'ecc',
         env: runtimeEnv,
         envProvider: runtimeEnvProvider,
-        logDirectoryProvider: () =>
-          resolveEccSidecarLogDirectory(getLogSessionDirectory()),
+        logDirectoryProvider: () => resolveEccSidecarLogDirectory(logSessionDirectory),
         onEvent,
         onNotification,
       }),
@@ -182,8 +170,7 @@ function getDesktopServices() {
       new EccRpcSidecarProcess({
         env: runtimeEnv,
         envProvider: runtimeEnvProvider,
-        logDirectoryProvider: () =>
-          resolveEccSidecarLogDirectory(getLogSessionDirectory()),
+        logDirectoryProvider: () => resolveEccSidecarLogDirectory(logSessionDirectory),
         onEvent,
         onNotification: (notification) => {
           const event = frontendRuntimeEventFromNotification(
@@ -240,7 +227,7 @@ function getDesktopServices() {
     isPackaged: app.isPackaged,
     platform: process.platform,
     resourcesPath: process.resourcesPath,
-    viewerLogDirectory: join(getLogSessionDirectory(), 'chip-viewer'),
+    viewerLogDirectory: join(logSessionDirectory, 'chip-viewer'),
     layoutEditRuntime: eccRuntimeService,
     workspaceResourceService,
   })

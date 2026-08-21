@@ -115,6 +115,7 @@ vi.mock('./flowExecutionState', () => ({
 
 import { useWorkspace } from './useWorkspace'
 import { useWorkspaceLifecycle } from './useWorkspaceLifecycle'
+import { useNotificationStore } from '@/stores/notificationStore'
 
 type SerializedRecentProject = Omit<Project, 'lastOpened'> & { lastOpened: string }
 
@@ -241,6 +242,7 @@ describe('useWorkspace openProject', () => {
     notifyWorkspaceRerunPreparedMock.mockReset()
     clearFlowExecutionActiveForWorkspaceMock.mockReset()
     settingsData.clear()
+    useNotificationStore().clear()
 
     desktopApi = createDesktopApiMock()
     activeProjectRoot = null
@@ -2453,6 +2455,66 @@ describe('useWorkspace openProject', () => {
     })
 
     expect(clearFlowExecutionActiveForWorkspaceMock).toHaveBeenCalledWith('/work/demo')
+  })
+
+  it('updates a stopped sidecar notification after interruption recovery', async () => {
+    await openWorkspaceAndConnectRuntimeEvents()
+    const notifications = useNotificationStore()
+
+    onRuntimeEvent?.({
+      cmd: 'notify',
+      data: {
+        jobId: 'operation-place',
+        method: 'runtime.exited',
+        type: 'error',
+      },
+      message: ['ECC RPC sidecar exited unexpectedly.'],
+      response: 'error',
+    })
+    onRuntimeEvent?.({
+      cmd: 'notify',
+      data: {
+        errorCode: 'interrupted',
+        jobId: 'operation-place',
+        logFile: '/work/demo/place_dreamplace/log/place.log',
+        method: 'flow.run_step',
+        step: 'place',
+        type: 'error',
+      },
+      message: ['place was interrupted when the ECC sidecar stopped.'],
+      response: 'error',
+    })
+
+    expect(notifications.notifications.value).toEqual([
+      expect.objectContaining({
+        key: 'operation-place',
+        logFile: '/work/demo/place_dreamplace/log/place.log',
+        title: 'Place interrupted',
+      }),
+    ])
+  })
+
+  it('labels an interruption recovered on a later workspace open', async () => {
+    await openWorkspaceAndConnectRuntimeEvents()
+    const notifications = useNotificationStore()
+
+    onRuntimeEvent?.({
+      cmd: 'notify',
+      data: {
+        errorCode: 'interrupted',
+        errorDetails: { previousRun: true },
+        jobId: 'operation-place',
+        method: 'flow.run_step',
+        step: 'place',
+        type: 'error',
+      },
+      message: ['Previous place run was interrupted.'],
+      response: 'error',
+    })
+
+    expect(notifications.notifications.value[0]?.title).toBe(
+      'Previous Place run was interrupted',
+    )
   })
 
   it('waits for the main-process terminal tracker when the renderer misses completion', async () => {

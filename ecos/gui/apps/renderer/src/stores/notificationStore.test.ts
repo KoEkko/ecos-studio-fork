@@ -37,4 +37,32 @@ describe('notificationStore', () => {
     store.remove(id)
     expect(store.notifications.value).toHaveLength(0)
   })
+
+  it('updates one operation notification in place', () => {
+    const store = useNotificationStore()
+    store.addNotification({
+      key: 'operation-1',
+      severity: 'error',
+      title: 'ECC sidecar stopped',
+      message: 'The sidecar stopped.',
+    })
+    const id = store.notifications.value[0]!.id
+
+    store.addNotification({
+      key: 'operation-1',
+      severity: 'error',
+      title: 'Place interrupted',
+      message: 'Previous place run was interrupted.',
+      logFile: '/work/demo/place_dreamplace/log/place.log',
+    })
+
+    expect(store.notifications.value).toEqual([
+      expect.objectContaining({
+        id,
+        key: 'operation-1',
+        title: 'Place interrupted',
+        logFile: '/work/demo/place_dreamplace/log/place.log',
+      }),
+    ])
+  })
 })

@@ -44,7 +44,6 @@
 
     <!-- 全局 Toast 通知 -->
     <Toast position="top-right" class="app-toast" />
-    <NotificationCenter />
 
     <!-- 全局新建工程向导 -->
     <NewProjectWizard
@@ -189,7 +188,6 @@ import ECOSTerminal from '@/components/ECOSTerminal.vue'
 import AboutDialog from '@/components/AboutDialog.vue'
 import SignoffPackageReviewDialog from '@/components/SignoffPackageReviewDialog.vue'
 import Toast from 'primevue/toast'
-import NotificationCenter from '@/components/NotificationCenter.vue'
 import Dialog from 'primevue/dialog'
 import NewProjectWizard from '@/components/NewProjectWizard.vue'
 import DesignFilesManageDialog from '@/components/DesignFilesManageDialog.vue'

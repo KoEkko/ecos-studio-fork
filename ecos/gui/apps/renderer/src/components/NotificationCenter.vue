@@ -3,6 +3,7 @@
     <button
       type="button"
       class="notification-trigger"
+      :class="{ active: open }"
       :aria-expanded="open"
       aria-label="Open notifications"
       title="Notifications"
@@ -85,7 +86,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import {
   useNotificationStore,
   type AppNotificationSeverity,
@@ -96,6 +97,13 @@ const { notifications, unreadCount, markRead, remove, clear } = useNotificationS
 const unreadCountLabel = computed(() =>
   unreadCount.value > 99 ? '99+' : unreadCount.value,
 )
+
+function handleKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape' && open.value) open.value = false
+}
+
+onMounted(() => document.addEventListener('keydown', handleKeydown))
+onUnmounted(() => document.removeEventListener('keydown', handleKeydown))
 
 function iconFor(severity: AppNotificationSeverity): string {
   if (severity === 'error') return 'ri-error-warning-line'
@@ -113,18 +121,16 @@ function formatTime(timestamp: number): string {
 
 <style scoped>
 .notification-center {
-  position: fixed;
-  top: 40px;
-  right: 16px;
-  z-index: 1200;
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 100%;
 }
 
 .notification-trigger,
 .notification-icon-button {
   display: inline-grid;
   place-items: center;
-  border: 1px solid var(--border-color);
-  background: var(--bg-secondary);
   color: var(--text-secondary);
   cursor: pointer;
   transition:
@@ -135,13 +141,20 @@ function formatTime(timestamp: number): string {
 
 .notification-trigger {
   position: relative;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
+  width: 40px;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
   font-size: 1rem;
 }
 
 .notification-trigger:hover,
+.notification-trigger.active {
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+
 .notification-icon-button:hover:not(:disabled) {
   border-color: var(--accent-color);
   color: var(--accent-color);
@@ -150,8 +163,9 @@ function formatTime(timestamp: number): string {
 
 .notification-count {
   position: absolute;
-  top: -5px;
-  right: -5px;
+  top: 2px;
+  right: 1px;
+  z-index: 1;
   min-width: 16px;
   height: 16px;
   padding: 0 4px;
@@ -160,7 +174,7 @@ function formatTime(timestamp: number): string {
   color: var(--accent-text);
   font-size: 0.62rem;
   font-weight: 700;
-  line-height: 16px;
+  line-height: 15px;
   text-align: center;
 }
 
@@ -209,7 +223,9 @@ function formatTime(timestamp: number): string {
 .notification-icon-button {
   width: 28px;
   height: 28px;
+  border: 1px solid var(--border-color);
   border-radius: 5px;
+  background: var(--bg-secondary);
   font-size: 0.9rem;
 }
 
@@ -332,13 +348,9 @@ function formatTime(timestamp: number): string {
 }
 
 @media (max-width: 560px) {
-  .notification-center {
-    top: 38px;
-    right: 10px;
-  }
   .notification-panel {
     position: fixed;
-    top: 78px;
+    top: 40px;
     right: 10px;
     left: 10px;
     width: auto;
