@@ -230,6 +230,7 @@ const props = defineProps<{
   projectName?: string | null
   hasWorkspace?: boolean
   signoffPackageExportEnabled?: boolean
+  designReportExportEnabled?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -315,6 +316,12 @@ const menus = computed<Menu[]>(() => [
         icon: 'ri-archive-line',
         event: appMenuActionIds.exportSignoffPackage,
         disabled: !props.signoffPackageExportEnabled,
+      },
+      {
+        label: 'Export Design Summary',
+        icon: 'ri-file-chart-line',
+        event: appMenuActionIds.exportDesignSummary,
+        disabled: !props.hasWorkspace && !props.designReportExportEnabled,
       },
     ],
   },
