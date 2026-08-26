@@ -112,6 +112,48 @@
     <DesignFilesManageDialog v-model="showManageDialog" />
 
     <Dialog
+      :visible="pdkNameDialogVisible"
+      modal
+      header="Import PDK"
+      :style="{ width: 'min(420px, calc(100vw - 32px))' }"
+      :draggable="false"
+      @update:visible="updatePdkNameDialogVisibility"
+    >
+      <label
+        for="pdk-name"
+        class="mb-2 block text-sm font-semibold text-(--text-primary)"
+      >
+        PDK Name
+      </label>
+      <InputText
+        id="pdk-name"
+        v-model="pdkNameDraft"
+        autofocus
+        autocomplete="off"
+        spellcheck="false"
+        class="w-full"
+        @keydown.enter.prevent="confirmPdkName"
+      />
+      <div class="mt-6 flex justify-end gap-2">
+        <button
+          type="button"
+          class="rounded border border-(--border-color) px-3 py-1.5 text-sm text-(--text-secondary) hover:bg-(--bg-secondary) hover:text-(--text-primary)"
+          @click="cancelPdkName"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="rounded bg-(--accent-color) px-3 py-1.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+          :disabled="!pdkNameDraft.trim()"
+          @click="confirmPdkName"
+        >
+          Import
+        </button>
+      </div>
+    </Dialog>
+
+    <Dialog
       :visible="showStepConfigDialog"
       modal
       maximizable
@@ -180,6 +222,7 @@ import AboutDialog from '@/components/AboutDialog.vue'
 import SignoffPackageReviewDialog from '@/components/SignoffPackageReviewDialog.vue'
 import Toast from 'primevue/toast'
 import Dialog from 'primevue/dialog'
+import InputText from 'primevue/inputtext'
 import NewProjectWizard from '@/components/NewProjectWizard.vue'
 import DesignFilesManageDialog from '@/components/DesignFilesManageDialog.vue'
 import WorkspaceStepConfigDialog from '@/components/WorkspaceStepConfigDialog.vue'
@@ -229,7 +272,8 @@ const {
   runtimeBackendTitle,
   runtimeBackendSubtitle,
 } = useWorkspace()
-const { loadPdks } = usePdkManager()
+const { loadPdks, pdkNameDialogVisible, pdkNameDraft, confirmPdkName, cancelPdkName } =
+  usePdkManager()
 const { loadVersions } = useVersion()
 const { showToast } = useWorkspace()
 const { showManageDialog, openManageDialog } = useDesignFiles()
@@ -247,6 +291,10 @@ const {
   workspaceSession,
 })
 const desktopApi = ref<DesktopApi | null>(getOptionalDesktopApi())
+
+function updatePdkNameDialogVisibility(visible: boolean): void {
+  if (!visible) cancelPdkName()
+}
 
 watch(
   () => Boolean(currentProject.value?.path),

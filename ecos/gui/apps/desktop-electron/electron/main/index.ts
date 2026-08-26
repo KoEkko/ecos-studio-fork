@@ -33,6 +33,7 @@ import { ProjectReadGrantStore } from '../services/projectReadGrantStore'
 import { ProjectManifestService } from '../services/projectManifestService'
 import { ProjectManagementReadService } from '../services/projectManagementReadService'
 import { ResourceManagerService } from '../services/resourceManagerService'
+import type { PdkInventoryService } from '../services/pdkInventoryService'
 import { SettingsStore } from '../services/settingsStore'
 import { ShellPtyService } from '../services/shellPtyService'
 import {
@@ -65,6 +66,7 @@ let services: {
   projectManifestService: ProjectManifestService
   settingsStore: SettingsStore
   resourceManagerService: ResourceManagerService
+  pdkInventoryService: PdkInventoryService
   chipViewerService: ChipViewerService
   shellService: ShellPtyService
   surferProtocolService: SurferProtocolService
@@ -147,6 +149,7 @@ function getDesktopServices() {
     projectScopeProvider: projectScopeService,
   })
   const resourceManagerService = new ResourceManagerService()
+  const pdkInventoryService = resourceManagerService.getPdkInventoryService()
   const runtimeEnvProvider = () =>
     resourceManagerService.createRuntimeEnv(runtimeEnv, {
       platform: process.platform,
@@ -254,6 +257,7 @@ function getDesktopServices() {
     eccRuntimeService,
     projectManagementReadService,
     projectManifestService,
+    pdkInventoryService,
     resourceManagerService,
     settingsStore,
     shellService,
@@ -299,6 +303,7 @@ async function ensureDesktopBridgeReady(): Promise<void> {
       projectManagementReadService: desktopServices.projectManagementReadService,
       projectManifestService: desktopServices.projectManifestService,
       resourceManagerService: desktopServices.resourceManagerService,
+      pdkInventoryService: desktopServices.pdkInventoryService,
       chipViewerService: desktopServices.chipViewerService,
       settingsStore: desktopServices.settingsStore,
       shellService: desktopServices.shellService,
