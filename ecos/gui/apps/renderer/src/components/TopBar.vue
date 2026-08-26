@@ -80,6 +80,7 @@
       >
         <i class="ri-sparkling-2-line text-base" aria-hidden="true"></i>
       </button>
+      <NotificationCenter />
       <button
         @click="toggleTheme"
         class="window-btn theme-btn"
@@ -200,6 +201,7 @@ import { useAgentShellStore } from '@/stores/agentShellStore'
 import { useRoute, useRouter } from 'vue-router'
 import type { DesktopApi } from '@ecos-studio/shared'
 import { getOptionalDesktopApi, waitForDesktopApi } from '@/platform/desktop'
+import NotificationCenter from '@/components/NotificationCenter.vue'
 // ---- 类型定义 ----
 type TopBarMenuAction = AppMenuAction | 'step-config'
 
@@ -556,6 +558,7 @@ const handleClose = async () => {
   background: var(--topbar-bg);
   border-bottom: 1px solid var(--border-color);
   position: relative;
+  z-index: 100;
   cursor: default;
 }
 
