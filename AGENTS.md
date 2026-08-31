@@ -38,11 +38,11 @@ For setup, contribution, submodule, and release workflows, see
 
 Before working in a component, read its scoped instructions:
 
-- `ecos/**`: `ecos/AGENTS.md`
-- `ecos/gui/**`: `ecos/AGENTS.md`, then `ecos/gui/AGENTS.md`
-- `ecos/agent/**`: `ecos/AGENTS.md`, then `ecos/agent/AGENTS.md`
-- `ecos/chip-viewer/**`: `ecos/AGENTS.md`, then `ecos/chip-viewer/AGENTS.md`
-- `ecc/**`: `ecc/AGENTS.md`
+- `ecos/**`: @ecos/AGENTS.md
+- `ecos/gui/**`: @ecos/gui/AGENTS.md
+- `ecos/agent/**`: @ecos/agent/AGENTS.md
+- `ecos/chip-viewer/**`: @ecos/chip-viewer/AGENTS.md
+- `ecc/**`: @ecc/AGENTS.md
 - Other submodules: follow that repository's own instructions and README.
 
 ## Setup
